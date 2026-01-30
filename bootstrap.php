@@ -1,0 +1,86 @@
+<?php
+declare(strict_types=1);
+
+$config = require __DIR__ . '/config.php';
+
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+$debug = (bool)($config['debug'] ?? false);
+ini_set('display_errors', $debug ? '1' : '0');
+
+$logDir = dirname(__DIR__) . '/storage/logs';
+if (!is_dir($logDir)) {
+  mkdir($logDir, 0775, true);
+}
+ini_set('error_log', $logDir . '/php-error.log');
+
+set_exception_handler(function (Throwable $e): void {
+  error_log(sprintf(
+    '[%s] Uncaught exception: %s in %s:%d',
+    date('c'),
+    $e->getMessage(),
+    $e->getFile(),
+    $e->getLine()
+  ));
+  abort(500, 'Ocurrió un error interno. Intentá nuevamente más tarde.');
+});
+
+register_shutdown_function(function (): void {
+  $error = error_get_last();
+  if ($error !== null) {
+    error_log(sprintf(
+      '[%s] Fatal error: %s in %s:%d',
+      date('c'),
+      $error['message'] ?? 'unknown',
+      $error['file'] ?? 'unknown',
+      $error['line'] ?? 0
+    ));
+    if (!headers_sent()) {
+      abort(500, 'Ocurrió un error interno. Intentá nuevamente más tarde.');
+    }
+  }
+});
+
+session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+  error_log(sprintf('[%s] Session failed to start.', date('c')));
+  abort(500, 'No se pudo iniciar la sesión. Intentá nuevamente más tarde.');
+}
+
+function abort(int $code, string $message): void {
+  http_response_code($code);
+  echo "<h1>Error {$code}</h1>";
+  echo "<p>" . htmlspecialchars($message) . "</p>";
+  exit;
+}
+
+function e(string $s): string {
+  return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+function redirect(string $to): void {
+  header("Location: {$to}");
+  exit;
+}
+
+function require_login(): void {
+  if (empty($_SESSION['user'])) {
+    redirect('login.php');
+  }
+}
+
+function current_user(): array {
+  return $_SESSION['user'] ?? [];
+}
+
+function is_post(): bool {
+  return ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
+}
+
+function post(string $key, string $default=''): string {
+  return isset($_POST[$key]) ? trim((string)$_POST[$key]) : $default;
+}
+
+function get(string $key, string $default=''): string {
+  return isset($_GET[$key]) ? trim((string)$_GET[$key]) : $default;
+}
