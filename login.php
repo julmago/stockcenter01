@@ -44,7 +44,16 @@ if (is_post()) {
         $e->getFile(),
         $e->getLine()
       ));
-      $error = 'Ocurrió un error interno. Intentá nuevamente más tarde.';
+      if (!empty($debug)) {
+        $error = sprintf(
+          'Error interno: %s (%s:%d)',
+          $e->getMessage(),
+          $e->getFile(),
+          $e->getLine()
+        );
+      } else {
+        $error = 'Ocurrió un error interno. Intentá nuevamente más tarde.';
+      }
     }
   }
 }
