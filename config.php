@@ -10,11 +10,12 @@ function env(string $key, string $default = ''): string {
 }
 
 return [
+  'config_file' => __FILE__,
   'db' => [
     'host' => env('DB_HOST', 'localhost'),
     'name' => env('DB_NAME', 'stockcenter'),
-    'user' => env('DB_USER', 'stockcenter'),
-    'pass' => env('DB_PASS', 'Martina*84260579'),
+    'user' => env('DB_USER', 'root'),
+    'pass' => env('DB_PASS', ''),
     'charset' => env('DB_CHARSET', 'utf8mb4'),
   ],
   // Para producción: poné esto en true

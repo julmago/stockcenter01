@@ -49,7 +49,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 function abort(int $code, string $message): void {
   http_response_code($code);
-  echo "<h1>Error {$code}</h1>";
+  echo "<h1>Ocurrió un problema</h1>";
   echo "<p>" . htmlspecialchars($message) . "</p>";
   exit;
 }
