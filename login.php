@@ -14,14 +14,23 @@ if (is_post()) {
     $error = 'Completá email y contraseña.';
   } else {
     try {
-      $st = db()->prepare("SELECT id, role, first_name, last_name, email, password_plain, is_active FROM users WHERE email = ? LIMIT 1");
+      error_log(sprintf('[%s] Login attempt for %s', date('c'), $email));
+      $st = db()->prepare(
+        "SELECT id, role, first_name, last_name, email, password_plain, is_active
+         FROM users
+         WHERE email = ? AND is_active = 1
+         LIMIT 1"
+      );
       $st->execute([$email]);
       $u = $st->fetch();
-      if (!$u || (int)$u['is_active'] !== 1) {
+      if ($u === false) {
+        error_log(sprintf('[%s] Login user not found or inactive for %s', date('c'), $email));
         $error = 'Usuario no encontrado o inactivo.';
       } elseif ($u['password_plain'] !== $pass) {
+        error_log(sprintf('[%s] Login password mismatch for %s', date('c'), $email));
         $error = 'Contraseña incorrecta.';
       } else {
+        error_log(sprintf('[%s] Login success for %s', date('c'), $email));
         unset($u['password_plain']);
         $_SESSION['user'] = $u;
         redirect('dashboard.php');
