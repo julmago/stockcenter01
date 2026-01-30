@@ -17,10 +17,12 @@ function db(): PDO {
     ]);
   } catch (PDOException $e) {
     error_log(sprintf('[%s] DB connection failed: %s', date('c'), $e->getMessage()));
-    abort(
-      500,
-      'No se pudo conectar con la base de datos. Verificá las credenciales en config.php o tus variables de entorno.'
-    );
+    $debug = (bool)($config['debug'] ?? false);
+    $message = 'No se pudo conectar con la base de datos. Verificá las credenciales en config.php o tus variables de entorno.';
+    if ($debug) {
+      $message = sprintf('Error de base de datos: %s', $e->getMessage());
+    }
+    abort(500, $message);
   }
   return $pdo;
 }
