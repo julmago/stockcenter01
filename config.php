@@ -3,7 +3,10 @@
 // Cambiá estos datos por los de tu servidor.
 function env(string $key, string $default = ''): string {
   $value = getenv($key);
-  return ($value === false) ? $default : $value;
+  if ($value === false || $value === '') {
+    return $default;
+  }
+  return $value;
 }
 
 return [
