@@ -10,9 +10,17 @@ function db(): PDO {
   global $config;
   $db = $config['db'];
   $dsn = "mysql:host={$db['host']};dbname={$db['name']};charset={$db['charset']}";
-  $pdo = new PDO($dsn, $db['user'], $db['pass'], [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-  ]);
+  try {
+    $pdo = new PDO($dsn, $db['user'], $db['pass'], [
+      PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+      PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+  } catch (PDOException $e) {
+    error_log(sprintf('[%s] DB connection failed: %s', date('c'), $e->getMessage()));
+    abort(
+      500,
+      'No se pudo conectar con la base de datos. Verificá las credenciales en config.php o tus variables de entorno.'
+    );
+  }
   return $pdo;
 }
