@@ -13,8 +13,12 @@ $where = '';
 $params = [];
 if ($q !== '') {
   $like = '%' . $q . '%';
-  $where = "WHERE (p.sku LIKE ? OR p.name LIKE ? OR pc.code LIKE ?)";
-  $params = [$like, $like, $like];
+  $where = "WHERE (p.sku LIKE :like_sku OR p.name LIKE :like_name OR pc.code LIKE :like_code)";
+  $params = [
+    ':like_sku' => $like,
+    ':like_name' => $like,
+    ':like_code' => $like,
+  ];
 }
 
 $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
@@ -22,28 +26,34 @@ $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
   LEFT JOIN product_codes pc ON pc.product_id = p.id
   $where";
 $count_st = db()->prepare($count_sql);
-$count_st->execute($params);
+foreach ($params as $key => $value) {
+  $count_st->bindValue($key, $value, PDO::PARAM_STR);
+}
+$count_st->execute();
 $total = (int) $count_st->fetchColumn();
 $total_pages = max(1, (int) ceil($total / $limit));
 $page = min($page, $total_pages);
 $offset = ($page - 1) * $limit;
 
 $select_sql = "SELECT p.id, p.sku, p.name, p.brand,"
-  . ($numeric ? " MAX(pc.code = ?) AS code_exact_match" : " 0 AS code_exact_match")
+  . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
   . " FROM products p"
   . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
   . " $where"
   . " GROUP BY p.id, p.sku, p.name, p.brand"
   . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
-  . " LIMIT ? OFFSET ?";
+  . " LIMIT :limit OFFSET :offset";
 $select_params = $params;
 if ($numeric) {
-  array_unshift($select_params, $q);
+  $select_params[':code_exact'] = $q;
 }
-$select_params[] = $limit;
-$select_params[] = $offset;
 $st = db()->prepare($select_sql);
-$st->execute($select_params);
+foreach ($select_params as $key => $value) {
+  $st->bindValue($key, $value, PDO::PARAM_STR);
+}
+$st->bindValue(':limit', $limit, PDO::PARAM_INT);
+$st->bindValue(':offset', $offset, PDO::PARAM_INT);
+$st->execute();
 $products = $st->fetchAll();
 
 $query_base = [];
