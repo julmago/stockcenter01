@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_login();
 $u = current_user();
+$is_superadmin = ($u['role'] ?? '') === 'superadmin';
 ?>
 <div style="padding:10px;border-bottom:1px solid #ccc;">
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
@@ -12,7 +13,9 @@ $u = current_user();
     <a href="product_new.php">Nuevo Producto</a>
     <a href="product_list.php">Listado de productos</a>
     <a href="product_import.php">Importar CSV</a>
-    <a href="ps_config.php">Config PrestaShop</a>
+    <?php if ($is_superadmin): ?>
+      <a href="ps_config.php">Config PrestaShop</a>
+    <?php endif; ?>
     <span style="margin-left:auto;"></span>
     <span>Logeado: <?= e($u['first_name'] . ' ' . $u['last_name']) ?> (<?= e($u['email']) ?>)</span>
     <a href="logout.php">Salir</a>
