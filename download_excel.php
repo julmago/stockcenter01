@@ -22,13 +22,14 @@ $st->execute([$list_id]);
 $rows = $st->fetchAll();
 
 $filename = "listado_{$list_id}.csv";
-header('Content-Type: text/csv; charset=utf-8');
+header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="'.$filename.'"');
 
 $out = fopen('php://output', 'w');
-fputcsv($out, ['sku','nombre','cantidad']);
+fwrite($out, "\xEF\xBB\xBF");
+fputcsv($out, ['sku','nombre','cantidad'], ';');
 foreach ($rows as $r) {
-  fputcsv($out, [$r['sku'], $r['name'], (int)$r['qty']]);
+  fputcsv($out, [$r['sku'], $r['name'], (int)$r['qty']], ';');
 }
 fclose($out);
 exit;
