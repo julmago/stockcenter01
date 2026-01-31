@@ -116,6 +116,38 @@ function can_delete_list_item(): bool {
   return in_array(current_role(), ['superadmin', 'admin'], true);
 }
 
+function is_readonly_role(): bool {
+  return current_role() === 'lectura';
+}
+
+function can_create_list(): bool {
+  return !is_readonly_role();
+}
+
+function can_create_product(): bool {
+  return !is_readonly_role();
+}
+
+function can_edit_list(): bool {
+  return !is_readonly_role();
+}
+
+function can_scan(): bool {
+  return !is_readonly_role();
+}
+
+function can_close_list(): bool {
+  return !is_readonly_role();
+}
+
+function can_edit_product(): bool {
+  return !is_readonly_role();
+}
+
+function can_add_code(): bool {
+  return !is_readonly_role();
+}
+
 function is_post(): bool {
   return ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
 }
