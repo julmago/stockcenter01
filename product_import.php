@@ -2,9 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
-if (!can_import_csv()) {
-  abort(403, 'Sin permisos');
-}
+require_permission(can_import_csv());
 
 $error = '';
 $message = '';
