@@ -9,8 +9,12 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
     <strong>Entrada de Stock</strong>
     <span>|</span>
     <a href="dashboard.php">Listas</a> 
-    <a href="list_new.php">Nuevo Listado</a>
-    <a href="product_new.php">Nuevo Producto</a>
+    <?php if (can_create_list()): ?>
+      <a href="list_new.php">Nuevo Listado</a>
+    <?php endif; ?>
+    <?php if (can_create_product()): ?>
+      <a href="product_new.php">Nuevo Producto</a>
+    <?php endif; ?>
     <a href="product_list.php">Listado de productos</a>
     <?php if (can_import_csv()): ?>
       <a href="product_import.php">Importar CSV</a>

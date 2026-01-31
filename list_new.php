@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
+require_permission(can_create_list());
 
 $error = '';
 if (is_post()) {

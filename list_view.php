@@ -25,9 +25,13 @@ $search_results = [];
 $should_focus_scan = false;
 $clear_scan_input = false;
 $scan_mode = (string)post('scan_mode', 'add');
+$can_edit_list_action = can_edit_list();
+$can_scan_action = can_scan();
+$can_close_action = can_close_list();
 
 // Toggle open/closed
 if (is_post() && post('action') === 'toggle_status') {
+  require_permission($can_close_action);
   $new = ($list['status'] === 'open') ? 'closed' : 'open';
   $st = db()->prepare("UPDATE stock_lists SET status = ? WHERE id = ?");
   $st->execute([$new, $list_id]);
@@ -54,6 +58,7 @@ if (is_post() && post('action') === 'delete_item') {
 
 // Scan code
 if (is_post() && post('action') === 'scan') {
+  require_permission($can_scan_action);
   $should_focus_scan = true;
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
@@ -135,6 +140,7 @@ if (is_post() && post('action') === 'scan') {
 
 // Asociar código a producto existente (desde el cartel)
 if (is_post() && post('action') === 'associate_code') {
+  require_permission($can_edit_list_action);
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
   } else {
@@ -174,6 +180,7 @@ if (is_post() && post('action') === 'associate_code') {
 
 // Crear producto nuevo desde el cartel
 if (is_post() && post('action') === 'create_product_from_code') {
+  require_permission($can_edit_list_action);
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
   } else {
@@ -289,10 +296,12 @@ $can_delete_action = can_delete_list_item();
     <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
       <a href="download_excel.php?id=<?= (int)$list['id'] ?>">Descargar Excel</a>
 
-      <form method="post" style="display:inline;">
-        <input type="hidden" name="action" value="toggle_status">
-        <button type="submit"><?= $list['status'] === 'open' ? 'Cerrar' : 'Abrir' ?></button>
-      </form>
+      <?php if ($can_close_action): ?>
+        <form method="post" style="display:inline;">
+          <input type="hidden" name="action" value="toggle_status">
+          <button type="submit"><?= $list['status'] === 'open' ? 'Cerrar' : 'Abrir' ?></button>
+        </form>
+      <?php endif; ?>
 
       <?php if ($can_sync_action): ?>
         <form method="post" style="display:inline;" action="ps_sync.php?id=<?= (int)$list['id'] ?>">
@@ -314,7 +323,7 @@ $can_delete_action = can_delete_list_item();
     </div>
   </div>
 
-  <?php if ($unknown_code !== ''): ?>
+  <?php if ($unknown_code !== '' && $can_edit_list_action): ?>
     <div style="border:2px solid #f00; padding:10px; margin-top:12px;">
       <h3>Código no encontrado</h3>
       <p><strong>Código:</strong> <?= e($unknown_code) ?></p>
@@ -387,24 +396,26 @@ $can_delete_action = can_delete_list_item();
     </div>
   <?php endif; ?>
 
-  <div style="margin-top:16px;">
-    <h3>Cargar por escaneo</h3>
-    <form method="post">
-      <input type="hidden" name="action" value="scan">
-      <label style="margin-right:8px;">
-        Modo:
-        <select name="scan_mode">
-          <option value="add" <?= $scan_mode === 'add' ? 'selected' : '' ?>>Sumar +1</option>
-          <option value="subtract" <?= $scan_mode === 'subtract' ? 'selected' : '' ?>>Restar -1</option>
-        </select>
-      </label>
-      <input type="text" id="scan-code" name="code" value="<?= e($unknown_code !== '' ? $unknown_code : post('code')) ?>" autofocus placeholder="Escaneá acá (enter)..." <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>
-      <button type="submit" <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>Aplicar</button>
-      <?php if ($list['status'] !== 'open'): ?>
-        <small>(listado cerrado)</small>
-      <?php endif; ?>
-    </form>
-  </div>
+  <?php if ($can_scan_action): ?>
+    <div style="margin-top:16px;">
+      <h3>Cargar por escaneo</h3>
+      <form method="post">
+        <input type="hidden" name="action" value="scan">
+        <label style="margin-right:8px;">
+          Modo:
+          <select name="scan_mode">
+            <option value="add" <?= $scan_mode === 'add' ? 'selected' : '' ?>>Sumar +1</option>
+            <option value="subtract" <?= $scan_mode === 'subtract' ? 'selected' : '' ?>>Restar -1</option>
+          </select>
+        </label>
+        <input type="text" id="scan-code" name="code" value="<?= e($unknown_code !== '' ? $unknown_code : post('code')) ?>" autofocus placeholder="Escaneá acá (enter)..." <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>
+        <button type="submit" <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>Aplicar</button>
+        <?php if ($list['status'] !== 'open'): ?>
+          <small>(listado cerrado)</small>
+        <?php endif; ?>
+      </form>
+    </div>
+  <?php endif; ?>
 
   <div style="margin-top:14px;">
     <h3>Items</h3>
@@ -443,7 +454,7 @@ $can_delete_action = can_delete_list_item();
   </div>
 
 </div>
-<?php if ($list['status'] === 'open' && ($should_focus_scan || $clear_scan_input)): ?>
+<?php if ($can_scan_action && $list['status'] === 'open' && ($should_focus_scan || $clear_scan_input)): ?>
 <script>
   (function() {
     var input = document.getElementById('scan-code');
