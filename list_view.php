@@ -99,7 +99,7 @@ if (is_post() && post('action') === 'scan') {
       } else {
         $pid = (int)$found['product_id'];
         if ($scan_mode === 'subtract') {
-          $st = db()->prepare("SELECT qty FROM stock_list_items WHERE stock_list_id = ? AND product_id = ? LIMIT 1");
+          $st = db()->prepare("SELECT qty, synced_qty FROM stock_list_items WHERE stock_list_id = ? AND product_id = ? LIMIT 1");
           $st->execute([$list_id, $pid]);
           $item = $st->fetch();
           if (!$item) {
@@ -112,8 +112,10 @@ if (is_post() && post('action') === 'scan') {
             $message = "Restado: {$found['sku']} - {$found['name']}";
             $clear_scan_input = true;
           } else {
-            $st = db()->prepare("UPDATE stock_list_items SET qty = qty - 1, updated_at = NOW() WHERE stock_list_id = ? AND product_id = ?");
-            $st->execute([$list_id, $pid]);
+            $new_qty = (int)$item['qty'] - 1;
+            $new_synced = min((int)$item['synced_qty'], $new_qty);
+            $st = db()->prepare("UPDATE stock_list_items SET qty = ?, synced_qty = ?, updated_at = NOW() WHERE stock_list_id = ? AND product_id = ?");
+            $st->execute([$new_qty, $new_synced, $list_id, $pid]);
             $message = "Restado: {$found['sku']} - {$found['name']}";
             $clear_scan_input = true;
           }
@@ -239,7 +241,7 @@ $st->execute([$list_id]);
 $list = $st->fetch();
 
 $items = db()->prepare("
-  SELECT p.id AS product_id, p.sku, p.name, i.qty, i.updated_at
+  SELECT p.id AS product_id, p.sku, p.name, i.qty, i.synced_qty, i.updated_at
   FROM stock_list_items i
   JOIN products p ON p.id = i.product_id
   WHERE i.stock_list_id = ?
@@ -249,7 +251,16 @@ $items->execute([$list_id]);
 $items = $items->fetchAll();
 
 $total_units = 0;
-foreach ($items as $it) $total_units += (int)$it['qty'];
+$total_pending = 0;
+foreach ($items as $it) {
+  $qty = (int)$it['qty'];
+  $synced_qty = min((int)$it['synced_qty'], $qty);
+  $total_units += $qty;
+  $total_pending += max(0, $qty - $synced_qty);
+}
+
+$sync_blocked = $list['status'] !== 'open';
+$can_sync = !$sync_blocked && $total_pending > 0;
 
 ?>
 <!doctype html>
@@ -281,11 +292,13 @@ foreach ($items as $it) $total_units += (int)$it['qty'];
       </form>
 
       <form method="post" style="display:inline;" action="ps_sync.php?id=<?= (int)$list['id'] ?>">
-        <button type="submit" <?= $list['sync_target'] === 'prestashop' ? 'disabled' : '' ?>>
+        <button type="submit" <?= $can_sync ? '' : 'disabled' ?>>
           Sincronizar a PrestaShop
         </button>
-        <?php if ($list['sync_target'] === 'prestashop'): ?>
-          <small>(bloqueado: ya sincronizado)</small>
+        <?php if ($sync_blocked): ?>
+          <small>(listado cerrado)</small>
+        <?php elseif (!$can_sync): ?>
+          <small>(sin pendientes)</small>
         <?php endif; ?>
       </form>
     </div>
@@ -392,17 +405,22 @@ foreach ($items as $it) $total_units += (int)$it['qty'];
     <h3>Items</h3>
     <table border="1" cellpadding="6" cellspacing="0">
       <thead>
-        <tr><th>sku</th><th>nombre</th><th>cantidad</th><th>acciones</th></tr>
+        <tr><th>sku</th><th>nombre</th><th>cantidad</th><th>sincronizado</th><th>acciones</th></tr>
       </thead>
       <tbody>
         <?php if (!$items): ?>
-          <tr><td colspan="4">Sin items todavía.</td></tr>
+          <tr><td colspan="5">Sin items todavía.</td></tr>
         <?php else: ?>
           <?php foreach ($items as $it): ?>
+            <?php
+              $qty = (int)$it['qty'];
+              $synced_qty = min((int)$it['synced_qty'], $qty);
+            ?>
             <tr>
               <td><?= e($it['sku']) ?></td>
               <td><?= e($it['name']) ?></td>
-              <td><?= (int)$it['qty'] ?></td>
+              <td><?= $qty ?></td>
+              <td><?= $synced_qty ?>/<?= $qty ?></td>
               <td>
                 <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
                   <input type="hidden" name="action" value="delete_item">
