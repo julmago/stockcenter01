@@ -17,13 +17,14 @@ $st->execute([$list_id]);
 $list = $st->fetch();
 if (!$list) abort(404, 'Listado no encontrado.');
 
-$message = '';
+$message = (string)get('msg', '');
 $error = '';
 $unknown_code = (string)post('unknown_code','');
 $search_term = '';
 $search_results = [];
 $should_focus_scan = false;
 $clear_scan_input = false;
+$scan_mode = (string)post('scan_mode', 'add');
 
 // Toggle open/closed
 if (is_post() && post('action') === 'toggle_status') {
@@ -33,8 +34,26 @@ if (is_post() && post('action') === 'toggle_status') {
   redirect("list_view.php?id={$list_id}");
 }
 
+// Delete item
+if (is_post() && post('action') === 'delete_item') {
+  $product_id = (int)post('product_id', '0');
+  if ($product_id <= 0) {
+    $error = 'Producto inválido.';
+  } else {
+    $st = db()->prepare("DELETE FROM stock_list_items WHERE stock_list_id = ? AND product_id = ?");
+    $st->execute([$list_id, $product_id]);
+    if ($st->rowCount() <= 0) {
+      $error = 'El producto no está en el listado.';
+    } else {
+      $success = urlencode('Item eliminado.');
+      redirect("list_view.php?id={$list_id}&msg={$success}");
+    }
+  }
+}
+
 // Scan code
 if (is_post() && post('action') === 'scan') {
+  $should_focus_scan = true;
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
   } else {
@@ -79,13 +98,33 @@ if (is_post() && post('action') === 'scan') {
         $unknown_code = $code;
       } else {
         $pid = (int)$found['product_id'];
-        // upsert item
-        $st = db()->prepare("INSERT INTO stock_list_items(stock_list_id, product_id, qty) VALUES(?, ?, 1)
-          ON DUPLICATE KEY UPDATE qty = qty + 1, updated_at = NOW()");
-        $st->execute([$list_id, $pid]);
-        $message = "Sumado: {$found['sku']} - {$found['name']}";
-        $clear_scan_input = true;
-        $should_focus_scan = true;
+        if ($scan_mode === 'subtract') {
+          $st = db()->prepare("SELECT qty FROM stock_list_items WHERE stock_list_id = ? AND product_id = ? LIMIT 1");
+          $st->execute([$list_id, $pid]);
+          $item = $st->fetch();
+          if (!$item) {
+            $error = 'No se puede restar: el producto no está en el listado.';
+          } elseif ((int)$item['qty'] <= 0) {
+            $error = 'No se puede restar: la cantidad ya está en 0.';
+          } elseif ((int)$item['qty'] === 1) {
+            $st = db()->prepare("DELETE FROM stock_list_items WHERE stock_list_id = ? AND product_id = ?");
+            $st->execute([$list_id, $pid]);
+            $message = "Restado: {$found['sku']} - {$found['name']}";
+            $clear_scan_input = true;
+          } else {
+            $st = db()->prepare("UPDATE stock_list_items SET qty = qty - 1, updated_at = NOW() WHERE stock_list_id = ? AND product_id = ?");
+            $st->execute([$list_id, $pid]);
+            $message = "Restado: {$found['sku']} - {$found['name']}";
+            $clear_scan_input = true;
+          }
+        } else {
+          // upsert item
+          $st = db()->prepare("INSERT INTO stock_list_items(stock_list_id, product_id, qty) VALUES(?, ?, 1)
+            ON DUPLICATE KEY UPDATE qty = qty + 1, updated_at = NOW()");
+          $st->execute([$list_id, $pid]);
+          $message = "Sumado: {$found['sku']} - {$found['name']}";
+          $clear_scan_input = true;
+        }
       }
     }
   }
@@ -200,7 +239,7 @@ $st->execute([$list_id]);
 $list = $st->fetch();
 
 $items = db()->prepare("
-  SELECT p.sku, p.name, i.qty, i.updated_at
+  SELECT p.id AS product_id, p.sku, p.name, i.qty, i.updated_at
   FROM stock_list_items i
   JOIN products p ON p.id = i.product_id
   WHERE i.stock_list_id = ?
@@ -334,8 +373,15 @@ foreach ($items as $it) $total_units += (int)$it['qty'];
     <h3>Cargar por escaneo</h3>
     <form method="post">
       <input type="hidden" name="action" value="scan">
+      <label style="margin-right:8px;">
+        Modo:
+        <select name="scan_mode">
+          <option value="add" <?= $scan_mode === 'add' ? 'selected' : '' ?>>Sumar +1</option>
+          <option value="subtract" <?= $scan_mode === 'subtract' ? 'selected' : '' ?>>Restar -1</option>
+        </select>
+      </label>
       <input type="text" id="scan-code" name="code" value="<?= e($unknown_code !== '' ? $unknown_code : post('code')) ?>" autofocus placeholder="Escaneá acá (enter)..." <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>
-      <button type="submit" <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>Sumar +1</button>
+      <button type="submit" <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>Aplicar</button>
       <?php if ($list['status'] !== 'open'): ?>
         <small>(listado cerrado)</small>
       <?php endif; ?>
@@ -346,17 +392,24 @@ foreach ($items as $it) $total_units += (int)$it['qty'];
     <h3>Items</h3>
     <table border="1" cellpadding="6" cellspacing="0">
       <thead>
-        <tr><th>sku</th><th>nombre</th><th>cantidad</th></tr>
+        <tr><th>sku</th><th>nombre</th><th>cantidad</th><th>acciones</th></tr>
       </thead>
       <tbody>
         <?php if (!$items): ?>
-          <tr><td colspan="3">Sin items todavía.</td></tr>
+          <tr><td colspan="4">Sin items todavía.</td></tr>
         <?php else: ?>
           <?php foreach ($items as $it): ?>
             <tr>
               <td><?= e($it['sku']) ?></td>
               <td><?= e($it['name']) ?></td>
               <td><?= (int)$it['qty'] ?></td>
+              <td>
+                <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
+                  <input type="hidden" name="action" value="delete_item">
+                  <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
+                  <button type="submit">Eliminar</button>
+                </form>
+              </td>
             </tr>
           <?php endforeach; ?>
         <?php endif; ?>
