@@ -34,7 +34,7 @@ if (is_post() && post('action') === 'scan') {
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
   } else {
-    $code = post('code');
+    $code = trim((string)post('code'));
     if ($code === '') {
       $error = 'Escaneá o pegá un código.';
     } else {
@@ -42,14 +42,24 @@ if (is_post() && post('action') === 'scan') {
         SELECT pc.product_id, p.sku, p.name
         FROM product_codes pc
         JOIN products p ON p.id = pc.product_id
-        WHERE pc.code = ?
+        WHERE LOWER(pc.code) = LOWER(?)
         LIMIT 1
       ");
       $st->execute([$code]);
       $found = $st->fetch();
       if (!$found) {
-        // Mostrar cartel inmediato para asociar o crear
-        $unknown_code = $code;
+        $st = db()->prepare("
+          SELECT p.id AS product_id, p.sku, p.name
+          FROM products p
+          WHERE LOWER(p.sku) = LOWER(?)
+          LIMIT 1
+        ");
+        $st->execute([$code]);
+        $found = $st->fetch();
+      }
+
+      if (!$found) {
+        $error = 'Producto no encontrado';
       } else {
         $pid = (int)$found['product_id'];
         // upsert item
