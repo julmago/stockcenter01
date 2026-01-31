@@ -55,72 +55,93 @@ $prestashop_mode = setting_get('prestashop_mode','replace');
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Config PrestaShop</title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Config PrestaShop</title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
 
-<div style="padding:10px;">
-  <h2>Config PrestaShop</h2>
-
-  <?php if ($message): ?><p style="color:green;"><?= e($message) ?></p><?php endif; ?>
-  <?php if ($error): ?><p style="color:red;"><?= e($error) ?></p><?php endif; ?>
-
-  <form method="post">
-    <input type="hidden" name="action" value="save">
-    <div>
-      <label>URL base (sin / final)</label><br>
-      <input type="text" name="prestashop_url" value="<?= e($prestashop_url) ?>" placeholder="https://mitienda.com" style="width:520px;">
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Config PrestaShop</h2>
+      <span class="muted">Configurar credenciales y modo de sincronización.</span>
     </div>
 
-    <div style="margin-top:8px;">
-      <label>API Key (Webservice)</label><br>
-      <input type="text" name="prestashop_api_key" value="<?= e($prestashop_api_key) ?>" style="width:520px;">
-      <div><small>Se usa por Basic Auth (API Key como usuario, contraseña vacía).</small></div>
+    <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+
+    <div class="card">
+      <form method="post" class="stack">
+        <input type="hidden" name="action" value="save">
+        <div class="form-group">
+          <label class="form-label">URL base (sin / final)</label>
+          <input class="form-control" type="text" name="prestashop_url" value="<?= e($prestashop_url) ?>" placeholder="https://mitienda.com">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">API Key (Webservice)</label>
+          <input class="form-control" type="text" name="prestashop_api_key" value="<?= e($prestashop_api_key) ?>">
+          <div class="muted small">Se usa por Basic Auth (API Key como usuario, contraseña vacía).</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Modo de sincronización</label>
+          <select name="prestashop_mode">
+            <option value="replace" <?= $prestashop_mode==='replace'?'selected':'' ?>>Reemplazar (= qty del listado)</option>
+            <option value="add" <?= $prestashop_mode==='add'?'selected':'' ?>>Sumar (+ qty del listado)</option>
+          </select>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn" type="submit">Guardar</button>
+          <a class="btn btn-ghost" href="dashboard.php">Volver</a>
+        </div>
+      </form>
     </div>
 
-    <div style="margin-top:10px;">
-      <label>Modo de sincronización</label><br>
-      <select name="prestashop_mode">
-        <option value="replace" <?= $prestashop_mode==='replace'?'selected':'' ?>>Reemplazar (= qty del listado)</option>
-        <option value="add" <?= $prestashop_mode==='add'?'selected':'' ?>>Sumar (+ qty del listado)</option>
-      </select>
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Probar conexión / Probar SKU</h3>
+      </div>
+      <p class="muted small">Se usa la misma búsqueda que la sincronización. Revisá los logs del servidor para ver URL, status, content-type y el inicio de la respuesta.</p>
+      <?php if ($test_error): ?><div class="alert alert-danger"><?= e($test_error) ?></div><?php endif; ?>
+      <?php if (is_array($test_result)): ?>
+        <?php if ($test_result['found']): ?>
+          <div class="alert alert-success">
+            Encontrado (<?= e($test_result['type']) ?>):
+            product_id=<?= (int)$test_result['id_product'] ?>,
+            combo_id=<?= (int)$test_result['id_product_attribute'] ?>
+          </div>
+        <?php else: ?>
+          <div class="alert alert-warning">No encontrado.</div>
+        <?php endif; ?>
+      <?php endif; ?>
+      <form method="post" class="form-row">
+        <input type="hidden" name="action" value="test">
+        <div class="form-group">
+          <label class="form-label">SKU</label>
+          <input class="form-control" type="text" name="prestashop_test_sku" value="<?= e($test_sku) ?>" placeholder="MS-06">
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn" type="submit">Probar</button>
+        </div>
+      </form>
     </div>
 
-    <div style="margin-top:12px;">
-      <button type="submit">Guardar</button>
-      <a href="dashboard.php">Volver</a>
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Permisos que necesita la API Key</h3>
+      </div>
+      <ul>
+        <li><strong>GET</strong> sobre <span class="code">products</span>, <span class="code">combinations</span>, <span class="code">stock_availables</span></li>
+        <li><strong>PUT</strong> sobre <span class="code">stock_availables</span></li>
+      </ul>
     </div>
-  </form>
-
-  <hr>
-  <h3>Probar conexión / Probar SKU</h3>
-  <p><small>Se usa la misma búsqueda que la sincronización. Revisá los logs del servidor para ver URL, status, content-type y el inicio de la respuesta.</small></p>
-  <?php if ($test_error): ?><p style="color:red;"><?= e($test_error) ?></p><?php endif; ?>
-  <?php if (is_array($test_result)): ?>
-    <?php if ($test_result['found']): ?>
-      <p style="color:green;">
-        Encontrado (<?= e($test_result['type']) ?>):
-        product_id=<?= (int)$test_result['id_product'] ?>,
-        combo_id=<?= (int)$test_result['id_product_attribute'] ?>
-      </p>
-    <?php else: ?>
-      <p style="color:red;">No encontrado.</p>
-    <?php endif; ?>
-  <?php endif; ?>
-  <form method="post" style="margin-top:8px;">
-    <input type="hidden" name="action" value="test">
-    <label>SKU</label><br>
-    <input type="text" name="prestashop_test_sku" value="<?= e($test_sku) ?>" placeholder="MS-06" style="width:220px;">
-    <button type="submit" style="margin-left:6px;">Probar</button>
-  </form>
-
-  <hr>
-  <h3>Permisos que necesita la API Key</h3>
-  <ul>
-    <li><strong>GET</strong> sobre <code>products</code>, <code>combinations</code>, <code>stock_availables</code></li>
-    <li><strong>PUT</strong> sobre <code>stock_availables</code></li>
-  </ul>
-</div>
+  </div>
+</main>
 
 </body>
 </html>

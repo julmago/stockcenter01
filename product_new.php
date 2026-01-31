@@ -38,39 +38,52 @@ if (is_post()) {
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Nuevo Producto</title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Nuevo Producto</title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
 
-<div style="padding:10px;">
-  <h2>Nuevo Producto</h2>
-  <?php if ($error): ?><p style="color:red;"><?= e($error) ?></p><?php endif; ?>
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Nuevo Producto</h2>
+      <span class="muted">Cargá la información base del producto.</span>
+    </div>
+    <div class="card">
+      <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
-  <form method="post">
-    <div>
-      <label>SKU (primordial)</label><br>
-      <input type="text" name="sku" required>
-    </div>
-    <div style="margin-top:6px;">
-      <label>Nombre</label><br>
-      <input type="text" name="name" required>
-    </div>
-    <div style="margin-top:6px;">
-      <label>Marca</label><br>
-      <input type="text" name="brand">
-    </div>
+      <form method="post" class="stack">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">SKU (primordial)</label>
+            <input class="form-control" type="text" name="sku" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nombre</label>
+            <input class="form-control" type="text" name="name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Marca</label>
+            <input class="form-control" type="text" name="brand">
+          </div>
+        </div>
 
-    <div style="margin-top:10px;border-top:1px solid #ccc;padding-top:10px;">
-      <label>Primer código (opcional, luego podés cargar más)</label><br>
-      <input type="text" name="code" placeholder="Escaneá código">
-    </div>
+        <div class="form-group">
+          <label class="form-label">Primer código (opcional, luego podés cargar más)</label>
+          <input class="form-control" type="text" name="code" placeholder="Escaneá código">
+        </div>
 
-    <div style="margin-top:12px;">
-      <button type="submit">Crear</button>
-      <a href="dashboard.php">Volver</a>
+        <div class="form-actions">
+          <button class="btn" type="submit">Crear</button>
+          <a class="btn btn-ghost" href="dashboard.php">Volver</a>
+        </div>
+      </form>
     </div>
-  </form>
-</div>
+  </div>
+</main>
 
 </body>
 </html>

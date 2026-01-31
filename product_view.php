@@ -76,98 +76,123 @@ $codes = $st->fetchAll();
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Producto <?= e($product['sku']) ?></title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Producto <?= e($product['sku']) ?></title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
 
-<div style="padding:10px;">
-  <h2>Producto</h2>
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Producto</h2>
+      <span class="muted">SKU <?= e($product['sku']) ?></span>
+    </div>
 
-  <?php if ($message): ?><p style="color:green;"><?= e($message) ?></p><?php endif; ?>
-  <?php if ($error): ?><p style="color:red;"><?= e($error) ?></p><?php endif; ?>
+    <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
-  <?php if ($can_edit): ?>
-    <form method="post">
-      <input type="hidden" name="action" value="update">
-      <div>
-        <label>SKU</label><br>
-        <input type="text" name="sku" value="<?= e($product['sku']) ?>" required>
+    <div class="card">
+      <?php if ($can_edit): ?>
+        <form method="post" class="stack">
+          <input type="hidden" name="action" value="update">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">SKU</label>
+              <input class="form-control" type="text" name="sku" value="<?= e($product['sku']) ?>" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nombre</label>
+              <input class="form-control" type="text" name="name" value="<?= e($product['name']) ?>" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Marca</label>
+              <input class="form-control" type="text" name="brand" value="<?= e($product['brand']) ?>">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn" type="submit">Guardar cambios</button>
+            <a class="btn btn-ghost" href="product_list.php">Volver</a>
+          </div>
+        </form>
+      <?php else: ?>
+        <div class="stack">
+          <div><strong>SKU:</strong> <?= e($product['sku']) ?></div>
+          <div><strong>Nombre:</strong> <?= e($product['name']) ?></div>
+          <div><strong>Marca:</strong> <?= e($product['brand']) ?></div>
+          <div class="form-actions">
+            <a class="btn btn-ghost" href="product_list.php">Volver</a>
+          </div>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Códigos</h3>
+        <span class="muted small"><?= count($codes) ?> registrados</span>
       </div>
-      <div style="margin-top:6px;">
-        <label>Nombre</label><br>
-        <input type="text" name="name" value="<?= e($product['name']) ?>" required>
-      </div>
-      <div style="margin-top:6px;">
-        <label>Marca</label><br>
-        <input type="text" name="brand" value="<?= e($product['brand']) ?>">
-      </div>
-      <div style="margin-top:10px;">
-        <button type="submit">Guardar cambios</button>
-        <a href="product_list.php">Volver</a>
-      </div>
-    </form>
-  <?php else: ?>
-    <div>
-      <div><strong>SKU:</strong> <?= e($product['sku']) ?></div>
-      <div style="margin-top:6px;"><strong>Nombre:</strong> <?= e($product['name']) ?></div>
-      <div style="margin-top:6px;"><strong>Marca:</strong> <?= e($product['brand']) ?></div>
-      <div style="margin-top:10px;">
-        <a href="product_list.php">Volver</a>
+      <?php if ($can_add_code): ?>
+        <form method="post" class="form-row">
+          <input type="hidden" name="action" value="add_code">
+          <div class="form-group">
+            <label class="form-label">Código</label>
+            <input class="form-control" type="text" name="code" placeholder="Escaneá código" autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select name="code_type">
+              <option value="BARRA">BARRA</option>
+              <option value="MPN">MPN</option>
+            </select>
+          </div>
+          <div class="form-group" style="align-self:end;">
+            <button class="btn" type="submit">Agregar</button>
+          </div>
+        </form>
+      <?php endif; ?>
+
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>código</th>
+              <th>tipo</th>
+              <th>fecha</th>
+              <?php if ($can_add_code): ?>
+                <th>acciones</th>
+              <?php endif; ?>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if (!$codes): ?>
+              <tr><td colspan="<?= $can_add_code ? 4 : 3 ?>">Sin códigos todavía.</td></tr>
+            <?php else: ?>
+              <?php foreach ($codes as $c): ?>
+                <tr>
+                  <td><?= e($c['code']) ?></td>
+                  <td><?= e($c['code_type']) ?></td>
+                  <td><?= e($c['created_at']) ?></td>
+                  <?php if ($can_add_code): ?>
+                    <td class="table-actions">
+                      <form method="post" style="display:inline;">
+                        <input type="hidden" name="action" value="delete_code">
+                        <input type="hidden" name="code_id" value="<?= (int)$c['id'] ?>">
+                        <button class="btn btn-danger" type="submit">Eliminar</button>
+                      </form>
+                    </td>
+                  <?php endif; ?>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
       </div>
     </div>
-  <?php endif; ?>
-
-  <hr>
-
-  <h3>Códigos</h3>
-  <?php if ($can_add_code): ?>
-    <form method="post">
-      <input type="hidden" name="action" value="add_code">
-      <input type="text" name="code" placeholder="Escaneá código" autofocus>
-      <select name="code_type">
-        <option value="BARRA">BARRA</option>
-        <option value="MPN">MPN</option>
-      </select>
-      <button type="submit">Agregar</button>
-    </form>
-  <?php endif; ?>
-
-  <table border="1" cellpadding="6" cellspacing="0" style="margin-top:10px;">
-    <thead>
-      <tr>
-        <th>código</th>
-        <th>tipo</th>
-        <th>fecha</th>
-        <?php if ($can_add_code): ?>
-          <th>acciones</th>
-        <?php endif; ?>
-      </tr>
-    </thead>
-    <tbody>
-      <?php if (!$codes): ?>
-        <tr><td colspan="<?= $can_add_code ? 4 : 3 ?>">Sin códigos todavía.</td></tr>
-      <?php else: ?>
-        <?php foreach ($codes as $c): ?>
-          <tr>
-            <td><?= e($c['code']) ?></td>
-            <td><?= e($c['code_type']) ?></td>
-            <td><?= e($c['created_at']) ?></td>
-            <?php if ($can_add_code): ?>
-              <td>
-                <form method="post" style="display:inline;">
-                  <input type="hidden" name="action" value="delete_code">
-                  <input type="hidden" name="code_id" value="<?= (int)$c['id'] ?>">
-                  <button type="submit">Eliminar</button>
-                </form>
-              </td>
-            <?php endif; ?>
-          </tr>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </tbody>
-  </table>
-
-</div>
+  </div>
+</main>
 
 </body>
 </html>
