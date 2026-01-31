@@ -74,11 +74,15 @@ function ps_xml_load(string $xml): SimpleXMLElement {
 function ps_find_by_reference(string $sku): ?array {
   $sku = trim($sku);
   if ($sku === '') return null;
+  $base = ps_base_url();
+  $encoded_sku = rawurlencode($sku);
 
   // 1) probar combinaciones por reference (si existen)
   // display=[id,id_product,reference]
-  $q = "/api/combinations?display=[id,id_product,reference]&filter[reference]=[" . rawurlencode($sku) . "]";
+  $q = "/api/combinations?display=[id,id_product,reference]&filter[reference]=[" . $encoded_sku . "]";
+  error_log("PrestaShop URL: " . $base . $q);
   $r = ps_request("GET", $q);
+  error_log("PrestaShop response: " . $r['body']);
   if ($r['code'] >= 200 && $r['code'] < 300) {
     $sx = ps_xml_load($r['body']);
     if (isset($sx->combinations->combination)) {
@@ -92,8 +96,10 @@ function ps_find_by_reference(string $sku): ?array {
   }
 
   // 2) producto simple por reference
-  $q = "/api/products?display=[id,reference]&filter[reference]=[" . rawurlencode($sku) . "]";
+  $q = "/api/products?display=[id,reference]&filter[reference]=[" . $encoded_sku . "]";
+  error_log("PrestaShop URL: " . $base . $q);
   $r = ps_request("GET", $q);
+  error_log("PrestaShop response: " . $r['body']);
   if ($r['code'] >= 200 && $r['code'] < 300) {
     $sx = ps_xml_load($r['body']);
     if (isset($sx->products->product)) {
