@@ -9,10 +9,6 @@ if (file_exists($dbPath)) {
   require_once $dbPath;
 }
 
-$autoloadPath = __DIR__ . '/vendor/autoload.php';
-if (file_exists($autoloadPath)) {
-  require_once $autoloadPath;
-}
 
 if (!function_exists('abort')) {
   function abort(int $code, string $message): void {
@@ -68,8 +64,6 @@ if (!function_exists('require_login')) {
   }
 }
 
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 require_login();
 
 $list_id = (int)get('id','0');
@@ -106,52 +100,134 @@ while (ob_get_level() > 0) {
   ob_end_clean();
 }
 
-$hasXlsx = class_exists(Spreadsheet::class) && class_exists(Xlsx::class);
-
-if (!$hasXlsx) {
-  $filename = "listado_{$list_id}.csv";
-  header('Content-Type: text/csv; charset=UTF-8');
-  header('Content-Disposition: attachment; filename="' . $filename . '"');
-  header('Cache-Control: max-age=0');
-  echo "\xEF\xBB\xBF";
-  $output = fopen('php://output', 'w');
-  if ($output === false) {
-    abort(500, 'No se pudo generar el CSV.');
+function sanitize_sheet_name(string $name): string {
+  $name = str_replace(['\\', '/', '?', '*', '[', ']', ':'], ' ', $name);
+  $name = trim(preg_replace('/\s+/', ' ', $name));
+  if ($name === '') {
+    $name = 'Listado';
   }
-  fputcsv($output, ['sku', 'nombre', 'cantidad']);
-  foreach ($rows as $r) {
-    fputcsv($output, [$r['sku'], $r['name'], (int)$r['qty']]);
+  if (function_exists('mb_substr')) {
+    return mb_substr($name, 0, 31);
   }
-  fclose($output);
-  exit;
+  return substr($name, 0, 31);
 }
 
-$spreadsheet = new Spreadsheet();
-$sheet = $spreadsheet->getActiveSheet();
-$sheet->setTitle('Listado');
+function column_letter(int $index): string {
+  $letters = '';
+  while ($index > 0) {
+    $index--;
+    $letters = chr(65 + ($index % 26)) . $letters;
+    $index = intdiv($index, 26);
+  }
+  return $letters;
+}
 
-$sheet->setCellValue('A1', 'sku');
-$sheet->setCellValue('B1', 'nombre');
-$sheet->setCellValue('C1', 'cantidad');
-$sheet->getStyle('A1:C1')->getFont()->setBold(true);
+function build_sheet_xml(array $rows, string $sheetName): string {
+  $sheetData = '';
+  $rowNumber = 1;
+  foreach ($rows as $row) {
+    $cells = '';
+    $colIndex = 1;
+    foreach ($row as $value) {
+      $cellRef = column_letter($colIndex) . $rowNumber;
+      $escaped = htmlspecialchars((string)$value, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+      $cells .= '<c r="' . $cellRef . '" t="inlineStr"><is><t xml:space="preserve">' . $escaped . '</t></is></c>';
+      $colIndex++;
+    }
+    $sheetData .= '<row r="' . $rowNumber . '">' . $cells . '</row>';
+    $rowNumber++;
+  }
 
-$rowIndex = 2;
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    . '<sheetData>' . $sheetData . '</sheetData>'
+    . '</worksheet>';
+}
+
+function build_workbook_xml(string $sheetName): string {
+  $safeName = htmlspecialchars($sheetName, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+    . 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    . '<sheets><sheet name="' . $safeName . '" sheetId="1" r:id="rId1"/></sheets>'
+    . '</workbook>';
+}
+
+function build_content_types_xml(): string {
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    . '<Default Extension="xml" ContentType="application/xml"/>'
+    . '<Override PartName="/xl/workbook.xml" '
+    . 'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    . '<Override PartName="/xl/worksheets/sheet1.xml" '
+    . 'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    . '</Types>';
+}
+
+function build_root_rels_xml(): string {
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    . '<Relationship Id="rId1" '
+    . 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+    . 'Target="xl/workbook.xml"/>'
+    . '</Relationships>';
+}
+
+function build_workbook_rels_xml(): string {
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    . '<Relationship Id="rId1" '
+    . 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+    . 'Target="worksheets/sheet1.xml"/>'
+    . '</Relationships>';
+}
+
+function generate_xlsx(array $rows, string $sheetName): string {
+  if (!class_exists('ZipArchive')) {
+    abort(500, 'No se pudo generar XLSX.');
+  }
+
+  $tmpFile = tempnam(sys_get_temp_dir(), 'xlsx_');
+  if ($tmpFile === false) {
+    abort(500, 'No se pudo generar XLSX.');
+  }
+
+  $zip = new ZipArchive();
+  if ($zip->open($tmpFile, ZipArchive::OVERWRITE) !== true) {
+    @unlink($tmpFile);
+    abort(500, 'No se pudo generar XLSX.');
+  }
+
+  $zip->addFromString('[Content_Types].xml', build_content_types_xml());
+  $zip->addFromString('_rels/.rels', build_root_rels_xml());
+  $zip->addFromString('xl/workbook.xml', build_workbook_xml($sheetName));
+  $zip->addFromString('xl/_rels/workbook.xml.rels', build_workbook_rels_xml());
+  $zip->addFromString('xl/worksheets/sheet1.xml', build_sheet_xml($rows, $sheetName));
+  $zip->close();
+
+  $data = file_get_contents($tmpFile);
+  @unlink($tmpFile);
+
+  if ($data === false) {
+    abort(500, 'No se pudo generar XLSX.');
+  }
+
+  return $data;
+}
+
+$sheetName = sanitize_sheet_name($list['name'] ?? 'Listado');
+$xlsxRows = [['sku', 'nombre', 'cantidad']];
 foreach ($rows as $r) {
-  $sheet->setCellValue("A{$rowIndex}", $r['sku']);
-  $sheet->setCellValue("B{$rowIndex}", $r['name']);
-  $sheet->setCellValue("C{$rowIndex}", (int)$r['qty']);
-  $rowIndex++;
+  $xlsxRows[] = [$r['sku'], $r['name'], (string)(int)$r['qty']];
 }
 
-foreach (['A', 'B', 'C'] as $column) {
-  $sheet->getColumnDimension($column)->setAutoSize(true);
-}
+$binary = generate_xlsx($xlsxRows, $sheetName);
 
 $filename = "listado_{$list_id}.xlsx";
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: max-age=0');
-
-$writer = new Xlsx($spreadsheet);
-$writer->save('php://output');
+header('Content-Length: ' . strlen($binary));
+echo $binary;
 exit;
