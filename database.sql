@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS stock_list_items (
   stock_list_id INT UNSIGNED NOT NULL,
   product_id INT UNSIGNED NOT NULL,
   qty INT NOT NULL DEFAULT 0,
+  synced_qty INT NOT NULL DEFAULT 0,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_list_product (stock_list_id, product_id),
