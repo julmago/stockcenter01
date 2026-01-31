@@ -128,52 +128,66 @@ if (is_post()) {
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Importar CSV</title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Importar CSV</title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
 
-<div style="padding:10px;">
-  <h2>Importar productos (CSV)</h2>
-
-  <?php if ($message): ?><p style="color:green;"><?= e($message) ?></p><?php endif; ?>
-  <?php if ($error): ?><p style="color:red;"><?= e($error) ?></p><?php endif; ?>
-
-  <div style="border:1px solid #ccc;padding:10px;margin-bottom:12px;">
-    <p><strong>Formato requerido</strong></p>
-    <ul>
-      <li>Separador: <code>;</code></li>
-      <li>Charset: UTF-8</li>
-      <li>Encabezados: <code>SKU;TITULO;MARCA;MPN;BARRA</code></li>
-    </ul>
-    <p>Reglas:</p>
-    <ul>
-      <li>SKU es único y obligatorio.</li>
-      <li>BARRA y MPN se guardan como códigos del producto.</li>
-      <li>Si un código ya está asociado a otro producto, esa fila se omite y se registra el error.</li>
-    </ul>
-  </div>
-
-  <form method="post" enctype="multipart/form-data">
-    <div>
-      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Importar productos (CSV)</h2>
+      <span class="muted">Cargá el archivo con el formato requerido.</span>
     </div>
-    <div style="margin-top:10px;">
-      <button type="submit">Importar</button>
-      <a href="product_list.php">Volver</a>
-    </div>
-  </form>
 
-  <?php if ($errors): ?>
-    <div style="margin-top:16px;">
-      <h3>Errores</h3>
+    <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+
+    <div class="card">
+      <p><strong>Formato requerido</strong></p>
       <ul>
-        <?php foreach ($errors as $row_error): ?>
-          <li><?= e($row_error) ?></li>
-        <?php endforeach; ?>
+        <li>Separador: <span class="code">;</span></li>
+        <li>Charset: UTF-8</li>
+        <li>Encabezados: <span class="code">SKU;TITULO;MARCA;MPN;BARRA</span></li>
+      </ul>
+      <p>Reglas:</p>
+      <ul>
+        <li>SKU es único y obligatorio.</li>
+        <li>BARRA y MPN se guardan como códigos del producto.</li>
+        <li>Si un código ya está asociado a otro producto, esa fila se omite y se registra el error.</li>
       </ul>
     </div>
-  <?php endif; ?>
-</div>
+
+    <div class="card">
+      <form method="post" enctype="multipart/form-data" class="stack">
+        <div class="form-group">
+          <label class="form-label">Archivo CSV</label>
+          <input class="form-control" type="file" name="csv_file" accept=".csv,text/csv" required>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">Importar</button>
+          <a class="btn btn-ghost" href="product_list.php">Volver</a>
+        </div>
+      </form>
+    </div>
+
+    <?php if ($errors): ?>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Errores</h3>
+        </div>
+        <ul>
+          <?php foreach ($errors as $row_error): ?>
+            <li><?= e($row_error) ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
+  </div>
+</main>
 
 </body>
 </html>

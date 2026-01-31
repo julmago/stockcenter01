@@ -275,185 +275,242 @@ $can_delete_action = can_delete_list_item();
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Listado #<?= (int)$list['id'] ?></title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Listado #<?= (int)$list['id'] ?></title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
 
-<div style="padding:10px;">
-  <h2>Listado #<?= (int)$list['id'] ?></h2>
-
-  <?php if ($message): ?><p style="color:green;"><?= e($message) ?></p><?php endif; ?>
-  <?php if ($error): ?><p style="color:red;"><?= e($error) ?></p><?php endif; ?>
-
-  <div style="border:1px solid #ccc; padding:10px;">
-    <div><strong>id:</strong> <?= (int)$list['id'] ?></div>
-    <div><strong>fecha:</strong> <?= e($list['created_at']) ?></div>
-    <div><strong>nombre:</strong> <?= e($list['name']) ?></div>
-    <div><strong>creador:</strong> <?= e($list['first_name'] . ' ' . $list['last_name']) ?></div>
-    <div><strong>sync:</strong> <?= $list['sync_target'] === 'prestashop' ? 'prestashop' : '' ?></div>
-    <div><strong>estado:</strong> <?= $list['status'] === 'open' ? 'Abierto' : 'Cerrado' ?></div>
-
-    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-      <a href="download_excel.php?id=<?= (int)$list['id'] ?>">Descargar Excel</a>
-
-      <?php if ($can_close_action): ?>
-        <form method="post" style="display:inline;">
-          <input type="hidden" name="action" value="toggle_status">
-          <button type="submit"><?= $list['status'] === 'open' ? 'Cerrar' : 'Abrir' ?></button>
-        </form>
-      <?php endif; ?>
-
-      <?php if ($can_sync_action): ?>
-        <form method="post" style="display:inline;" action="ps_sync.php?id=<?= (int)$list['id'] ?>">
-          <button type="submit" <?= $can_sync ? '' : 'disabled' ?>>
-            Sincronizar a PrestaShop
-          </button>
-          <?php if ($sync_blocked): ?>
-            <small>(listado cerrado)</small>
-          <?php elseif (!$can_sync): ?>
-            <small>(sin pendientes)</small>
-          <?php endif; ?>
-        </form>
-      <?php endif; ?>
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Listado #<?= (int)$list['id'] ?></h2>
+      <span class="muted"><?= e($list['name']) ?></span>
     </div>
 
-    <div style="margin-top:10px;">
-      <strong>Total unidades:</strong> <?= (int)$total_units ?> |
-      <strong>Productos distintos:</strong> <?= count($items) ?>
-    </div>
-  </div>
+    <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
-  <?php if ($unknown_code !== '' && $can_edit_list_action): ?>
-    <div style="border:2px solid #f00; padding:10px; margin-top:12px;">
-      <h3>Código no encontrado</h3>
-      <p><strong>Código:</strong> <?= e($unknown_code) ?></p>
-
-      <h4>1) Asociar a un producto existente</h4>
-      <form method="post">
-        <input type="hidden" name="action" value="search_products">
-        <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
+    <div class="card stack">
+      <div class="form-row">
+        <div><strong>id:</strong> <?= (int)$list['id'] ?></div>
+        <div><strong>fecha:</strong> <?= e($list['created_at']) ?></div>
+        <div><strong>creador:</strong> <?= e($list['first_name'] . ' ' . $list['last_name']) ?></div>
         <div>
-          <label>Buscar producto (por nombre / sku / marca)</label><br>
-          <input type="text" name="product_search" value="<?= e($search_term) ?>" placeholder="Escribí y buscá abajo" />
-          <button type="submit">Buscar</button>
+          <strong>sync:</strong>
+          <?php if ($list['sync_target'] === 'prestashop'): ?>
+            <span class="badge badge-success">prestashop</span>
+          <?php else: ?>
+            <span class="badge badge-muted">sin sync</span>
+          <?php endif; ?>
         </div>
-      </form>
-      <?php if ($search_term === ''): ?>
-        <p><small>Usá el botón Buscar para ver resultados y elegir el producto.</small></p>
-      <?php elseif (!$search_results): ?>
-        <p>No hubo resultados con esa búsqueda.</p>
-      <?php else: ?>
-        <table border="1" cellpadding="6" cellspacing="0" style="margin-top:8px;">
+        <div>
+          <strong>estado:</strong>
+          <?php if ($list['status'] === 'open'): ?>
+            <span class="badge badge-success">Abierto</span>
+          <?php else: ?>
+            <span class="badge badge-warning">Cerrado</span>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <div class="inline-actions">
+        <a class="btn btn-ghost" href="download_excel.php?id=<?= (int)$list['id'] ?>">Descargar Excel</a>
+
+        <?php if ($can_close_action): ?>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="toggle_status">
+            <button class="btn btn-secondary" type="submit"><?= $list['status'] === 'open' ? 'Cerrar' : 'Abrir' ?></button>
+          </form>
+        <?php endif; ?>
+
+        <?php if ($can_sync_action): ?>
+          <form method="post" style="display:inline;" action="ps_sync.php?id=<?= (int)$list['id'] ?>">
+            <button class="btn" type="submit" <?= $can_sync ? '' : 'disabled' ?>>
+              Sincronizar a PrestaShop
+            </button>
+            <?php if ($sync_blocked): ?>
+              <span class="muted small">(listado cerrado)</span>
+            <?php elseif (!$can_sync): ?>
+              <span class="muted small">(sin pendientes)</span>
+            <?php endif; ?>
+          </form>
+        <?php endif; ?>
+      </div>
+
+      <div class="inline-actions">
+        <span class="kpi">Total unidades: <?= (int)$total_units ?></span>
+        <span class="kpi">Productos distintos: <?= count($items) ?></span>
+      </div>
+    </div>
+
+    <?php if ($unknown_code !== '' && $can_edit_list_action): ?>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Código no encontrado</h3>
+          <span class="badge badge-danger"><?= e($unknown_code) ?></span>
+        </div>
+
+        <div class="stack">
+          <div>
+            <h4>1) Asociar a un producto existente</h4>
+            <form method="post" class="stack">
+              <input type="hidden" name="action" value="search_products">
+              <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
+              <div class="form-group">
+                <label class="form-label">Buscar producto (por nombre / sku / marca)</label>
+                <input class="form-control" type="text" name="product_search" value="<?= e($search_term) ?>" placeholder="Escribí y buscá abajo" />
+              </div>
+              <div class="form-actions">
+                <button class="btn" type="submit">Buscar</button>
+              </div>
+            </form>
+            <?php if ($search_term === ''): ?>
+              <p class="muted small">Usá el botón Buscar para ver resultados y elegir el producto.</p>
+            <?php elseif (!$search_results): ?>
+              <p class="muted">No hubo resultados con esa búsqueda.</p>
+            <?php else: ?>
+              <div class="table-wrapper">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Nombre</th>
+                      <th>Marca</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($search_results as $res): ?>
+                      <tr>
+                        <td><?= e($res['sku']) ?></td>
+                        <td><?= e($res['name']) ?></td>
+                        <td><?= e($res['brand']) ?></td>
+                        <td class="table-actions">
+                          <form method="post" style="margin:0;">
+                            <input type="hidden" name="action" value="associate_code">
+                            <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
+                            <input type="hidden" name="product_id" value="<?= (int)$res['id'] ?>">
+                            <button class="btn" type="submit">Asociar</button>
+                          </form>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php endif; ?>
+          </div>
+
+          <div>
+            <h4>2) Crear producto nuevo y sumar</h4>
+            <form method="post" class="stack">
+              <input type="hidden" name="action" value="create_product_from_code">
+              <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">SKU (obligatorio)</label>
+                  <input class="form-control" type="text" name="new_sku" value="<?= e(post('new_sku')) ?>" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Nombre (obligatorio)</label>
+                  <input class="form-control" type="text" name="new_name" value="<?= e(post('new_name')) ?>" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Marca</label>
+                  <input class="form-control" type="text" name="new_brand" value="<?= e(post('new_brand')) ?>">
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn" type="submit">Crear y sumar +1</button>
+                <a class="btn btn-ghost" href="list_view.php?id=<?= (int)$list_id ?>">Cancelar</a>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    <?php endif; ?>
+
+    <?php if ($can_scan_action): ?>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Cargar por escaneo</h3>
+          <?php if ($list['status'] !== 'open'): ?>
+            <span class="badge badge-warning">Listado cerrado</span>
+          <?php endif; ?>
+        </div>
+        <form method="post" class="form-row">
+          <input type="hidden" name="action" value="scan">
+          <div class="form-group">
+            <label class="form-label">Modo</label>
+            <select name="scan_mode">
+              <option value="add" <?= $scan_mode === 'add' ? 'selected' : '' ?>>Sumar +1</option>
+              <option value="subtract" <?= $scan_mode === 'subtract' ? 'selected' : '' ?>>Restar -1</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Código</label>
+            <input class="form-control" type="text" id="scan-code" name="code" value="<?= e($unknown_code !== '' ? $unknown_code : post('code')) ?>" autofocus placeholder="Escaneá acá (enter)..." <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>
+          </div>
+          <div class="form-group" style="align-self:end;">
+            <button class="btn" type="submit" <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>Aplicar</button>
+          </div>
+        </form>
+      </div>
+    <?php endif; ?>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Items</h3>
+        <span class="muted small"><?= count($items) ?> productos</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="table">
           <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Nombre</th>
-              <th>Marca</th>
-              <th></th>
-            </tr>
+            <tr><th>sku</th><th>nombre</th><th>cantidad</th><th>sincronizado</th><th>acciones</th></tr>
           </thead>
           <tbody>
-            <?php foreach ($search_results as $res): ?>
-              <tr>
-                <td><?= e($res['sku']) ?></td>
-                <td><?= e($res['name']) ?></td>
-                <td><?= e($res['brand']) ?></td>
-                <td>
-                  <form method="post" style="margin:0;">
-                    <input type="hidden" name="action" value="associate_code">
-                    <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
-                    <input type="hidden" name="product_id" value="<?= (int)$res['id'] ?>">
-                    <button type="submit">Asociar</button>
-                  </form>
-                </td>
-              </tr>
-            <?php endforeach; ?>
+            <?php if (!$items): ?>
+              <tr><td colspan="5">Sin items todavía.</td></tr>
+            <?php else: ?>
+              <?php foreach ($items as $it): ?>
+                <?php
+                  $qty = (int)$it['qty'];
+                  $synced_qty = min((int)$it['synced_qty'], $qty);
+                ?>
+                <tr>
+                  <td><?= e($it['sku']) ?></td>
+                  <td><?= e($it['name']) ?></td>
+                  <td><?= $qty ?></td>
+                  <td>
+                    <?php if ($synced_qty >= $qty): ?>
+                      <span class="badge badge-success"><?= $synced_qty ?>/<?= $qty ?></span>
+                    <?php elseif ($synced_qty > 0): ?>
+                      <span class="badge badge-warning"><?= $synced_qty ?>/<?= $qty ?></span>
+                    <?php else: ?>
+                      <span class="badge badge-muted">0/<?= $qty ?></span>
+                    <?php endif; ?>
+                  </td>
+                  <td class="table-actions">
+                    <?php if ($can_delete_action): ?>
+                      <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
+                        <input type="hidden" name="action" value="delete_item">
+                        <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
+                        <button class="btn btn-danger" type="submit">Eliminar</button>
+                      </form>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
           </tbody>
         </table>
-      <?php endif; ?>
-
-      <h4 style="margin-top:14px;">2) Crear producto nuevo y sumar</h4>
-      <form method="post">
-        <input type="hidden" name="action" value="create_product_from_code">
-        <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
-        <div>
-          <label>SKU (obligatorio)</label><br>
-          <input type="text" name="new_sku" value="<?= e(post('new_sku')) ?>" required>
-        </div>
-        <div style="margin-top:6px;">
-          <label>Nombre (obligatorio)</label><br>
-          <input type="text" name="new_name" value="<?= e(post('new_name')) ?>" required>
-        </div>
-        <div style="margin-top:6px;">
-          <label>Marca</label><br>
-          <input type="text" name="new_brand" value="<?= e(post('new_brand')) ?>">
-        </div>
-        <div style="margin-top:8px;">
-          <button type="submit">Crear y sumar +1</button>
-          <a href="list_view.php?id=<?= (int)$list_id ?>">Cancelar</a>
-        </div>
-      </form>
+      </div>
     </div>
-  <?php endif; ?>
-
-  <?php if ($can_scan_action): ?>
-    <div style="margin-top:16px;">
-      <h3>Cargar por escaneo</h3>
-      <form method="post">
-        <input type="hidden" name="action" value="scan">
-        <label style="margin-right:8px;">
-          Modo:
-          <select name="scan_mode">
-            <option value="add" <?= $scan_mode === 'add' ? 'selected' : '' ?>>Sumar +1</option>
-            <option value="subtract" <?= $scan_mode === 'subtract' ? 'selected' : '' ?>>Restar -1</option>
-          </select>
-        </label>
-        <input type="text" id="scan-code" name="code" value="<?= e($unknown_code !== '' ? $unknown_code : post('code')) ?>" autofocus placeholder="Escaneá acá (enter)..." <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>
-        <button type="submit" <?= $list['status'] !== 'open' ? 'disabled' : '' ?>>Aplicar</button>
-        <?php if ($list['status'] !== 'open'): ?>
-          <small>(listado cerrado)</small>
-        <?php endif; ?>
-      </form>
-    </div>
-  <?php endif; ?>
-
-  <div style="margin-top:14px;">
-    <h3>Items</h3>
-    <table border="1" cellpadding="6" cellspacing="0">
-      <thead>
-        <tr><th>sku</th><th>nombre</th><th>cantidad</th><th>sincronizado</th><th>acciones</th></tr>
-      </thead>
-      <tbody>
-        <?php if (!$items): ?>
-          <tr><td colspan="5">Sin items todavía.</td></tr>
-        <?php else: ?>
-          <?php foreach ($items as $it): ?>
-            <?php
-              $qty = (int)$it['qty'];
-              $synced_qty = min((int)$it['synced_qty'], $qty);
-            ?>
-            <tr>
-              <td><?= e($it['sku']) ?></td>
-              <td><?= e($it['name']) ?></td>
-              <td><?= $qty ?></td>
-              <td><?= $synced_qty ?>/<?= $qty ?></td>
-              <td>
-                <?php if ($can_delete_action): ?>
-                  <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
-                    <input type="hidden" name="action" value="delete_item">
-                    <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
-                    <button type="submit">Eliminar</button>
-                  </form>
-                <?php endif; ?>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
-    </table>
   </div>
-
-</div>
+</main>
 <?php if ($can_scan_action && $list['status'] === 'open' && ($should_focus_scan || $clear_scan_input)): ?>
 <script>
   (function() {

@@ -19,23 +19,34 @@ if (is_post()) {
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Nuevo Listado</title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Nuevo Listado</title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
 
-<div style="padding:10px;">
-  <h2>Nuevo Listado</h2>
-  <?php if ($error): ?><p style="color:red;"><?= e($error) ?></p><?php endif; ?>
-  <form method="post">
-    <div>
-      <label>Nombre</label><br>
-      <input type="text" name="name" value="<?= e(post('name')) ?>" required>
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Nuevo Listado</h2>
+      <span class="muted">Creá un nuevo listado de stock.</span>
     </div>
-    <div style="margin-top:10px;">
-      <button type="submit">Crear</button>
-      <a href="dashboard.php">Cancelar</a>
+    <div class="card">
+      <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+      <form method="post" class="stack">
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input class="form-control" type="text" name="name" value="<?= e(post('name')) ?>" required>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">Crear</button>
+          <a class="btn btn-ghost" href="dashboard.php">Cancelar</a>
+        </div>
+      </form>
     </div>
-  </form>
-</div>
+  </div>
+</main>
 </body>
 </html>

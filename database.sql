@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email      VARCHAR(190) NOT NULL,
   password_plain VARCHAR(190) NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  theme VARCHAR(32) NOT NULL DEFAULT 'theme_default',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_email (email)

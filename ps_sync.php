@@ -96,45 +96,71 @@ if ($total_sent > 0) {
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Sincronización PrestaShop</title></head>
-<body>
+<head>
+  <meta charset="utf-8">
+  <title>Sincronización PrestaShop</title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
 <?php require __DIR__ . '/_header.php'; ?>
-<div style="padding:10px;">
-  <h2>Sincronización PrestaShop - Listado #<?= (int)$list_id ?></h2>
-  <p><strong>Modo:</strong> <?= e($mode === 'add' ? 'Sumar (+)' : 'Reemplazar (=)') ?></p>
-  <p><strong>Total enviados en esta sincronización:</strong> <?= (int)$total_sent ?></p>
-  <p><strong>Pendiente después de sincronizar:</strong> <?= (int)$pending_after_total ?></p>
+<main class="page">
+  <div class="container">
+    <div class="page-header">
+      <h2 class="page-title">Sincronización PrestaShop</h2>
+      <span class="muted">Listado #<?= (int)$list_id ?></span>
+    </div>
 
-  <?php if ($synced): ?>
-    <p style="color:green;"><strong>OK:</strong> sincronización completa.</p>
-  <?php else: ?>
-    <p style="color:red;"><strong>Atención:</strong> hubo errores (<?= (int)$fail ?>).</p>
-    <p><small>Solución típica: corregí SKUs/reference en PrestaShop o en tu catálogo y volvé a intentar.</small></p>
-  <?php endif; ?>
+    <div class="card stack">
+      <div class="form-row">
+        <div><strong>Modo:</strong> <?= e($mode === 'add' ? 'Sumar (+)' : 'Reemplazar (=)') ?></div>
+        <div><strong>Total enviados en esta sincronización:</strong> <?= (int)$total_sent ?></div>
+        <div><strong>Pendiente después de sincronizar:</strong> <?= (int)$pending_after_total ?></div>
+      </div>
 
-  <table border="1" cellpadding="6" cellspacing="0" style="margin-top:10px;">
-    <thead>
-      <tr><th>SKU</th><th>Nombre</th><th>Cant.</th><th>Resultado</th><th>Detalle</th></tr>
-    </thead>
-    <tbody>
-      <?php foreach ($results as $r): ?>
-        <tr>
-          <td><?= e($r['sku']) ?></td>
-          <td><?= e($r['name']) ?></td>
-          <td><?= (int)$r['qty'] ?></td>
-          <td><?= e($r['status']) ?></td>
-          <td><?= e($r['detail']) ?></td>
-        </tr>
-      <?php endforeach; ?>
-      <?php if (!$results): ?>
-        <tr><td colspan="5">El listado no tiene items.</td></tr>
+      <?php if ($synced): ?>
+        <div class="alert alert-success"><strong>OK:</strong> sincronización completa.</div>
+      <?php else: ?>
+        <div class="alert alert-danger"><strong>Atención:</strong> hubo errores (<?= (int)$fail ?>).</div>
+        <p class="muted small">Solución típica: corregí SKUs/reference en PrestaShop o en tu catálogo y volvé a intentar.</p>
       <?php endif; ?>
-    </tbody>
-  </table>
+    </div>
 
-  <div style="margin-top:12px;">
-    <a href="list_view.php?id=<?= (int)$list_id ?>">Volver al listado</a>
+    <div class="card">
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr><th>SKU</th><th>Nombre</th><th>Cant.</th><th>Resultado</th><th>Detalle</th></tr>
+          </thead>
+          <tbody>
+            <?php foreach ($results as $r): ?>
+              <tr>
+                <td><?= e($r['sku']) ?></td>
+                <td><?= e($r['name']) ?></td>
+                <td><?= (int)$r['qty'] ?></td>
+                <td>
+                  <?php if ($r['status'] === 'OK'): ?>
+                    <span class="badge badge-success"><?= e($r['status']) ?></span>
+                  <?php elseif ($r['status'] === 'SIN PENDIENTE'): ?>
+                    <span class="badge badge-muted"><?= e($r['status']) ?></span>
+                  <?php else: ?>
+                    <span class="badge badge-danger"><?= e($r['status']) ?></span>
+                  <?php endif; ?>
+                </td>
+                <td><?= e($r['detail']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            <?php if (!$results): ?>
+              <tr><td colspan="5">El listado no tiene items.</td></tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="form-actions">
+        <a class="btn btn-ghost" href="list_view.php?id=<?= (int)$list_id ?>">Volver al listado</a>
+      </div>
+    </div>
   </div>
-</div>
+</main>
 </body>
 </html>

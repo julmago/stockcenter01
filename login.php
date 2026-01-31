@@ -16,7 +16,7 @@ if (is_post()) {
     try {
       error_log(sprintf('[%s] Login attempt for %s', date('c'), $email));
       $st = db()->prepare(
-        "SELECT id, role, first_name, last_name, email, password_plain, is_active
+        "SELECT id, role, first_name, last_name, email, password_plain, is_active, theme
          FROM users
          WHERE email = ? AND is_active = 1
          LIMIT 1"
@@ -61,27 +61,40 @@ if (is_post()) {
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Login</title></head>
-<body>
-  <h2>Login</h2>
-  <?php if ($error): ?>
-    <p style="color:red;"><?= e($error) ?></p>
-  <?php endif; ?>
-  <form method="post">
-    <div>
-      <label>Mail</label><br>
-      <input type="email" name="email" value="<?= e(post('email')) ?>" required>
+<head>
+  <meta charset="utf-8">
+  <title>Login</title>
+  <?= theme_css_links() ?>
+</head>
+<body class="app-body">
+  <main class="page">
+    <div class="container">
+      <div class="card login-card">
+        <div class="card-header">
+          <h2 class="card-title">Ingreso</h2>
+          <span class="muted small">Entrada de Stock</span>
+        </div>
+        <?php if ($error): ?>
+          <div class="alert alert-danger"><?= e($error) ?></div>
+        <?php endif; ?>
+        <form method="post" class="stack">
+          <div class="form-group">
+            <label class="form-label">Mail</label>
+            <input class="form-control" type="email" name="email" value="<?= e(post('email')) ?>" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contraseña</label>
+            <input class="form-control" type="text" name="password" required>
+          </div>
+          <div class="form-actions">
+            <button class="btn" type="submit">Ingresar</button>
+          </div>
+        </form>
+        <p class="muted small">
+          Los usuarios se crean por base de datos (tabla <span class="code">users</span>).
+        </p>
+      </div>
     </div>
-    <div style="margin-top:8px;">
-      <label>Contraseña</label><br>
-      <input type="text" name="password" required>
-    </div>
-    <div style="margin-top:12px;">
-      <button type="submit">Ingresar</button>
-    </div>
-  </form>
-  <p style="margin-top:14px;">
-    <small>Los usuarios se crean por base de datos (tabla <code>users</code>).</small>
-  </p>
+  </main>
 </body>
 </html>

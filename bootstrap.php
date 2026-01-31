@@ -159,3 +159,36 @@ function post(string $key, string $default=''): string {
 function get(string $key, string $default=''): string {
   return isset($_GET[$key]) ? trim((string)$_GET[$key]) : $default;
 }
+
+function theme_catalog(): array {
+  return [
+    'theme_default' => [
+      'name' => 'Default pastel',
+      'description' => 'Minimalista, claro y suave en colores pastel.',
+    ],
+    'theme_dark' => [
+      'name' => 'Dark pastel',
+      'description' => 'La misma estética suave, en versión oscura.',
+    ],
+    'theme_trek' => [
+      'name' => 'Trek futurista',
+      'description' => 'Inspiración sci-fi con paneles luminosos y glow sutil.',
+    ],
+  ];
+}
+
+function current_theme(): string {
+  $theme = (string)($_SESSION['user']['theme'] ?? 'theme_default');
+  $themes = theme_catalog();
+  if (!isset($themes[$theme])) {
+    $theme = 'theme_default';
+  }
+  return $theme;
+}
+
+function theme_css_links(): string {
+  $theme = current_theme();
+  $base = '<link rel="stylesheet" href="/assets/themes/base.css">';
+  $theme_css = '<link rel="stylesheet" href="/assets/themes/' . $theme . '.css" id="theme-stylesheet">';
+  return $base . $theme_css;
+}
