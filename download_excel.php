@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 require_login();
 
 $list_id = (int)get('id','0');
@@ -21,15 +25,40 @@ $st = db()->prepare("
 $st->execute([$list_id]);
 $rows = $st->fetchAll();
 
-$filename = "listado_{$list_id}.csv";
-header('Content-Type: text/csv; charset=UTF-8');
-header('Content-Disposition: attachment; filename="'.$filename.'"');
-
-$out = fopen('php://output', 'w');
-fwrite($out, "\xEF\xBB\xBF");
-fputcsv($out, ['sku','nombre','cantidad'], ';');
-foreach ($rows as $r) {
-  fputcsv($out, [$r['sku'], $r['name'], (int)$r['qty']], ';');
+if (headers_sent()) {
+  abort(500, 'No se pudo generar el XLSX.');
 }
-fclose($out);
+
+while (ob_get_level() > 0) {
+  ob_end_clean();
+}
+
+$spreadsheet = new Spreadsheet();
+$sheet = $spreadsheet->getActiveSheet();
+$sheet->setTitle('Listado');
+
+$sheet->setCellValue('A1', 'sku');
+$sheet->setCellValue('B1', 'nombre');
+$sheet->setCellValue('C1', 'cantidad');
+$sheet->getStyle('A1:C1')->getFont()->setBold(true);
+
+$rowIndex = 2;
+foreach ($rows as $r) {
+  $sheet->setCellValue("A{$rowIndex}", $r['sku']);
+  $sheet->setCellValue("B{$rowIndex}", $r['name']);
+  $sheet->setCellValue("C{$rowIndex}", (int)$r['qty']);
+  $rowIndex++;
+}
+
+foreach (['A', 'B', 'C'] as $column) {
+  $sheet->getColumnDimension($column)->setAutoSize(true);
+}
+
+$filename = "listado_{$list_id}.xlsx";
+header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Cache-Control: max-age=0');
+
+$writer = new Xlsx($spreadsheet);
+$writer->save('php://output');
 exit;
