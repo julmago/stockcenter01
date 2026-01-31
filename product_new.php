@@ -22,7 +22,7 @@ if (is_post()) {
       $pid = (int)db()->lastInsertId();
 
       if ($code !== '') {
-        $st = db()->prepare("INSERT INTO product_codes(product_id, code) VALUES(?, ?)");
+        $st = db()->prepare("INSERT INTO product_codes(product_id, code, code_type) VALUES(?, ?, 'BARRA')");
         $st->execute([$pid, $code]);
       }
 

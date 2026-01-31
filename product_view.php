@@ -34,11 +34,15 @@ if (is_post() && post('action') === 'update') {
 
 if (is_post() && post('action') === 'add_code') {
   $code = post('code');
+  $code_type = post('code_type');
+  if (!in_array($code_type, ['BARRA','MPN'], true)) {
+    $code_type = 'BARRA';
+  }
   if ($code === '') $error = 'Escaneá un código.';
   else {
     try {
-      $st = db()->prepare("INSERT INTO product_codes(product_id, code) VALUES(?, ?)");
-      $st->execute([$id, $code]);
+      $st = db()->prepare("INSERT INTO product_codes(product_id, code, code_type) VALUES(?, ?, ?)");
+      $st->execute([$id, $code, $code_type]);
       $message = 'Código agregado.';
     } catch (Throwable $t) {
       $error = 'Ese código ya existe en otro producto.';
@@ -60,7 +64,7 @@ $st = db()->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
 $st->execute([$id]);
 $product = $st->fetch();
 
-$st = db()->prepare("SELECT id, code, created_at FROM product_codes WHERE product_id = ? ORDER BY id DESC");
+$st = db()->prepare("SELECT id, code, code_type, created_at FROM product_codes WHERE product_id = ? ORDER BY id DESC");
 $st->execute([$id]);
 $codes = $st->fetchAll();
 
@@ -103,20 +107,25 @@ $codes = $st->fetchAll();
   <form method="post">
     <input type="hidden" name="action" value="add_code">
     <input type="text" name="code" placeholder="Escaneá código" autofocus>
+    <select name="code_type">
+      <option value="BARRA">BARRA</option>
+      <option value="MPN">MPN</option>
+    </select>
     <button type="submit">Agregar</button>
   </form>
 
   <table border="1" cellpadding="6" cellspacing="0" style="margin-top:10px;">
     <thead>
-      <tr><th>código</th><th>fecha</th><th>acciones</th></tr>
+      <tr><th>código</th><th>tipo</th><th>fecha</th><th>acciones</th></tr>
     </thead>
     <tbody>
       <?php if (!$codes): ?>
-        <tr><td colspan="3">Sin códigos todavía.</td></tr>
+        <tr><td colspan="4">Sin códigos todavía.</td></tr>
       <?php else: ?>
         <?php foreach ($codes as $c): ?>
           <tr>
             <td><?= e($c['code']) ?></td>
+            <td><?= e($c['code_type']) ?></td>
             <td><?= e($c['created_at']) ?></td>
             <td>
               <form method="post" style="display:inline;">
