@@ -167,11 +167,31 @@ img {
 .theme-card {
   display: flex;
   flex-direction: column;
-  min-height: 260px;
+  height: 100%;
+}
+
+.theme-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 40px;
+  margin-bottom: var(--space-3);
+}
+
+.theme-card__badge--hidden {
+  visibility: hidden;
+}
+
+.theme-card__description {
+  margin: 0 0 var(--space-3);
+}
+
+.theme-card__spacer {
+  flex: 1;
 }
 
 .theme-card__actions {
-  margin-top: auto;
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;

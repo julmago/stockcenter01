@@ -45,13 +45,12 @@ if (is_post() && post('action') === 'apply') {
     <div class="themes-grid">
       <?php foreach ($themes as $key => $theme): ?>
         <div class="card theme-card">
-          <div class="card-header">
+          <div class="theme-card__header">
             <h3 class="card-title"><?= e($theme['name']) ?></h3>
-            <?php if ($current_theme === $key): ?>
-              <span class="badge badge-success">Activo</span>
-            <?php endif; ?>
+            <span class="badge badge-success theme-card__badge <?= $current_theme === $key ? '' : 'theme-card__badge--hidden' ?>">Activo</span>
           </div>
-          <p class="muted"><?= e($theme['description']) ?></p>
+          <p class="muted theme-card__description"><?= e($theme['description']) ?></p>
+          <div class="theme-card__spacer"></div>
           <div class="form-actions theme-card__actions">
             <button class="btn btn-secondary" type="button" data-preview-btn="<?= e($key) ?>">Preview</button>
             <form method="post" style="margin:0;">
