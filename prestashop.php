@@ -19,6 +19,30 @@ function ps_mode(): string {
   return in_array($m, ['replace','add'], true) ? $m : 'replace';
 }
 
+function ps_build_url(string $path): string {
+  $base = ps_base_url();
+  if ($base === '') {
+    throw new RuntimeException("Falta configurar PrestaShop (URL base).");
+  }
+  $normalized = $path;
+  if (!str_starts_with($normalized, '/api')) {
+    if (!str_starts_with($normalized, '/')) {
+      $normalized = '/' . $normalized;
+    }
+    $normalized = '/api' . $normalized;
+  }
+  return $base . $normalized;
+}
+
+function ps_has_header(array $headers, string $needle): bool {
+  foreach ($headers as $header) {
+    if (stripos($header, $needle . ':') === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function ps_request(string $method, string $path, ?string $body = null, array $headers = []): array {
   $base = ps_base_url();
   $key  = ps_api_key();
@@ -26,7 +50,7 @@ function ps_request(string $method, string $path, ?string $body = null, array $h
     throw new RuntimeException("Falta configurar PrestaShop (URL / API Key).");
   }
 
-  $url = $base . $path;
+  $url = ps_build_url($path);
 
   $ch = curl_init($url);
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -35,23 +59,36 @@ function ps_request(string $method, string $path, ?string $body = null, array $h
   curl_setopt($ch, CURLOPT_TIMEOUT, 30);
   curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
+  if (!ps_has_header($headers, 'Accept')) {
+    $headers[] = 'Accept: application/xml';
+  }
+
   if ($body !== null) {
-    $headers[] = 'Content-Type: application/xml; charset=utf-8';
+    if (!ps_has_header($headers, 'Content-Type')) {
+      $headers[] = 'Content-Type: application/xml; charset=utf-8';
+    }
     curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
   }
 
   if ($headers) curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
+  error_log("[PrestaShop] Request: {$method} {$url}");
+
   $resp = curl_exec($ch);
   $err  = curl_error($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $contentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
   curl_close($ch);
 
   if ($resp === false) {
     throw new RuntimeException("Error cURL: " . $err);
   }
 
-  return ['code' => $code, 'body' => $resp];
+  $snippet = substr($resp, 0, 1000);
+  error_log("[PrestaShop] Response: HTTP {$code} | Content-Type: " . ($contentType ?: 'n/a'));
+  error_log("[PrestaShop] Body (first 1000 chars): " . $snippet);
+
+  return ['code' => $code, 'body' => $resp, 'content_type' => $contentType, 'url' => $url];
 }
 
 function ps_xml_load(string $xml): SimpleXMLElement {
@@ -74,15 +111,13 @@ function ps_xml_load(string $xml): SimpleXMLElement {
 function ps_find_by_reference(string $sku): ?array {
   $sku = trim($sku);
   if ($sku === '') return null;
-  $base = ps_base_url();
   $encoded_sku = rawurlencode($sku);
 
   // 1) probar combinaciones por reference (si existen)
   // display=[id,id_product,reference]
   $q = "/api/combinations?display=[id,id_product,reference]&filter[reference]=[" . $encoded_sku . "]";
-  error_log("PrestaShop URL: " . $base . $q);
+  error_log("[PrestaShop] Lookup combinations by reference URL: " . ps_build_url($q));
   $r = ps_request("GET", $q);
-  error_log("PrestaShop response: " . $r['body']);
   if ($r['code'] >= 200 && $r['code'] < 300) {
     $sx = ps_xml_load($r['body']);
     if (isset($sx->combinations->combination)) {
@@ -97,9 +132,8 @@ function ps_find_by_reference(string $sku): ?array {
 
   // 2) producto simple por reference
   $q = "/api/products?display=[id,reference]&filter[reference]=[" . $encoded_sku . "]";
-  error_log("PrestaShop URL: " . $base . $q);
+  error_log("[PrestaShop] Lookup products by reference URL: " . ps_build_url($q));
   $r = ps_request("GET", $q);
-  error_log("PrestaShop response: " . $r['body']);
   if ($r['code'] >= 200 && $r['code'] < 300) {
     $sx = ps_xml_load($r['body']);
     if (isset($sx->products->product)) {
