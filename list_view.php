@@ -36,9 +36,7 @@ if (is_post() && post('action') === 'toggle_status') {
 
 // Delete item
 if (is_post() && post('action') === 'delete_item') {
-  if (!can_delete_list_item()) {
-    abort(403, 'Sin permisos');
-  }
+  require_permission(can_delete_list_item());
   $product_id = (int)post('product_id', '0');
   if ($product_id <= 0) {
     $error = 'Producto inválido.';

@@ -89,6 +89,12 @@ function require_role(array $roles, string $message = 'Sin permisos'): void {
   }
 }
 
+function require_permission(bool $allowed, string $message = 'Sin permisos'): void {
+  if (!$allowed) {
+    abort(403, $message);
+  }
+}
+
 function current_user(): array {
   return $_SESSION['user'] ?? [];
 }

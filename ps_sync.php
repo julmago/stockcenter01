@@ -3,9 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/prestashop.php';
 require_login();
-if (!can_sync_prestashop()) {
-  abort(403, 'Sin permisos');
-}
+require_permission(can_sync_prestashop());
 
 $list_id = (int)get('id','0');
 if ($list_id <= 0) abort(400, 'Falta id de listado.');
