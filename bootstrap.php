@@ -8,6 +8,35 @@ ini_set('log_errors', '1');
 $debug = (bool)($config['debug'] ?? false);
 ini_set('display_errors', $debug ? '1' : '0');
 
+function normalize_base_path(string $path): string {
+  $path = trim($path);
+  if ($path === '' || $path === '/') {
+    return '';
+  }
+  if ($path[0] !== '/') {
+    $path = '/' . $path;
+  }
+  return rtrim($path, '/');
+}
+
+function detect_base_path(): string {
+  $scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '');
+  if ($scriptName === '') {
+    return '';
+  }
+  $dir = str_replace('\\', '/', dirname($scriptName));
+  if ($dir === '/' || $dir === '.') {
+    return '';
+  }
+  return $dir;
+}
+
+$configuredBasePath = (string)($config['base_path'] ?? '');
+$basePath = normalize_base_path($configuredBasePath !== '' ? $configuredBasePath : detect_base_path());
+if (!defined('BASE_PATH')) {
+  define('BASE_PATH', $basePath);
+}
+
 $logDir = dirname(__DIR__) . '/storage/logs';
 if (!is_dir($logDir)) {
   mkdir($logDir, 0775, true);
@@ -67,6 +96,11 @@ function abort(int $code, string $message): void {
 
 function e(string $s): string {
   return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+function asset_url(string $path): string {
+  $path = ltrim($path, '/');
+  return BASE_PATH . '/' . $path;
 }
 
 function redirect(string $to): void {
@@ -188,7 +222,7 @@ function current_theme(): string {
 
 function theme_css_links(): string {
   $theme = current_theme();
-  $base = '<link rel="stylesheet" href="/assets/themes/base.css">';
-  $theme_css = '<link rel="stylesheet" href="/assets/themes/' . $theme . '.css" id="theme-stylesheet">';
+  $base = '<link rel="stylesheet" href="' . asset_url('assets/themes/base.css') . '">';
+  $theme_css = '<link rel="stylesheet" href="' . asset_url('assets/themes/' . $theme . '.css') . '" id="theme-stylesheet">';
   return $base . $theme_css;
 }
