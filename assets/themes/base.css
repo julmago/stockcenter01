@@ -164,9 +164,9 @@ img {
 
 .themes-grid {
   display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
 }
 
 .theme-page-header {
@@ -184,6 +184,7 @@ img {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 220px;
 }
 
 .theme-card__header {
@@ -199,12 +200,8 @@ img {
   visibility: hidden;
 }
 
-.theme-card__description {
+.theme-card__desc {
   margin: 0 0 var(--space-3);
-}
-
-.theme-card__spacer {
-  flex: 1;
 }
 
 .theme-card__actions {

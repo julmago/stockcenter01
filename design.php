@@ -53,8 +53,7 @@ if (is_post() && post('action') === 'apply') {
             <h3 class="card-title"><?= e($theme['name']) ?></h3>
             <span class="badge badge-success theme-card__badge <?= $current_theme === $key ? '' : 'theme-card__badge--hidden' ?>">Activo</span>
           </div>
-          <p class="muted theme-card__description"><?= e($theme['description']) ?></p>
-          <div class="theme-card__spacer"></div>
+          <p class="muted theme-card__desc"><?= e($theme['description']) ?></p>
           <div class="form-actions theme-card__actions">
             <button class="btn btn-secondary" type="button" data-preview-btn="<?= e($key) ?>">Preview</button>
             <form method="post" style="margin:0;">
