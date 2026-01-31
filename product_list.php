@@ -33,7 +33,7 @@ $select_sql = "SELECT p.id, p.sku, p.name, p.brand,"
   . " FROM products p"
   . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
   . " $where"
-  . " GROUP BY p.id"
+  . " GROUP BY p.id, p.sku, p.name, p.brand"
   . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
   . " LIMIT ? OFFSET ?";
 $select_params = $params;
