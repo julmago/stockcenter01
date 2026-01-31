@@ -175,6 +175,8 @@ function ps_find_by_reference(string $sku): ?array {
   $q = "/api/products?display=[id,reference]&filter[reference]=[" . $encoded_sku . "]";
   error_log("[PrestaShop] Lookup products by reference URL: " . ps_build_url($q));
   $r = ps_request("GET", $q);
+  $snippet = substr($r['body'], 0, 500);
+  error_log("[PrestaShop] products HTTP {$r['code']} | Body (first 500 chars): " . $snippet);
   if ($r['code'] >= 200 && $r['code'] < 300) {
     $sx = ps_xml_load($r['body']);
     $id_prod = ps_find_first_product_id($sx);
@@ -187,16 +189,39 @@ function ps_find_by_reference(string $sku): ?array {
 }
 
 function ps_find_stock_available_id(int $id_product, int $id_product_attribute): ?int {
-  $q = "/api/stock_availables?display=[id,id_product,id_product_attribute]&filter[id_product]=[" . $id_product . "]&filter[id_product_attribute]=[" . $id_product_attribute . "]";
+  $filter_attr = 0;
+  $query = http_build_query([
+    'display' => '[id,id_product,id_product_attribute,quantity]',
+    'filter[id_product]' => '[' . $id_product . ']',
+    'filter[id_product_attribute]' => '[' . $filter_attr . ']',
+  ], '', '&', PHP_QUERY_RFC3986);
+  $q = "/api/stock_availables?" . $query;
+  error_log("[PrestaShop] Lookup stock_availables URL: " . ps_build_url($q));
   $r = ps_request("GET", $q);
-  if (!($r['code'] >= 200 && $r['code'] < 300)) return null;
+  $snippet = substr($r['body'], 0, 500);
+  error_log("[PrestaShop] stock_availables HTTP {$r['code']} | Body (first 500 chars): " . $snippet);
+  if (!($r['code'] >= 200 && $r['code'] < 300)) {
+    throw new RuntimeException("No se pudo consultar stock_availables (HTTP {$r['code']}).");
+  }
 
   $sx = ps_xml_load($r['body']);
-  if (isset($sx->stock_availables->stock_available)) {
-    $sa = $sx->stock_availables->stock_available[0];
-    $id = (int)$sa->attributes()->id;
-    return $id > 0 ? $id : null;
+  if (!isset($sx->stock_availables)) {
+    throw new RuntimeException("Respuesta XML inesperada al buscar stock_available.");
   }
+
+  if (isset($sx->stock_availables->stock_available)) {
+    foreach ($sx->stock_availables->stock_available as $sa) {
+      $attr_id = (int)trim((string)$sa->id_product_attribute);
+      if ($attr_id !== 0) {
+        continue;
+      }
+      $id = (int)trim((string)$sa->id);
+      if ($id > 0) {
+        return $id;
+      }
+    }
+  }
+
   return null;
 }
 
