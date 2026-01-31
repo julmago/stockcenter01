@@ -12,7 +12,9 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
     <a href="list_new.php">Nuevo Listado</a>
     <a href="product_new.php">Nuevo Producto</a>
     <a href="product_list.php">Listado de productos</a>
-    <a href="product_import.php">Importar CSV</a>
+    <?php if (can_import_csv()): ?>
+      <a href="product_import.php">Importar CSV</a>
+    <?php endif; ?>
     <?php if ($is_superadmin): ?>
       <a href="ps_config.php">Config PrestaShop</a>
     <?php endif; ?>
