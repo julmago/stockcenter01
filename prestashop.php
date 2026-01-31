@@ -228,3 +228,48 @@ function ps_update_stock_available_quantity(int $id_stock_available, int $new_qt
     throw new RuntimeException("Falló actualización stock_available #{$id_stock_available} (HTTP {$r['code']}).");
   }
 }
+
+function ps_extract_created_stock_available_id(SimpleXMLElement $sx): ?int {
+  if (isset($sx->stock_available->id)) {
+    $id = (int)trim((string)$sx->stock_available->id);
+    return $id > 0 ? $id : null;
+  }
+  if (isset($sx->stock_available) && $sx->stock_available->attributes() && isset($sx->stock_available->attributes()->id)) {
+    $id = (int)$sx->stock_available->attributes()->id;
+    return $id > 0 ? $id : null;
+  }
+  if (isset($sx->stock_available)) {
+    $id_text = trim((string)$sx->stock_available);
+    $id = (int)$id_text;
+    return $id > 0 ? $id : null;
+  }
+  return null;
+}
+
+function ps_create_stock_available(int $id_product, int $id_product_attribute, int $quantity): int {
+  $qty = max(0, $quantity);
+  $sx = new SimpleXMLElement('<prestashop></prestashop>');
+  $sa = $sx->addChild('stock_available');
+  $sa->addChild('id_product', (string)$id_product);
+  $sa->addChild('id_product_attribute', (string)$id_product_attribute);
+  $sa->addChild('quantity', (string)$qty);
+  $sa->addChild('depends_on_stock', '0');
+  $sa->addChild('out_of_stock', '2');
+
+  $xml = $sx->asXML();
+  if ($xml === false) {
+    throw new RuntimeException("No se pudo generar XML para crear stock.");
+  }
+
+  $r = ps_request("POST", "/api/stock_availables", $xml);
+  if (!($r['code'] >= 200 && $r['code'] < 300)) {
+    throw new RuntimeException("Falló creación de stock_available (HTTP {$r['code']}).");
+  }
+
+  $resp = ps_xml_load($r['body']);
+  $id = ps_extract_created_stock_available_id($resp);
+  if ($id === null) {
+    throw new RuntimeException("No se obtuvo ID de stock_available creado.");
+  }
+  return $id;
+}

@@ -43,7 +43,12 @@ foreach ($items as $it) {
 
     $id_sa = ps_find_stock_available_id($id_product, $id_attr);
     if (!$id_sa) {
-      throw new RuntimeException("No se encontró stock_available para id_product={$id_product}, id_attr={$id_attr}.");
+      $stock_message = "El producto existe pero no tiene stock creado en PrestaShop. Abrí el producto en PrestaShop, tocá el stock y guardá.";
+      try {
+        $id_sa = ps_create_stock_available($id_product, $id_attr, $qty);
+      } catch (Throwable $stock_error) {
+        throw new RuntimeException($stock_message . " (No se pudo crear automáticamente.)");
+      }
     }
 
     if ($mode === 'add') {
