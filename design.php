@@ -88,11 +88,12 @@ if (is_post() && post('action') === 'apply') {
     const resetButton = document.getElementById('theme-preview-reset');
     if (!themeLink || !previewButtons.length) return;
 
+    const basePath = '<?= e(BASE_PATH) ?>';
     const currentTheme = '<?= e($current_theme) ?>';
     const themes = <?= json_encode($themes) ?>;
 
     function setTheme(themeKey, isPreview) {
-      themeLink.setAttribute('href', `/assets/themes/${themeKey}.css`);
+      themeLink.setAttribute('href', `${basePath}/assets/themes/${themeKey}.css`);
       if (previewStatus && themes[themeKey]) {
         previewStatus.textContent = `${isPreview ? 'Preview' : 'Tema activo'}: ${themes[themeKey].name}`;
       }

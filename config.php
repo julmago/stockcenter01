@@ -20,4 +20,6 @@ return [
   ],
   // Para producción: poné esto en true
   'debug' => true,
+  // Base path del proyecto (ej: /stockcenter). Dejá vacío para auto-detección.
+  'base_path' => env('BASE_PATH', ''),
 ];
