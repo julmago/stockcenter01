@@ -34,13 +34,17 @@ if (is_post() && post('action') === 'apply') {
 
 <main class="page">
   <div class="container">
-    <div class="page-header">
+    <div class="page-header theme-page-header">
       <h2 class="page-title">Plantillas de diseño</h2>
       <span class="muted">Elegí una plantilla para cambiar el look del sistema.</span>
     </div>
 
-    <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
-    <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+    <?php if ($message || $error): ?>
+      <div class="theme-alerts">
+        <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
+        <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+      </div>
+    <?php endif; ?>
 
     <div class="themes-grid">
       <?php foreach ($themes as $key => $theme): ?>
