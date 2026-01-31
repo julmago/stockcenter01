@@ -98,16 +98,32 @@ try {
   abort(500, 'No se pudieron obtener los productos del listado.');
 }
 
-if (!class_exists(Spreadsheet::class) || !class_exists(Xlsx::class)) {
-  abort(500, 'No está disponible el generador de XLSX en este entorno.');
-}
-
 if (headers_sent()) {
-  abort(500, 'No se pudo generar el XLSX.');
+  abort(500, 'No se pudo generar el archivo.');
 }
 
 while (ob_get_level() > 0) {
   ob_end_clean();
+}
+
+$hasXlsx = class_exists(Spreadsheet::class) && class_exists(Xlsx::class);
+
+if (!$hasXlsx) {
+  $filename = "listado_{$list_id}.csv";
+  header('Content-Type: text/csv; charset=UTF-8');
+  header('Content-Disposition: attachment; filename="' . $filename . '"');
+  header('Cache-Control: max-age=0');
+  echo "\xEF\xBB\xBF";
+  $output = fopen('php://output', 'w');
+  if ($output === false) {
+    abort(500, 'No se pudo generar el CSV.');
+  }
+  fputcsv($output, ['sku', 'nombre', 'cantidad']);
+  foreach ($rows as $r) {
+    fputcsv($output, [$r['sku'], $r['name'], (int)$r['qty']]);
+  }
+  fclose($output);
+  exit;
 }
 
 $spreadsheet = new Spreadsheet();
