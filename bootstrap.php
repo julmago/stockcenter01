@@ -93,6 +93,23 @@ function current_user(): array {
   return $_SESSION['user'] ?? [];
 }
 
+function current_role(): string {
+  $user = current_user();
+  return (string)($user['role'] ?? '');
+}
+
+function can_import_csv(): bool {
+  return in_array(current_role(), ['superadmin', 'admin'], true);
+}
+
+function can_sync_prestashop(): bool {
+  return in_array(current_role(), ['superadmin', 'admin'], true);
+}
+
+function can_delete_list_item(): bool {
+  return in_array(current_role(), ['superadmin', 'admin'], true);
+}
+
 function is_post(): bool {
   return ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
 }

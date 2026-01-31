@@ -36,6 +36,9 @@ if (is_post() && post('action') === 'toggle_status') {
 
 // Delete item
 if (is_post() && post('action') === 'delete_item') {
+  if (!can_delete_list_item()) {
+    abort(403, 'Sin permisos');
+  }
   $product_id = (int)post('product_id', '0');
   if ($product_id <= 0) {
     $error = 'Producto inválido.';
@@ -261,6 +264,8 @@ foreach ($items as $it) {
 
 $sync_blocked = $list['status'] !== 'open';
 $can_sync = !$sync_blocked && $total_pending > 0;
+$can_sync_action = can_sync_prestashop();
+$can_delete_action = can_delete_list_item();
 
 ?>
 <!doctype html>
@@ -291,16 +296,18 @@ $can_sync = !$sync_blocked && $total_pending > 0;
         <button type="submit"><?= $list['status'] === 'open' ? 'Cerrar' : 'Abrir' ?></button>
       </form>
 
-      <form method="post" style="display:inline;" action="ps_sync.php?id=<?= (int)$list['id'] ?>">
-        <button type="submit" <?= $can_sync ? '' : 'disabled' ?>>
-          Sincronizar a PrestaShop
-        </button>
-        <?php if ($sync_blocked): ?>
-          <small>(listado cerrado)</small>
-        <?php elseif (!$can_sync): ?>
-          <small>(sin pendientes)</small>
-        <?php endif; ?>
-      </form>
+      <?php if ($can_sync_action): ?>
+        <form method="post" style="display:inline;" action="ps_sync.php?id=<?= (int)$list['id'] ?>">
+          <button type="submit" <?= $can_sync ? '' : 'disabled' ?>>
+            Sincronizar a PrestaShop
+          </button>
+          <?php if ($sync_blocked): ?>
+            <small>(listado cerrado)</small>
+          <?php elseif (!$can_sync): ?>
+            <small>(sin pendientes)</small>
+          <?php endif; ?>
+        </form>
+      <?php endif; ?>
     </div>
 
     <div style="margin-top:10px;">
@@ -422,11 +429,13 @@ $can_sync = !$sync_blocked && $total_pending > 0;
               <td><?= $qty ?></td>
               <td><?= $synced_qty ?>/<?= $qty ?></td>
               <td>
-                <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
-                  <input type="hidden" name="action" value="delete_item">
-                  <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
-                  <button type="submit">Eliminar</button>
-                </form>
+                <?php if ($can_delete_action): ?>
+                  <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
+                    <input type="hidden" name="action" value="delete_item">
+                    <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
+                    <button type="submit">Eliminar</button>
+                  </form>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>
