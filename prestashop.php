@@ -102,6 +102,47 @@ function ps_xml_load(string $xml): SimpleXMLElement {
   return $sx;
 }
 
+function ps_extract_product_id(SimpleXMLElement $product): int {
+  $id_text = trim((string)$product->id);
+  if ($id_text !== '') {
+    return (int)$id_text;
+  }
+
+  $attr_id = trim((string)$product->attributes()->id);
+  if ($attr_id !== '') {
+    return (int)$attr_id;
+  }
+
+  return 0;
+}
+
+function ps_find_first_product_id(SimpleXMLElement $sx): ?int {
+  if (!isset($sx->products->product)) {
+    return null;
+  }
+
+  $products = $sx->products->product;
+
+  if (is_array($products)) {
+    foreach ($products as $product) {
+      $id = ps_extract_product_id($product);
+      if ($id > 0) {
+        return $id;
+      }
+    }
+    return null;
+  }
+
+  foreach ($products as $product) {
+    $id = ps_extract_product_id($product);
+    if ($id > 0) {
+      return $id;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Busca un producto o combinación por SKU (reference).
  * Retorna:
@@ -123,7 +164,7 @@ function ps_find_by_reference(string $sku): ?array {
     if (isset($sx->combinations->combination)) {
       $comb = $sx->combinations->combination[0];
       $id_attr = (int)$comb->attributes()->id;
-      $id_prod = (int)$comb->id_product;
+      $id_prod = (int)trim((string)$comb->id_product);
       if ($id_attr > 0 && $id_prod > 0) {
         return ['type' => 'combination', 'id_product' => $id_prod, 'id_product_attribute' => $id_attr];
       }
@@ -136,12 +177,9 @@ function ps_find_by_reference(string $sku): ?array {
   $r = ps_request("GET", $q);
   if ($r['code'] >= 200 && $r['code'] < 300) {
     $sx = ps_xml_load($r['body']);
-    if (isset($sx->products->product)) {
-      $p = $sx->products->product[0];
-      $id_prod = (int)$p->attributes()->id;
-      if ($id_prod > 0) {
-        return ['type' => 'product', 'id_product' => $id_prod, 'id_product_attribute' => 0];
-      }
+    $id_prod = ps_find_first_product_id($sx);
+    if ($id_prod !== null && $id_prod > 0) {
+      return ['type' => 'product', 'id_product' => $id_prod, 'id_product_attribute' => 0];
     }
   }
 
