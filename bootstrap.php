@@ -41,6 +41,17 @@ register_shutdown_function(function (): void {
   }
 });
 
+$sessionLifetime = 31536000;
+ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
+ini_set('session.cookie_lifetime', (string)$sessionLifetime);
+ini_set('session.use_strict_mode', '1');
+session_set_cookie_params([
+  'lifetime' => $sessionLifetime,
+  'path' => '/',
+  'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+  'httponly' => true,
+  'samesite' => 'Lax',
+]);
 session_start();
 if (session_status() !== PHP_SESSION_ACTIVE) {
   error_log(sprintf('[%s] Session failed to start.', date('c')));

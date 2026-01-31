@@ -31,6 +31,7 @@ if (is_post()) {
         $error = 'Contraseña incorrecta.';
       } else {
         error_log(sprintf('[%s] Login success for %s', date('c'), $email));
+        session_regenerate_id(true);
         unset($u['password_plain']);
         $_SESSION['user'] = $u;
         redirect('dashboard.php');
