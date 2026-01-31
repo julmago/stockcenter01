@@ -42,9 +42,9 @@ if (is_post() && post('action') === 'apply') {
     <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
-    <div class="grid grid-3">
+    <div class="themes-grid">
       <?php foreach ($themes as $key => $theme): ?>
-        <div class="card">
+        <div class="card theme-card">
           <div class="card-header">
             <h3 class="card-title"><?= e($theme['name']) ?></h3>
             <?php if ($current_theme === $key): ?>
@@ -52,10 +52,7 @@ if (is_post() && post('action') === 'apply') {
             <?php endif; ?>
           </div>
           <p class="muted"><?= e($theme['description']) ?></p>
-          <div class="theme-preview" data-preview="<?= e($key) ?>">
-            Vista previa: <?= e($theme['name']) ?>
-          </div>
-          <div class="form-actions">
+          <div class="form-actions theme-card__actions">
             <button class="btn btn-secondary" type="button" data-preview-btn="<?= e($key) ?>">Preview</button>
             <form method="post" style="margin:0;">
               <input type="hidden" name="action" value="apply">
@@ -67,12 +64,9 @@ if (is_post() && post('action') === 'apply') {
       <?php endforeach; ?>
     </div>
 
-    <div class="card" style="margin-top: var(--space-4);">
-      <div class="card-header">
-        <h3 class="card-title">Preview en vivo</h3>
-      </div>
-      <p class="muted">Podés previsualizar sin guardar. El botón “Aplicar” guarda tu preferencia.</p>
-      <div class="inline-actions">
+    <div class="card theme-preview-card">
+      <p class="muted">Preview en vivo: probá el tema sin guardar. El botón “Aplicar” confirma tu preferencia.</p>
+      <div class="theme-preview-card__actions">
         <span class="badge badge-muted" id="theme-preview-status">Tema activo: <?= e($themes[$current_theme]['name']) ?></span>
         <button class="btn btn-ghost" type="button" id="theme-preview-reset">Restaurar tema activo</button>
       </div>
