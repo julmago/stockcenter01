@@ -80,6 +80,15 @@ function require_login(): void {
   }
 }
 
+function require_role(array $roles, string $message = 'Sin permisos'): void {
+  require_login();
+  $user = current_user();
+  $role = $user['role'] ?? '';
+  if (!in_array($role, $roles, true)) {
+    abort(403, $message);
+  }
+}
+
 function current_user(): array {
   return $_SESSION['user'] ?? [];
 }
