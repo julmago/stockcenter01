@@ -166,7 +166,7 @@ img {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-items: stretch;
+  align-items: start;
 }
 
 .theme-page-header {
@@ -212,6 +212,7 @@ img {
   gap: var(--space-2);
   flex-wrap: wrap;
   align-items: center;
+  margin-top: auto;
 }
 
 .theme-preview-card {
