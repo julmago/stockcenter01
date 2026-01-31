@@ -42,7 +42,7 @@ if (is_post() && post('action') === 'scan') {
         SELECT pc.product_id, p.sku, p.name
         FROM product_codes pc
         JOIN products p ON p.id = pc.product_id
-        WHERE LOWER(pc.code) = LOWER(?)
+        WHERE pc.code_type = 'BARRA' AND LOWER(pc.code) = LOWER(?)
         LIMIT 1
       ");
       $st->execute([$code]);
@@ -52,6 +52,18 @@ if (is_post() && post('action') === 'scan') {
           SELECT p.id AS product_id, p.sku, p.name
           FROM products p
           WHERE LOWER(p.sku) = LOWER(?)
+          LIMIT 1
+        ");
+        $st->execute([$code]);
+        $found = $st->fetch();
+      }
+
+      if (!$found) {
+        $st = db()->prepare("
+          SELECT pc.product_id, p.sku, p.name
+          FROM product_codes pc
+          JOIN products p ON p.id = pc.product_id
+          WHERE pc.code_type = 'MPN' AND LOWER(pc.code) = LOWER(?)
           LIMIT 1
         ");
         $st->execute([$code]);
@@ -84,7 +96,7 @@ if (is_post() && post('action') === 'associate_code') {
     } else {
       // Insert code (si ya existe, error por UNIQUE)
       try {
-        $st = db()->prepare("INSERT INTO product_codes(product_id, code) VALUES(?, ?)");
+        $st = db()->prepare("INSERT INTO product_codes(product_id, code, code_type) VALUES(?, ?, 'BARRA')");
         $st->execute([$product_id, $code]);
       } catch (Throwable $t) {
         $error = 'Ese código ya está asignado a otro producto.';
@@ -118,7 +130,7 @@ if (is_post() && post('action') === 'create_product_from_code') {
         $st->execute([$sku, $name, $brand]);
         $pid = (int)db()->lastInsertId();
 
-        $st = db()->prepare("INSERT INTO product_codes(product_id, code) VALUES(?, ?)");
+        $st = db()->prepare("INSERT INTO product_codes(product_id, code, code_type) VALUES(?, ?, 'BARRA')");
         $st->execute([$pid, $code]);
 
         $st = db()->prepare("INSERT INTO stock_list_items(stock_list_id, product_id, qty) VALUES(?, ?, 1)
