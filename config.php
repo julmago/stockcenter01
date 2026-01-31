@@ -14,8 +14,8 @@ return [
   'db' => [
     'host' => env('DB_HOST', 'localhost'),
     'name' => env('DB_NAME', 'stockcenter'),
-    'user' => env('DB_USER', 'root'),
-    'pass' => env('DB_PASS', ''),
+    'user' => env('DB_USER', 'usuariostcok'),
+    'pass' => env('DB_PASS', 'Martina*84260579'),
     'charset' => env('DB_CHARSET', 'utf8mb4'),
   ],
   // Para producción: poné esto en true
