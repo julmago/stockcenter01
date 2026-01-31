@@ -271,6 +271,7 @@ $sync_blocked = $list['status'] !== 'open';
 $can_sync = !$sync_blocked && $total_pending > 0;
 $can_sync_action = can_sync_prestashop();
 $can_delete_action = can_delete_list_item();
+$showActionsColumn = $can_delete_action;
 
 ?>
 <!doctype html>
@@ -469,11 +470,19 @@ $can_delete_action = can_delete_list_item();
       <div class="table-wrapper">
         <table class="table">
           <thead>
-            <tr><th>sku</th><th>nombre</th><th>cantidad</th><th>sincronizado</th><th>acciones</th></tr>
+            <tr>
+              <th>sku</th>
+              <th>nombre</th>
+              <th>cantidad</th>
+              <th>sincronizado</th>
+              <?php if ($showActionsColumn): ?>
+                <th>acciones</th>
+              <?php endif; ?>
+            </tr>
           </thead>
           <tbody>
             <?php if (!$items): ?>
-              <tr><td colspan="5">Sin items todavía.</td></tr>
+              <tr><td colspan="<?= $showActionsColumn ? 5 : 4 ?>">Sin items todavía.</td></tr>
             <?php else: ?>
               <?php foreach ($items as $it): ?>
                 <?php
@@ -493,15 +502,17 @@ $can_delete_action = can_delete_list_item();
                       <span class="badge badge-muted">0/<?= $qty ?></span>
                     <?php endif; ?>
                   </td>
-                  <td class="table-actions">
-                    <?php if ($can_delete_action): ?>
-                      <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
-                        <input type="hidden" name="action" value="delete_item">
-                        <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
-                        <button class="btn btn-danger" type="submit">Eliminar</button>
-                      </form>
-                    <?php endif; ?>
-                  </td>
+                  <?php if ($showActionsColumn): ?>
+                    <td class="table-actions">
+                      <?php if ($can_delete_action): ?>
+                        <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar este item del listado?');">
+                          <input type="hidden" name="action" value="delete_item">
+                          <input type="hidden" name="product_id" value="<?= (int)$it['product_id'] ?>">
+                          <button class="btn btn-danger" type="submit">Eliminar</button>
+                        </form>
+                      <?php endif; ?>
+                    </td>
+                  <?php endif; ?>
                 </tr>
               <?php endforeach; ?>
             <?php endif; ?>
