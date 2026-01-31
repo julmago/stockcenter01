@@ -7,10 +7,10 @@ $u = current_user();
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
     <strong>Entrada de Stock</strong>
     <span>|</span>
+    <a href="dashboard.php">Listas</a>
     <a href="list_new.php">Nuevo Listado</a>
     <a href="product_new.php">Nuevo Producto</a>
     <a href="product_list.php">Listado de productos</a>
-    <a href="dashboard.php">Listas</a>
     <a href="ps_config.php">Config PrestaShop</a>
     <span style="margin-left:auto;"></span>
     <span>Logeado: <?= e($u['first_name'] . ' ' . $u['last_name']) ?> (<?= e($u['email']) ?>)</span>
