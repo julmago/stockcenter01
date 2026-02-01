@@ -71,13 +71,23 @@ $next_page = min($total_pages, $page + 1);
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/_header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
     <div class="page-header">
-      <h2 class="page-title">Listado de productos</h2>
-      <span class="muted">Explorá el catálogo y accedé al detalle.</span>
+      <div>
+        <h2 class="page-title">Listado de productos</h2>
+        <span class="muted">Explorá el catálogo y accedé al detalle.</span>
+      </div>
+      <div class="inline-actions">
+        <?php if (can_create_product()): ?>
+          <a class="btn" href="product_new.php">+ Nuevo producto</a>
+        <?php endif; ?>
+        <?php if (can_import_csv()): ?>
+          <a class="btn btn-ghost" href="product_import.php">Importar CSV</a>
+        <?php endif; ?>
+      </div>
     </div>
 
     <div class="card">

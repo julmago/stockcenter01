@@ -61,7 +61,7 @@ $prestashop_mode = setting_get('prestashop_mode','replace');
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/_header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">

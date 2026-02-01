@@ -31,13 +31,20 @@ $lists = $st->fetchAll();
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/_header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
     <div class="page-header">
-      <h2 class="page-title">Principal</h2>
-      <span class="muted">Resumen rápido de listados y productos.</span>
+      <div>
+        <h2 class="page-title">Principal</h2>
+        <span class="muted">Resumen rápido de listados y productos.</span>
+      </div>
+      <div class="inline-actions">
+        <?php if (can_create_list()): ?>
+          <a class="btn" href="list_new.php">+ Nuevo listado</a>
+        <?php endif; ?>
+      </div>
     </div>
 
     <div class="card">

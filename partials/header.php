@@ -1,0 +1,64 @@
+<?php
+require_once __DIR__ . '/../bootstrap.php';
+require_login();
+$u = current_user();
+$role = $u['role'] ?? '';
+$can_manage_prestashop = in_array($role, ['superadmin', 'admin'], true);
+$display_name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+if ($display_name === '') {
+  $display_name = $u['email'] ?? 'Usuario';
+}
+?>
+<header class="topbar">
+  <div class="container topbar-content">
+    <div class="topbar-left">
+      <a class="brand" href="dashboard.php">
+        <span class="brand-title">Entrada de Stock</span>
+      </a>
+      <nav class="nav nav-primary">
+        <a class="nav-link" href="dashboard.php">Listas</a>
+        <a class="nav-link" href="product_list.php">Productos</a>
+      </nav>
+    </div>
+    <div class="topbar-center" aria-hidden="true"></div>
+    <div class="topbar-right">
+      <nav class="nav nav-utility">
+        <?php if ($can_manage_prestashop): ?>
+          <a class="nav-link" href="ps_config.php">Config PrestaShop</a>
+        <?php endif; ?>
+        <a class="nav-link" href="design.php">Diseño</a>
+      </nav>
+      <div class="user-menu" data-user-menu>
+        <button class="user-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
+          <?= e($display_name) ?> <span aria-hidden="true">▾</span>
+        </button>
+        <div class="user-menu-dropdown" role="menu">
+          <a class="user-menu-item" href="logout.php" role="menuitem">Salir</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<script>
+  (() => {
+    const menu = document.querySelector('[data-user-menu]');
+    if (!menu) return;
+    const button = menu.querySelector('.user-menu-button');
+    const toggle = () => {
+      const isOpen = menu.classList.toggle('user-menu--open');
+      if (button) {
+        button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      }
+    };
+    button?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggle();
+    });
+    document.addEventListener('click', (event) => {
+      if (!menu.contains(event.target)) {
+        menu.classList.remove('user-menu--open');
+        button?.setAttribute('aria-expanded', 'false');
+      }
+    });
+  })();
+</script>
