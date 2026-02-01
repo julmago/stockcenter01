@@ -129,6 +129,7 @@ img {
 }
 
 .card {
+  margin-top: var(--space-4);
   background: var(--card);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
