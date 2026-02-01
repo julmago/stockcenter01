@@ -7,7 +7,7 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
 <header class="topbar">
   <div class="container topbar-content">
     <div class="brand">
-      <span class="brand-title">Entrada de Stock</span>
+      <span class="brand-title">TS WORK</span>
     </div>
     <nav class="nav">
       <a class="nav-link" href="dashboard.php">Listas</a>
