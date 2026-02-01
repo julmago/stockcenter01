@@ -3,7 +3,9 @@ require_once __DIR__ . '/../bootstrap.php';
 require_login();
 $u = current_user();
 $role = $u['role'] ?? '';
-$can_manage_prestashop = in_array($role, ['superadmin', 'admin'], true);
+$is_superadmin = $role === 'superadmin';
+$can_manage_prestashop = hasPerm('menu_config_prestashop');
+$can_view_design = hasPerm('menu_design');
 $display_name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
 if ($display_name === '') {
   $display_name = $u['email'] ?? 'Usuario';
@@ -26,7 +28,12 @@ if ($display_name === '') {
         <?php if ($can_manage_prestashop): ?>
           <a class="nav-link" href="ps_config.php">Config PrestaShop</a>
         <?php endif; ?>
-        <a class="nav-link" href="design.php">Diseño</a>
+        <?php if ($can_view_design): ?>
+          <a class="nav-link" href="design.php">Diseño</a>
+        <?php endif; ?>
+        <?php if ($is_superadmin): ?>
+          <a class="nav-link" href="roles.php">Roles</a>
+        <?php endif; ?>
       </nav>
       <div class="user-menu" data-user-menu>
         <button class="user-menu-button" type="button" aria-haspopup="true" aria-expanded="false">

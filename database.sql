@@ -16,6 +16,23 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS roles (
+  role_key VARCHAR(32) NOT NULL,
+  role_name VARCHAR(64) NOT NULL,
+  is_system TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (role_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_key VARCHAR(32) NOT NULL,
+  perm_key VARCHAR(64) NOT NULL,
+  perm_value TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (role_key, perm_key),
+  CONSTRAINT fk_role_permissions_role
+    FOREIGN KEY (role_key) REFERENCES roles(role_key)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS products (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   sku VARCHAR(80) NOT NULL,

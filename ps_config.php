@@ -2,7 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/settings.php';
 require_once __DIR__ . '/prestashop.php';
-require_role(['superadmin']);
+require_permission(hasPerm('menu_config_prestashop'));
 
 $error = '';
 $message = '';
