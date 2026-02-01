@@ -136,9 +136,6 @@ img {
   padding: var(--space-4);
 }
 
-.card + .card {
-  margin-top: var(--space-4);
-}
 
 .card-header {
   display: flex;
@@ -163,6 +160,7 @@ img {
 }
 
 .themes-grid {
+  margin-top: var(--space-4);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
