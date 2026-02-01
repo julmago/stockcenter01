@@ -281,13 +281,16 @@ $can_sync = !$sync_blocked && $total_pending > 0;
 $can_sync_action = can_sync_prestashop();
 $can_delete_action = can_delete_list_item();
 $showActionsColumn = $can_delete_action;
+$list_name = trim((string)$list['name']);
+$page_title = $list_name !== '' ? $list_name : 'Listado';
+$show_subtitle = $list_name !== '' && $list_name !== $page_title;
 
 ?>
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Listado #<?= (int)$list['id'] ?></title>
+  <title><?= e($page_title) ?></title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
@@ -296,8 +299,10 @@ $showActionsColumn = $can_delete_action;
 <main class="page">
   <div class="container">
     <div class="page-header">
-      <h2 class="page-title">Listado #<?= (int)$list['id'] ?></h2>
-      <span class="muted"><?= e($list['name']) ?></span>
+      <h2 class="page-title"><?= e($page_title) ?></h2>
+      <?php if ($show_subtitle): ?>
+        <span class="muted"><?= e($list_name) ?></span>
+      <?php endif; ?>
     </div>
 
     <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
