@@ -56,7 +56,6 @@ if (is_post() && post('action') === 'apply') {
           </div>
           <p class="muted theme-card__desc"><?= e($theme['description']) ?></p>
           <div class="form-actions theme-card__actions">
-            <button class="btn btn-secondary" type="button" data-preview-btn="<?= e($key) ?>">Preview</button>
             <form method="post" style="margin:0;">
               <input type="hidden" name="action" value="apply">
               <input type="hidden" name="theme" value="<?= e($key) ?>">
@@ -66,49 +65,7 @@ if (is_post() && post('action') === 'apply') {
         </div>
       <?php endforeach; ?>
     </div>
-
-    <div class="card theme-preview-card">
-      <p class="muted">Preview en vivo: probá el tema sin guardar. El botón “Aplicar” confirma tu preferencia.</p>
-      <div class="theme-preview-card__actions">
-        <span class="badge badge-muted" id="theme-preview-status">Tema activo: <?= e($themes[$current_theme]['name']) ?></span>
-        <button class="btn btn-ghost" type="button" id="theme-preview-reset">Restaurar tema activo</button>
-      </div>
-    </div>
   </div>
 </main>
-
-<script>
-  (function() {
-    const themeLink = document.getElementById('theme-stylesheet');
-    const previewButtons = document.querySelectorAll('[data-preview-btn]');
-    const previewStatus = document.getElementById('theme-preview-status');
-    const resetButton = document.getElementById('theme-preview-reset');
-    if (!themeLink || !previewButtons.length) return;
-
-    const basePath = '<?= e(BASE_PATH) ?>';
-    const currentTheme = '<?= e($current_theme) ?>';
-    const themes = <?= json_encode($themes) ?>;
-
-    function setTheme(themeKey, isPreview) {
-      themeLink.setAttribute('href', `${basePath}/assets/themes/${themeKey}.css`);
-      if (previewStatus && themes[themeKey]) {
-        previewStatus.textContent = `${isPreview ? 'Preview' : 'Tema activo'}: ${themes[themeKey].name}`;
-      }
-    }
-
-    previewButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const themeKey = btn.getAttribute('data-preview-btn');
-        if (themes[themeKey]) {
-          setTheme(themeKey, true);
-        }
-      });
-    });
-
-    if (resetButton) {
-      resetButton.addEventListener('click', () => setTheme(currentTheme, false));
-    }
-  })();
-</script>
 </body>
 </html>
