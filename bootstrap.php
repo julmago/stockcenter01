@@ -174,6 +174,10 @@ function can_close_list(): bool {
   return !is_readonly_role();
 }
 
+function can_reopen_list(): bool {
+  return in_array(current_role(), ['superadmin', 'admin'], true);
+}
+
 function can_edit_product(): bool {
   return !is_readonly_role();
 }

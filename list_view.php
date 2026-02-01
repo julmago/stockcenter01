@@ -28,11 +28,17 @@ $scan_mode = (string)post('scan_mode', 'add');
 $can_edit_list_action = can_edit_list();
 $can_scan_action = can_scan();
 $can_close_action = can_close_list();
+$can_reopen_action = can_reopen_list();
 
 // Toggle open/closed
 if (is_post() && post('action') === 'toggle_status') {
-  require_permission($can_close_action);
-  $new = ($list['status'] === 'open') ? 'closed' : 'open';
+  if ($list['status'] === 'open') {
+    require_permission($can_close_action);
+    $new = 'closed';
+  } else {
+    require_permission($can_reopen_action, 'No tenés permisos para reabrir un listado cerrado');
+    $new = 'open';
+  }
   $st = db()->prepare("UPDATE stock_lists SET status = ? WHERE id = ?");
   $st->execute([$new, $list_id]);
   redirect("list_view.php?id={$list_id}");
@@ -320,10 +326,15 @@ $showActionsColumn = $can_delete_action;
       <div class="inline-actions">
         <a class="btn btn-ghost" href="download_excel.php?id=<?= (int)$list['id'] ?>">Descargar Excel</a>
 
-        <?php if ($can_close_action): ?>
+        <?php if ($list['status'] === 'open' && $can_close_action): ?>
           <form method="post" style="display:inline;">
             <input type="hidden" name="action" value="toggle_status">
-            <button class="btn btn-secondary" type="submit"><?= $list['status'] === 'open' ? 'Cerrar' : 'Abrir' ?></button>
+            <button class="btn btn-secondary" type="submit">Cerrar</button>
+          </form>
+        <?php elseif ($list['status'] === 'closed' && $can_reopen_action): ?>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="toggle_status">
+            <button class="btn btn-secondary" type="submit">Abrir</button>
           </form>
         <?php endif; ?>
 
