@@ -92,6 +92,33 @@ CREATE TABLE IF NOT EXISTS stock_list_items (
     ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS tasks (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  title VARCHAR(190) NOT NULL,
+  description TEXT NULL,
+  category ENUM('deposito','publicaciones','sincronizacion','mantenimiento','administrativo','incidencias') NOT NULL DEFAULT 'deposito',
+  priority ENUM('low','medium','high') NOT NULL DEFAULT 'medium',
+  status ENUM('pending','in_progress','completed') NOT NULL DEFAULT 'pending',
+  assigned_user_id INT UNSIGNED NOT NULL,
+  created_by_user_id INT UNSIGNED NOT NULL,
+  due_date DATE NULL,
+  related_type ENUM('list','product','general') NOT NULL DEFAULT 'general',
+  related_id INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_tasks_assigned (assigned_user_id),
+  KEY idx_tasks_category (category),
+  KEY idx_tasks_status (status),
+  KEY idx_tasks_created_by (created_by_user_id),
+  CONSTRAINT fk_tasks_assigned_user
+    FOREIGN KEY (assigned_user_id) REFERENCES users(id)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_tasks_created_user
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 CREATE TABLE IF NOT EXISTS settings (
   `key` VARCHAR(120) NOT NULL,

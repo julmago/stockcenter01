@@ -18,6 +18,7 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
         <a class="nav-link" href="product_new.php">Nuevo Producto</a>
       <?php endif; ?>
       <a class="nav-link" href="product_list.php">Listado de productos</a>
+      <a class="nav-link" href="tasks_all.php">Tareas</a>
       <?php if (can_import_csv()): ?>
         <a class="nav-link" href="product_import.php">Importar CSV</a>
       <?php endif; ?>

@@ -20,6 +20,7 @@ if ($display_name === '') {
       <nav class="nav nav-primary">
         <a class="nav-link" href="dashboard.php">Listas</a>
         <a class="nav-link" href="product_list.php">Productos</a>
+        <a class="nav-link" href="tasks_all.php">Tareas</a>
       </nav>
     </div>
     <div class="topbar-center" aria-hidden="true"></div>
