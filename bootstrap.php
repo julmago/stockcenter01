@@ -208,6 +208,10 @@ function theme_catalog(): array {
       'name' => 'Trek futurista',
       'description' => 'Inspiración sci-fi con paneles luminosos y glow sutil.',
     ],
+    'theme_colorful' => [
+      'name' => 'Color splash',
+      'description' => 'Explosión vibrante de color con gradientes intensos y energía juvenil.',
+    ],
   ];
 }
 

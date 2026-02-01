@@ -55,7 +55,7 @@ if (is_post() && post('action') === 'apply') {
           </div>
           <p class="muted theme-card__desc"><?= e($theme['description']) ?></p>
           <div class="form-actions theme-card__actions">
-            <button class="btn btn-secondary" style="display: none; type="button" data-preview-btn="<?= e($key) ?>">Preview</button>
+            <button class="btn btn-secondary" type="button" data-preview-btn="<?= e($key) ?>">Preview</button>
             <form method="post" style="margin:0;">
               <input type="hidden" name="action" value="apply">
               <input type="hidden" name="theme" value="<?= e($key) ?>">
@@ -66,7 +66,7 @@ if (is_post() && post('action') === 'apply') {
       <?php endforeach; ?>
     </div>
 
-    <div class="card theme-preview-card" style="display: none;>
+    <div class="card theme-preview-card">
       <p class="muted">Preview en vivo: probá el tema sin guardar. El botón “Aplicar” confirma tu preferencia.</p>
       <div class="theme-preview-card__actions">
         <span class="badge badge-muted" id="theme-preview-status">Tema activo: <?= e($themes[$current_theme]['name']) ?></span>
