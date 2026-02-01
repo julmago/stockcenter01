@@ -25,10 +25,12 @@ $search_results = [];
 $should_focus_scan = false;
 $clear_scan_input = false;
 $scan_mode = (string)post('scan_mode', 'add');
-$can_edit_list_action = can_edit_list();
 $can_scan_action = can_scan();
 $can_close_action = can_close_list();
 $can_reopen_action = can_reopen_list();
+$can_edit_product_action = can_edit_product();
+$can_add_code_action = can_add_code();
+$can_manage_unknown_code = $can_edit_product_action || $can_add_code_action;
 
 // Toggle open/closed
 if (is_post() && post('action') === 'toggle_status') {
@@ -146,7 +148,7 @@ if (is_post() && post('action') === 'scan') {
 
 // Asociar código a producto existente (desde el cartel)
 if (is_post() && post('action') === 'associate_code') {
-  require_permission($can_edit_list_action);
+  require_permission($can_add_code_action);
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
   } else {
@@ -186,7 +188,7 @@ if (is_post() && post('action') === 'associate_code') {
 
 // Crear producto nuevo desde el cartel
 if (is_post() && post('action') === 'create_product_from_code') {
-  require_permission($can_edit_list_action);
+  require_permission($can_edit_product_action);
   if ($list['status'] !== 'open') {
     $error = 'El listado está cerrado. Abrilo para seguir cargando.';
   } else {
@@ -233,6 +235,7 @@ if (is_post() && post('action') === 'create_product_from_code') {
 
 // Buscar productos existentes para asociar
 if (is_post() && post('action') === 'search_products') {
+  require_permission($can_manage_unknown_code);
   $unknown_code = trim((string)post('unknown_code'));
   $search_term = trim((string)post('product_search'));
   if ($search_term !== '') {
@@ -358,7 +361,7 @@ $showActionsColumn = $can_delete_action;
       </div>
     </div>
 
-    <?php if ($unknown_code !== '' && $can_edit_list_action): ?>
+    <?php if ($unknown_code !== '' && $can_manage_unknown_code): ?>
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">Código no encontrado</h3>
@@ -366,6 +369,7 @@ $showActionsColumn = $can_delete_action;
         </div>
 
         <div class="stack">
+          <?php if ($can_add_code_action): ?>
           <div>
             <h4>1) Asociar a un producto existente</h4>
             <form method="post" class="stack">
@@ -415,32 +419,35 @@ $showActionsColumn = $can_delete_action;
               </div>
             <?php endif; ?>
           </div>
+          <?php endif; ?>
 
-          <div>
-            <h4>2) Crear producto nuevo y sumar</h4>
-            <form method="post" class="stack">
-              <input type="hidden" name="action" value="create_product_from_code">
-              <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">SKU (obligatorio)</label>
-                  <input class="form-control" type="text" name="new_sku" value="<?= e(post('new_sku')) ?>" required>
+          <?php if ($can_edit_product_action): ?>
+            <div>
+              <h4>2) Crear producto nuevo y sumar</h4>
+              <form method="post" class="stack">
+                <input type="hidden" name="action" value="create_product_from_code">
+                <input type="hidden" name="unknown_code" value="<?= e($unknown_code) ?>">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">SKU (obligatorio)</label>
+                    <input class="form-control" type="text" name="new_sku" value="<?= e(post('new_sku')) ?>" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Nombre (obligatorio)</label>
+                    <input class="form-control" type="text" name="new_name" value="<?= e(post('new_name')) ?>" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Marca</label>
+                    <input class="form-control" type="text" name="new_brand" value="<?= e(post('new_brand')) ?>">
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Nombre (obligatorio)</label>
-                  <input class="form-control" type="text" name="new_name" value="<?= e(post('new_name')) ?>" required>
+                <div class="form-actions">
+                  <button class="btn" type="submit">Crear y sumar +1</button>
+                  <a class="btn btn-ghost" href="list_view.php?id=<?= (int)$list_id ?>">Cancelar</a>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Marca</label>
-                  <input class="form-control" type="text" name="new_brand" value="<?= e(post('new_brand')) ?>">
-                </div>
-              </div>
-              <div class="form-actions">
-                <button class="btn" type="submit">Crear y sumar +1</button>
-                <a class="btn btn-ghost" href="list_view.php?id=<?= (int)$list_id ?>">Cancelar</a>
-              </div>
-            </form>
-          </div>
+              </form>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
     <?php endif; ?>

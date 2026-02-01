@@ -138,52 +138,229 @@ function current_role(): string {
   return (string)($user['role'] ?? '');
 }
 
+function getRoleKeyFromSession(): string {
+  return current_role();
+}
+
+function role_default_definitions(): array {
+  return [
+    'superadmin' => ['name' => 'Superadmin', 'is_system' => true],
+    'admin' => ['name' => 'Admin', 'is_system' => false],
+    'vendedor' => ['name' => 'Vendedor', 'is_system' => false],
+    'lectura' => ['name' => 'Lectura', 'is_system' => false],
+  ];
+}
+
+function permission_default_definitions(): array {
+  return [
+    'menu_config_prestashop' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'menu_import_csv' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'menu_design' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => true,
+    ],
+    'menu_new_list' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => false,
+    ],
+    'menu_new_product' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => false,
+    ],
+    'list_can_sync' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'list_can_delete_item' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'list_can_close' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => false,
+    ],
+    'list_can_open' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'list_can_scan' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => false,
+    ],
+    'product_can_edit' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => false,
+    ],
+    'product_can_add_code' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => true,
+      'lectura' => false,
+    ],
+  ];
+}
+
+function ensure_roles_schema(): void {
+  static $done = false;
+  if ($done) {
+    return;
+  }
+  require_once __DIR__ . '/db.php';
+  $pdo = db();
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS roles (
+      role_key VARCHAR(32) NOT NULL,
+      role_name VARCHAR(64) NOT NULL,
+      is_system TINYINT(1) NOT NULL DEFAULT 0,
+      PRIMARY KEY (role_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ");
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      role_key VARCHAR(32) NOT NULL,
+      perm_key VARCHAR(64) NOT NULL,
+      perm_value TINYINT(1) NOT NULL DEFAULT 0,
+      PRIMARY KEY (role_key, perm_key),
+      CONSTRAINT fk_role_permissions_role
+        FOREIGN KEY (role_key) REFERENCES roles(role_key)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ");
+  $done = true;
+}
+
+function ensure_roles_defaults(): void {
+  static $seeded = false;
+  if ($seeded) {
+    return;
+  }
+  ensure_roles_schema();
+  require_once __DIR__ . '/db.php';
+  $pdo = db();
+
+  $roles = role_default_definitions();
+  foreach ($roles as $role_key => $data) {
+    $st = $pdo->prepare("INSERT INTO roles(role_key, role_name, is_system) VALUES(?, ?, ?)
+      ON DUPLICATE KEY UPDATE role_name = role_name, is_system = is_system");
+    $st->execute([$role_key, $data['name'], $data['is_system'] ? 1 : 0]);
+  }
+
+  $permission_defaults = permission_default_definitions();
+  foreach ($permission_defaults as $perm_key => $values) {
+    foreach ($roles as $role_key => $_data) {
+      $value = !empty($values[$role_key]) ? 1 : 0;
+      $st = $pdo->prepare("INSERT INTO role_permissions(role_key, perm_key, perm_value) VALUES(?, ?, ?)
+        ON DUPLICATE KEY UPDATE perm_value = perm_value");
+      $st->execute([$role_key, $perm_key, $value]);
+    }
+  }
+  $seeded = true;
+}
+
+function hasPerm(string $perm_key): bool {
+  $role_key = getRoleKeyFromSession();
+  if ($role_key === 'superadmin') {
+    return true;
+  }
+  ensure_roles_defaults();
+
+  static $cache = [];
+  if (isset($cache[$role_key]) && array_key_exists($perm_key, $cache[$role_key])) {
+    return $cache[$role_key][$perm_key];
+  }
+  require_once __DIR__ . '/db.php';
+  $pdo = db();
+  $st = $pdo->prepare("SELECT perm_value FROM role_permissions WHERE role_key = ? AND perm_key = ? LIMIT 1");
+  $st->execute([$role_key, $perm_key]);
+  $row = $st->fetch();
+  if ($row) {
+    $value = (bool)$row['perm_value'];
+  } else {
+    $defaults = permission_default_definitions();
+    $value = !empty($defaults[$perm_key][$role_key]);
+  }
+  $cache[$role_key][$perm_key] = $value;
+  return $value;
+}
+
 function can_import_csv(): bool {
-  return in_array(current_role(), ['superadmin', 'admin'], true);
+  return hasPerm('menu_import_csv');
 }
 
 function can_sync_prestashop(): bool {
-  return in_array(current_role(), ['superadmin', 'admin'], true);
+  return hasPerm('list_can_sync');
 }
 
 function can_delete_list_item(): bool {
-  return in_array(current_role(), ['superadmin', 'admin'], true);
+  return hasPerm('list_can_delete_item');
 }
 
 function is_readonly_role(): bool {
-  return current_role() === 'lectura';
+  return !hasPerm('menu_new_list')
+    && !hasPerm('menu_new_product')
+    && !hasPerm('list_can_scan')
+    && !hasPerm('product_can_edit')
+    && !hasPerm('product_can_add_code');
 }
 
 function can_create_list(): bool {
-  return !is_readonly_role();
+  return hasPerm('menu_new_list');
 }
 
 function can_create_product(): bool {
-  return !is_readonly_role();
+  return hasPerm('menu_new_product');
 }
 
 function can_edit_list(): bool {
-  return !is_readonly_role();
+  return hasPerm('product_can_edit');
 }
 
 function can_scan(): bool {
-  return !is_readonly_role();
+  return hasPerm('list_can_scan');
 }
 
 function can_close_list(): bool {
-  return !is_readonly_role();
+  return hasPerm('list_can_close');
 }
 
 function can_reopen_list(): bool {
-  return in_array(current_role(), ['superadmin', 'admin'], true);
+  return hasPerm('list_can_open');
 }
 
 function can_edit_product(): bool {
-  return !is_readonly_role();
+  return hasPerm('product_can_edit');
 }
 
 function can_add_code(): bool {
-  return !is_readonly_role();
+  return hasPerm('product_can_add_code');
 }
 
 function is_post(): bool {

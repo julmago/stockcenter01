@@ -21,10 +21,15 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
       <?php if (can_import_csv()): ?>
         <a class="nav-link" href="product_import.php">Importar CSV</a>
       <?php endif; ?>
-      <?php if ($is_superadmin): ?>
+      <?php if (hasPerm('menu_config_prestashop')): ?>
         <a class="nav-link" href="ps_config.php">Config PrestaShop</a>
       <?php endif; ?>
-      <a class="nav-link" href="design.php">Diseño</a>
+      <?php if (hasPerm('menu_design')): ?>
+        <a class="nav-link" href="design.php">Diseño</a>
+      <?php endif; ?>
+      <?php if ($is_superadmin): ?>
+        <a class="nav-link" href="roles.php">Roles</a>
+      <?php endif; ?>
     </nav>
     <div class="topbar-user">
       <span class="muted small">
