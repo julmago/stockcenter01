@@ -9,6 +9,7 @@ $statuses = task_statuses();
 $priorities = task_priorities();
 $related_types = task_related_types(null, true);
 $users = task_users($pdo);
+$current_user_id = (int)(current_user()['id'] ?? 0);
 $priority_badges = [
   'low' => 'badge-muted',
   'medium' => 'badge-warning',
@@ -23,8 +24,17 @@ $status_badges = [
 $category = get('category');
 $status = get('status');
 $assignee = (int)get('assignee');
+$mine = get('mine') === '1';
+$mine_filter = get('mine_filter');
 $message = get('message');
 $success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
+
+$allowed_mine_filters = ['all_active', 'pending', 'in_progress', 'all'];
+if (!$mine) {
+  $mine_filter = '';
+} elseif (!in_array($mine_filter, $allowed_mine_filters, true)) {
+  $mine_filter = 'all_active';
+}
 
 $where = [];
 $params = [];
@@ -36,10 +46,33 @@ if ($status !== '' && array_key_exists($status, $statuses)) {
   $where[] = 't.status = ?';
   $params[] = $status;
 }
-if ($assignee > 0) {
+if ($mine) {
+  $where[] = 'EXISTS (SELECT 1 FROM task_assignees ta_mine WHERE ta_mine.task_id = t.id AND ta_mine.user_id = ?)';
+  $params[] = $current_user_id;
+  if ($mine_filter === 'all_active') {
+    $where[] = "t.status <> 'completed'";
+  } elseif ($mine_filter === 'pending') {
+    $where[] = "t.status = 'pending'";
+  } elseif ($mine_filter === 'in_progress') {
+    $where[] = "t.status = 'in_progress'";
+  }
+}
+if (!$mine && $assignee > 0) {
   $where[] = 'EXISTS (SELECT 1 FROM task_assignees ta2 WHERE ta2.task_id = t.id AND ta2.user_id = ?)';
   $params[] = $assignee;
 }
+
+$mine_subtitles = [
+  'all_active' => 'Tus tareas activas (sin completadas).',
+  'pending' => 'Tus tareas pendientes.',
+  'in_progress' => 'Tus tareas en progreso.',
+  'all' => 'Todas tus tareas (incluye completadas).',
+];
+$page_title = $mine ? 'Mis tareas' : 'Todas las tareas';
+$header_title = $mine ? 'Mis tareas' : 'Tareas';
+$header_subtitle = $mine ? ($mine_subtitles[$mine_filter] ?? $mine_subtitles['all_active']) : 'Transparencia total del trabajo del equipo.';
+$card_title = $mine ? 'Mis tareas' : 'Vista general';
+$card_subtitle = $mine ? ($mine_subtitles[$mine_filter] ?? $mine_subtitles['all_active']) : 'Todas las tareas (solo lectura, salvo tus propias tareas).';
 
 $where_sql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 $st = $pdo->prepare("
@@ -68,7 +101,7 @@ $tasks = $st->fetchAll();
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Todas las tareas</title>
+  <title><?= e($page_title) ?></title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
@@ -77,8 +110,8 @@ $tasks = $st->fetchAll();
 <main class="page">
     <div class="page-header">
       <div>
-        <h2 class="page-title">Tareas</h2>
-        <span class="muted">Transparencia total del trabajo del equipo.</span>
+        <h2 class="page-title"><?= e($header_title) ?></h2>
+        <span class="muted"><?= e($header_subtitle) ?></span>
       </div>
       <div class="inline-actions">
         <a class="btn" href="task_new.php">+ Crear tarea</a>
@@ -92,16 +125,44 @@ $tasks = $st->fetchAll();
     <div class="card">
       <div class="card-header">
         <div>
-          <h3 class="card-title">Vista general</h3>
-          <span class="muted small">Todas las tareas (solo lectura, salvo tus propias tareas).</span>
+          <h3 class="card-title"><?= e($card_title) ?></h3>
+          <span class="muted small"><?= e($card_subtitle) ?></span>
         </div>
         <div class="inline-actions">
-          <a class="btn btn-ghost" href="tasks_all.php">Todas las tareas</a>
-          <a class="btn btn-ghost" href="tasks_my.php">Mis tareas</a>
+          <?php
+          $base_params = array_filter([
+            'category' => $category !== '' ? $category : null,
+            'status' => $status !== '' ? $status : null,
+            'assignee' => (!$mine && $assignee > 0) ? $assignee : null,
+          ], static fn($value) => $value !== null);
+          $mine_views = [
+            'all_active' => 'Mis tareas',
+            'pending' => 'Mis tareas pendientes',
+            'in_progress' => 'Mis tareas en progreso',
+            'all' => 'Todas mis tareas',
+          ];
+          ?>
+          <?php $all_tasks_link = 'tasks_all.php' . ($base_params ? '?' . http_build_query($base_params) : ''); ?>
+          <a class="btn <?= $mine ? 'btn-ghost' : '' ?>" href="<?= e($all_tasks_link) ?>">Todas las tareas</a>
+          <?php foreach ($mine_views as $key => $label): ?>
+            <?php
+            $mine_link = 'tasks_all.php?' . http_build_query(array_merge($base_params, [
+              'mine' => 1,
+              'mine_filter' => $key,
+            ]));
+            ?>
+            <a class="btn <?= $mine && $mine_filter === $key ? '' : 'btn-ghost' ?>" href="<?= e($mine_link) ?>">
+              <?= e($label) ?>
+            </a>
+          <?php endforeach; ?>
         </div>
       </div>
 
       <form method="get" action="tasks_all.php" class="stack">
+        <?php if ($mine): ?>
+          <input type="hidden" name="mine" value="1">
+          <input type="hidden" name="mine_filter" value="<?= e($mine_filter) ?>">
+        <?php endif; ?>
         <div class="filters-grid">
           <label class="form-field">
             <span class="form-label">Categoría</span>
@@ -121,21 +182,23 @@ $tasks = $st->fetchAll();
               <?php endforeach; ?>
             </select>
           </label>
-          <label class="form-field">
-            <span class="form-label">Asignado a</span>
-            <select class="form-control" name="assignee">
-              <option value="">Todos</option>
-              <?php foreach ($users as $user): ?>
-                <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
-                <option value="<?= (int)$user['id'] ?>" <?= $assignee === (int)$user['id'] ? 'selected' : '' ?>>
-                  <?= e($user_name !== '' ? $user_name : $user['email']) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
+          <?php if (!$mine): ?>
+            <label class="form-field">
+              <span class="form-label">Asignado a</span>
+              <select class="form-control" name="assignee">
+                <option value="">Todos</option>
+                <?php foreach ($users as $user): ?>
+                  <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
+                  <option value="<?= (int)$user['id'] ?>" <?= $assignee === (int)$user['id'] ? 'selected' : '' ?>>
+                    <?= e($user_name !== '' ? $user_name : $user['email']) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+          <?php endif; ?>
           <div class="filters-actions">
             <button class="btn" type="submit">Filtrar</button>
-            <a class="btn btn-ghost" href="tasks_all.php">Limpiar</a>
+            <a class="btn btn-ghost" href="<?= e($mine ? ('tasks_all.php?' . http_build_query(['mine' => 1, 'mine_filter' => $mine_filter])) : 'tasks_all.php') ?>">Limpiar</a>
           </div>
         </div>
       </form>
