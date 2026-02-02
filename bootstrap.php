@@ -183,6 +183,12 @@ function permission_default_definitions(): array {
       'vendedor' => true,
       'lectura' => false,
     ],
+    'tasks_settings' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
     'list_can_sync' => [
       'superadmin' => true,
       'admin' => true,
