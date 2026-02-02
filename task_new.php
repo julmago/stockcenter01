@@ -6,12 +6,6 @@ $pdo = db();
 $current_user = current_user();
 $current_user_id = (int)($current_user['id'] ?? 0);
 
-$categories = task_categories();
-$statuses = task_statuses();
-$priorities = task_priorities();
-$related_types = task_related_types();
-$users = task_users($pdo);
-
 $errors = [];
 $title = '';
 $description = '';
@@ -20,7 +14,14 @@ $priority = 'medium';
 $assigned_user_id = '';
 $due_date = '';
 $related_type = 'general';
-$related_id = '';
+
+$categories = task_categories($category);
+$category_map = task_categories(null, true);
+$statuses = task_statuses();
+$priorities = task_priorities();
+$related_types = task_related_types($related_type);
+$related_types_map = task_related_types(null, true);
+$users = task_users($pdo);
 
 if (is_post()) {
   $title = post('title');
@@ -30,22 +31,20 @@ if (is_post()) {
   $assigned_user_id = post('assigned_user_id');
   $due_date = post('due_date');
   $related_type = post('related_type', $related_type);
-  $related_id = post('related_id');
+  $categories = task_categories($category);
+  $related_types = task_related_types($related_type);
 
   if ($title === '') {
     $errors[] = 'El título es obligatorio.';
   }
-  if (!array_key_exists($category, $categories)) {
+  if (!array_key_exists($category, $category_map)) {
     $errors[] = 'La categoría es inválida.';
   }
   if (!array_key_exists($priority, $priorities)) {
     $errors[] = 'La prioridad es inválida.';
   }
-  if (!array_key_exists($related_type, $related_types)) {
+  if (!array_key_exists($related_type, $related_types_map)) {
     $errors[] = 'El tipo relacionado es inválido.';
-  }
-  if ($related_type !== 'general' && $related_id === '') {
-    $errors[] = 'Indicá el ID relacionado.';
   }
 
   $assigned_id = (int)$assigned_user_id;
@@ -61,9 +60,8 @@ if (is_post()) {
 
   if (!$errors) {
     $due_date_value = $due_date !== '' ? $due_date : null;
-    $related_id_value = $related_id !== '' ? (int)$related_id : null;
-    $st = $pdo->prepare("INSERT INTO tasks (title, description, category, priority, status, assigned_user_id, created_by_user_id, due_date, related_type, related_id)
-      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)");
+    $st = $pdo->prepare("INSERT INTO tasks (title, description, category, priority, status, assigned_user_id, created_by_user_id, due_date, related_type)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)");
     $st->execute([
       $title,
       $description !== '' ? $description : null,
@@ -73,7 +71,6 @@ if (is_post()) {
       $current_user_id,
       $due_date_value,
       $related_type,
-      $related_id_value,
     ]);
     redirect('tasks_all.php');
   }
@@ -173,11 +170,6 @@ if (is_post()) {
                 <option value="<?= e($key) ?>" <?= $related_type === $key ? 'selected' : '' ?>><?= e($label) ?></option>
               <?php endforeach; ?>
             </select>
-          </label>
-
-          <label class="form-field">
-            <span class="form-label">ID relacionado</span>
-            <input class="form-control" type="number" name="related_id" value="<?= e($related_id) ?>" min="1" placeholder="Opcional">
           </label>
         </div>
 

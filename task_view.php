@@ -17,12 +17,6 @@ if (!in_array($return_to, $allowed_returns, true)) {
 }
 $return_label = $return_to === 'tasks_my.php' ? 'Mis tareas' : 'Todas las tareas';
 
-$categories = task_categories();
-$statuses = task_statuses();
-$priorities = task_priorities();
-$related_types = task_related_types();
-$users = task_users($pdo);
-
 $st = $pdo->prepare("
   SELECT t.*,
          au.first_name AS assigned_first_name, au.last_name AS assigned_last_name,
@@ -41,18 +35,19 @@ if (!$task) {
   abort(404, 'Tarea no encontrada.');
 }
 
+$categories = task_categories((string)$task['category']);
+$category_map = task_categories(null, true);
+$statuses = task_statuses();
+$priorities = task_priorities();
+$related_types = task_related_types((string)$task['related_type']);
+$related_types_map = task_related_types(null, true);
+$users = task_users($pdo);
+
 $creator_name = trim(($task['created_first_name'] ?? '') . ' ' . ($task['created_last_name'] ?? ''));
 
 $error = '';
 $can_edit = (int)$task['assigned_user_id'] === $current_user_id;
 $saved = get('saved') === '1';
-$related_placeholder = '';
-if ($task['related_type'] === 'list') {
-  $related_placeholder = 'ID de listado';
-} elseif ($task['related_type'] === 'product') {
-  $related_placeholder = 'ID de producto';
-}
-
 if (is_post() && post('action') === 'update') {
   if (!$can_edit) {
     abort(403, 'No tenés permisos para editar esta tarea.');
@@ -65,11 +60,10 @@ if (is_post() && post('action') === 'update') {
   $assigned_user_id = (int)post('assigned_user_id', '0');
   $due_date = trim((string)post('due_date'));
   $related_type = post('related_type');
-  $related_id = trim((string)post('related_id'));
 
   if ($title === '') {
     $error = 'El título es obligatorio.';
-  } elseif (!array_key_exists($category, $categories)) {
+  } elseif (!array_key_exists($category, $category_map)) {
     $error = 'La categoría es obligatoria.';
   } elseif (!array_key_exists($priority, $priorities)) {
     $error = 'La prioridad es obligatoria.';
@@ -77,19 +71,11 @@ if (is_post() && post('action') === 'update') {
     $error = 'El estado es obligatorio.';
   } elseif ($assigned_user_id <= 0) {
     $error = 'El usuario asignado es obligatorio.';
-  } elseif (!array_key_exists($related_type, $related_types)) {
+  } elseif (!array_key_exists($related_type, $related_types_map)) {
     $error = 'El tipo relacionado es inválido.';
   } else {
     $description = $description === '' ? null : $description;
     $due_date = $due_date === '' ? null : $due_date;
-    if ($related_type === 'general') {
-      $related_id_value = null;
-    } else {
-      $related_id_value = (int)$related_id;
-      if ($related_id_value <= 0) {
-        $error = 'El ID relacionado es obligatorio.';
-      }
-    }
     if ($error === '') {
       $check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_active = 1");
       $check->execute([$assigned_user_id]);
@@ -108,7 +94,6 @@ if (is_post() && post('action') === 'update') {
             assigned_user_id = ?,
             due_date = ?,
             related_type = ?,
-            related_id = ?,
             updated_at = NOW()
         WHERE id = ?
       ");
@@ -121,7 +106,6 @@ if (is_post() && post('action') === 'update') {
         $assigned_user_id,
         $due_date,
         $related_type,
-        $related_id_value,
         $task_id,
       ]);
       $redirect_params = [
@@ -145,13 +129,12 @@ if (is_post() && post('action') === 'update') {
 <?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
-  <div class="page-header">
-    <div>
-      <h2 class="page-title">Detalle de tarea</h2>
-      <span class="muted">ID #<?= (int)$task['id'] ?></span>
-    </div>
-    <div class="inline-actions">
-      <a class="btn btn-ghost" href="<?= e($return_to) ?>">Volver a <?= e($return_label) ?></a>
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">Detalle de tarea</h2>
+      </div>
+      <div class="inline-actions">
+        <a class="btn btn-ghost" href="<?= e($return_to) ?>">Volver a <?= e($return_label) ?></a>
     </div>
   </div>
 
@@ -197,61 +180,63 @@ if (is_post() && post('action') === 'update') {
         </div>
       </div>
       <div class="stack">
-        <div class="form-group">
-          <label class="form-label" for="task-category">Categoría</label>
-          <select class="form-control" id="task-category" name="category" required <?= $can_edit ? '' : 'disabled' ?>>
-            <?php foreach ($categories as $key => $label): ?>
-              <option value="<?= e($key) ?>" <?= $task['category'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-          </select>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4);">
+          <div class="stack">
+            <div class="form-group">
+              <label class="form-label" for="task-category">Categoría</label>
+              <select class="form-control" id="task-category" name="category" required <?= $can_edit ? '' : 'disabled' ?>>
+                <?php foreach ($categories as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $task['category'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-priority">Prioridad</label>
+              <select class="form-control" id="task-priority" name="priority" required <?= $can_edit ? '' : 'disabled' ?>>
+                <?php foreach ($priorities as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $task['priority'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-status">Estado</label>
+              <select class="form-control" id="task-status" name="status" required <?= $can_edit ? '' : 'disabled' ?>>
+                <?php foreach ($statuses as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $task['status'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="form-group">
+              <label class="form-label" for="task-assigned">Asignado a</label>
+              <select class="form-control" id="task-assigned" name="assigned_user_id" required <?= $can_edit ? '' : 'disabled' ?>>
+                <?php foreach ($users as $user): ?>
+                  <?php
+                  $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                  $user_label = $user_name !== '' ? $user_name : ($user['email'] ?? '');
+                  ?>
+                  <option value="<?= (int)$user['id'] ?>" <?= (int)$task['assigned_user_id'] === (int)$user['id'] ? 'selected' : '' ?>>
+                    <?= e($user_label) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-due-date">Fecha límite</label>
+              <input class="form-control" id="task-due-date" type="date" name="due_date" value="<?= e($task['due_date'] ? substr((string)$task['due_date'], 0, 10) : '') ?>" <?= $can_edit ? '' : 'disabled' ?>>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-related-type">Relacionado con</label>
+              <select class="form-control" id="task-related-type" name="related_type" required <?= $can_edit ? '' : 'disabled' ?>>
+                <?php foreach ($related_types as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $task['related_type'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="task-priority">Prioridad</label>
-          <select class="form-control" id="task-priority" name="priority" required <?= $can_edit ? '' : 'disabled' ?>>
-            <?php foreach ($priorities as $key => $label): ?>
-              <option value="<?= e($key) ?>" <?= $task['priority'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="task-status">Estado</label>
-          <select class="form-control" id="task-status" name="status" required <?= $can_edit ? '' : 'disabled' ?>>
-            <?php foreach ($statuses as $key => $label): ?>
-              <option value="<?= e($key) ?>" <?= $task['status'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="task-assigned">Asignado a</label>
-          <select class="form-control" id="task-assigned" name="assigned_user_id" required <?= $can_edit ? '' : 'disabled' ?>>
-            <?php foreach ($users as $user): ?>
-              <?php
-              $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
-              $user_label = $user_name !== '' ? $user_name : ($user['email'] ?? '');
-              ?>
-              <option value="<?= (int)$user['id'] ?>" <?= (int)$task['assigned_user_id'] === (int)$user['id'] ? 'selected' : '' ?>>
-                <?= e($user_label) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="task-due-date">Fecha límite</label>
-          <input class="form-control" id="task-due-date" type="date" name="due_date" value="<?= e($task['due_date'] ? substr((string)$task['due_date'], 0, 10) : '') ?>" <?= $can_edit ? '' : 'disabled' ?>>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="task-related-type">Relacionado con</label>
-          <select class="form-control" id="task-related-type" name="related_type" required <?= $can_edit ? '' : 'disabled' ?>>
-            <?php foreach ($related_types as $key => $label): ?>
-              <option value="<?= e($key) ?>" <?= $task['related_type'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="form-group" id="task-related-id-group" <?= $task['related_type'] === 'general' ? 'hidden' : '' ?>>
-          <label class="form-label" for="task-related-id">ID relacionado</label>
-          <input class="form-control" id="task-related-id" type="number" name="related_id" min="1" placeholder="<?= e($related_placeholder) ?>" value="<?= e((string)($task['related_id'] ?? '')) ?>" <?= $can_edit ? '' : 'disabled' ?>>
-        </div>
-        <div class="task-detail-grid">
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3);">
           <div class="task-detail-item">
             <div class="task-detail-label">Creado por</div>
             <div class="task-detail-value"><?= e($creator_name !== '' ? $creator_name : ($task['created_email'] ?? '')) ?></div>
@@ -276,32 +261,6 @@ if (is_post() && post('action') === 'update') {
     <?php endif; ?>
   </form>
 </main>
-
-<script>
-  const relatedTypeSelect = document.getElementById('task-related-type');
-  const relatedIdGroup = document.getElementById('task-related-id-group');
-  const relatedIdInput = document.getElementById('task-related-id');
-
-  function updateRelatedField() {
-    if (!relatedTypeSelect || !relatedIdGroup || !relatedIdInput) {
-      return;
-    }
-    const selected = relatedTypeSelect.value;
-    const isGeneral = selected === 'general';
-    relatedIdGroup.hidden = isGeneral;
-    relatedIdInput.required = !isGeneral;
-    if (isGeneral) {
-      relatedIdInput.value = '';
-    } else {
-      relatedIdInput.placeholder = selected === 'list' ? 'ID de listado' : 'ID de producto';
-    }
-  }
-
-  if (relatedTypeSelect) {
-    relatedTypeSelect.addEventListener('change', updateRelatedField);
-    updateRelatedField();
-  }
-</script>
 
 </body>
 </html>

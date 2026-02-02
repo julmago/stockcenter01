@@ -21,6 +21,7 @@ if ($display_name === '') {
         <a class="nav-link" href="dashboard.php">Listas</a>
         <a class="nav-link" href="product_list.php">Productos</a>
         <a class="nav-link" href="tasks_all.php">Tareas</a>
+        <a class="nav-link" href="task_settings.php">Tareas · Configuración</a>
       </nav>
     </div>
     <div class="topbar-center" aria-hidden="true"></div>
