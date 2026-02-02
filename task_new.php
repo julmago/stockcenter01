@@ -9,11 +9,11 @@ $current_user_id = (int)($current_user['id'] ?? 0);
 $errors = [];
 $title = '';
 $description = '';
-$category = 'deposito';
+$category = '';
 $priority = 'medium';
 $assigned_user_id = '';
 $due_date = '';
-$related_type = 'general';
+$related_type = '';
 
 $categories = task_categories($category);
 $category_map = task_categories(null, true);
@@ -37,13 +37,17 @@ if (is_post()) {
   if ($title === '') {
     $errors[] = 'El título es obligatorio.';
   }
-  if (!array_key_exists($category, $category_map)) {
+  if ($category === '') {
+    $errors[] = 'Seleccioná una categoría.';
+  } elseif (!array_key_exists($category, $category_map)) {
     $errors[] = 'La categoría es inválida.';
   }
   if (!array_key_exists($priority, $priorities)) {
     $errors[] = 'La prioridad es inválida.';
   }
-  if (!array_key_exists($related_type, $related_types_map)) {
+  if ($related_type === '') {
+    $errors[] = 'Seleccioná un tipo relacionado.';
+  } elseif (!array_key_exists($related_type, $related_types_map)) {
     $errors[] = 'El tipo relacionado es inválido.';
   }
 
@@ -127,7 +131,8 @@ if (is_post()) {
         <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
           <label class="form-field">
             <span class="form-label">Categoría</span>
-            <select class="form-control" name="category">
+            <select class="form-control" name="category" required>
+              <option value="" selected disabled>Seleccionar categoría</option>
               <?php foreach ($categories as $key => $label): ?>
                 <option value="<?= e($key) ?>" <?= $category === $key ? 'selected' : '' ?>><?= e($label) ?></option>
               <?php endforeach; ?>
@@ -165,7 +170,8 @@ if (is_post()) {
         <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
           <label class="form-field">
             <span class="form-label">Relacionado con</span>
-            <select class="form-control" name="related_type">
+            <select class="form-control" name="related_type" required>
+              <option value="" selected disabled>Seleccionar relación</option>
               <?php foreach ($related_types as $key => $label): ?>
                 <option value="<?= e($key) ?>" <?= $related_type === $key ? 'selected' : '' ?>><?= e($label) ?></option>
               <?php endforeach; ?>
