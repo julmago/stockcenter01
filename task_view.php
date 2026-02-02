@@ -226,8 +226,25 @@ if (is_post() && post('action') === 'update') {
         </div>
       </div>
       <div class="stack">
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4);">
-          <div class="stack">
+        <div class="task-form-grid">
+          <div class="task-form-assignees">
+            <div class="form-group">
+              <label class="form-label" for="task-assigned">Asignar a</label>
+              <select class="form-control" id="task-assigned" name="assigned_user_ids[]" multiple <?= $can_edit ? '' : 'disabled' ?>>
+                <option value="" disabled>Seleccionar usuarios</option>
+                <?php foreach ($users as $user): ?>
+                  <?php
+                  $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                  $user_label = $user_name !== '' ? $user_name : ($user['email'] ?? '');
+                  ?>
+                  <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
+                    <?= e($user_label) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="task-form-fields">
             <div class="form-group">
               <label class="form-label" for="task-category">Categoría</label>
               <select class="form-control" id="task-category" name="category" required <?= $can_edit ? '' : 'disabled' ?>>
@@ -249,23 +266,6 @@ if (is_post() && post('action') === 'update') {
               <select class="form-control" id="task-status" name="status" required <?= $can_edit ? '' : 'disabled' ?>>
                 <?php foreach ($statuses as $key => $label): ?>
                   <option value="<?= e($key) ?>" <?= $task['status'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-          </div>
-          <div class="stack">
-            <div class="form-group">
-              <label class="form-label" for="task-assigned">Asignado a</label>
-              <select class="form-control" id="task-assigned" name="assigned_user_ids[]" multiple <?= $can_edit ? '' : 'disabled' ?>>
-                <option value="" disabled>Seleccionar usuarios</option>
-                <?php foreach ($users as $user): ?>
-                  <?php
-                  $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
-                  $user_label = $user_name !== '' ? $user_name : ($user['email'] ?? '');
-                  ?>
-                  <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
-                    <?= e($user_label) ?>
-                  </option>
                 <?php endforeach; ?>
               </select>
             </div>

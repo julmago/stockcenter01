@@ -144,55 +144,57 @@ if (is_post()) {
           <textarea class="form-control" name="description" rows="4"><?= e($description) ?></textarea>
         </label>
 
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-          <label class="form-field">
-            <span class="form-label">Categoría</span>
-            <select class="form-control" name="category" required>
-              <option value="" selected disabled>Seleccionar categoría</option>
-              <?php foreach ($categories as $key => $label): ?>
-                <option value="<?= e($key) ?>" <?= $category === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
+        <div class="task-form-grid">
+          <div class="task-form-assignees">
+            <label class="form-field">
+              <span class="form-label">Asignar a</span>
+              <select class="form-control" name="assigned_user_ids[]" multiple>
+                <option value="" disabled>Seleccionar usuarios</option>
+                <?php foreach ($users as $user): ?>
+                  <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
+                  <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
+                    <?= e($user_name !== '' ? $user_name : $user['email']) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+          </div>
 
-          <label class="form-field">
-            <span class="form-label">Asignar a</span>
-            <select class="form-control" name="assigned_user_ids[]" multiple>
-              <option value="" disabled>Seleccionar usuarios</option>
-              <?php foreach ($users as $user): ?>
-                <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
-                <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
-                  <?= e($user_name !== '' ? $user_name : $user['email']) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
+          <div class="task-form-fields">
+            <label class="form-field">
+              <span class="form-label">Categoría</span>
+              <select class="form-control" name="category" required>
+                <option value="" selected disabled>Seleccionar categoría</option>
+                <?php foreach ($categories as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $category === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
 
-          <label class="form-field">
-            <span class="form-label">Prioridad</span>
-            <select class="form-control" name="priority">
-              <?php foreach ($priorities as $key => $label): ?>
-                <option value="<?= e($key) ?>" <?= $priority === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
+            <label class="form-field">
+              <span class="form-label">Prioridad</span>
+              <select class="form-control" name="priority">
+                <?php foreach ($priorities as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $priority === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
 
-          <label class="form-field">
-            <span class="form-label">Fecha límite</span>
-            <input class="form-control" type="date" name="due_date" value="<?= e($due_date) ?>">
-          </label>
-        </div>
+            <label class="form-field">
+              <span class="form-label">Fecha límite</span>
+              <input class="form-control" type="date" name="due_date" value="<?= e($due_date) ?>">
+            </label>
 
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-          <label class="form-field">
-            <span class="form-label">Relacionado con</span>
-            <select class="form-control" name="related_type" required>
-              <option value="" selected disabled>Seleccionar relación</option>
-              <?php foreach ($related_types as $key => $label): ?>
-                <option value="<?= e($key) ?>" <?= $related_type === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
+            <label class="form-field">
+              <span class="form-label">Relacionado con</span>
+              <select class="form-control" name="related_type" required>
+                <option value="" selected disabled>Seleccionar relación</option>
+                <?php foreach ($related_types as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $related_type === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div class="inline-actions">
