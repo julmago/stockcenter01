@@ -32,9 +32,16 @@ if (!$task) {
   abort(404, 'Tarea no encontrada.');
 }
 
-$assigned_ids_st = $pdo->prepare("SELECT user_id FROM task_assignees WHERE task_id = ? ORDER BY user_id ASC");
-$assigned_ids_st->execute([$task_id]);
-$assigned_user_ids = array_map('intval', $assigned_ids_st->fetchAll(PDO::FETCH_COLUMN));
+$assigned_users_st = $pdo->prepare("
+  SELECT u.id, u.first_name, u.last_name, u.email
+  FROM task_assignees ta
+  JOIN users u ON u.id = ta.user_id
+  WHERE ta.task_id = ?
+  ORDER BY u.first_name, u.last_name
+");
+$assigned_users_st->execute([$task_id]);
+$assigned_users = $assigned_users_st->fetchAll();
+$assigned_user_ids = array_map('intval', array_column($assigned_users, 'id'));
 
 $categories = task_categories((string)$task['category']);
 $category_map = task_categories(null, true);
@@ -47,8 +54,9 @@ $users = task_users($pdo);
 $creator_name = trim(($task['created_first_name'] ?? '') . ' ' . ($task['created_last_name'] ?? ''));
 
 $error = '';
-$can_edit = in_array($current_user_id, $assigned_user_ids, true);
+$can_edit = task_user_can_edit($pdo, $task_id, $current_user_id);
 $saved = get('saved') === '1';
+$status_updated = get('status_updated') === '1';
 if (is_post() && post('action') === 'update') {
   if (!$can_edit) {
     abort(403, 'No tenés permisos para editar esta tarea.');
@@ -93,6 +101,7 @@ if (is_post() && post('action') === 'update') {
       }
     }
     if ($error === '') {
+      $status_changed = $status !== $task['status'];
       $st = $pdo->prepare("
         UPDATE tasks
         SET title = ?,
@@ -130,6 +139,9 @@ if (is_post() && post('action') === 'update') {
         'saved' => 1,
         'from' => $return_to,
       ];
+      if ($status_changed) {
+        $redirect_params['status_updated'] = 1;
+      }
       redirect('task_view.php?' . http_build_query($redirect_params));
     }
   }
@@ -158,7 +170,9 @@ if (is_post() && post('action') === 'update') {
   <?php if ($error): ?>
     <div class="alert alert-danger"><?= e($error) ?></div>
   <?php endif; ?>
-  <?php if ($saved): ?>
+  <?php if ($status_updated): ?>
+    <div class="alert alert-success">Estado actualizado.</div>
+  <?php elseif ($saved): ?>
     <div class="alert alert-success">Cambios guardados.</div>
   <?php endif; ?>
 
@@ -178,6 +192,21 @@ if (is_post() && post('action') === 'update') {
         </div>
       </div>
       <div class="stack">
+        <div class="task-detail-item">
+          <div class="task-detail-label">Asignados</div>
+          <div class="task-detail-value">
+            <?php if ($assigned_users): ?>
+              <?php foreach ($assigned_users as $user): ?>
+                <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
+                <span class="badge badge-muted">
+                  <?= e($user_name !== '' ? $user_name : ($user['email'] ?? '')) ?>
+                </span>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <span class="muted">Sin asignar</span>
+            <?php endif; ?>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="task-title">Título</label>
           <input class="form-control" id="task-title" type="text" name="title" value="<?= e($task['title']) ?>" required <?= $can_edit ? '' : 'disabled' ?>>
@@ -228,7 +257,7 @@ if (is_post() && post('action') === 'update') {
             <div class="form-group">
               <label class="form-label" for="task-assigned">Asignado a</label>
               <select class="form-control" id="task-assigned" name="assigned_user_ids[]" multiple <?= $can_edit ? '' : 'disabled' ?>>
-                <option value="" disabled>Seleccionar usuario(s)</option>
+                <option value="" disabled>Seleccionar usuarios</option>
                 <?php foreach ($users as $user): ?>
                   <?php
                   $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));

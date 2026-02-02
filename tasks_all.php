@@ -45,9 +45,11 @@ $where_sql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 $st = $pdo->prepare("
   SELECT t.*,
          GROUP_CONCAT(
-           COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email)
-           SEPARATOR ', '
-         ) AS assigned_to,
+           DISTINCT COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email)
+           ORDER BY u.first_name, u.last_name
+           SEPARATOR '||'
+         ) AS assignee_names,
+         COUNT(DISTINCT ta.user_id) AS assignee_count,
          cu.first_name AS created_first_name, cu.last_name AS created_last_name,
          cu.email AS created_email
   FROM tasks t
@@ -163,7 +165,18 @@ $tasks = $st->fetchAll();
                 $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
                 $status_class = $status_badges[$task['status']] ?? 'badge-muted';
                 $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_all.php';
-                $assigned_to = $task['assigned_to'] ?: '-';
+                $assignee_names = $task['assignee_names'] ? explode('||', (string)$task['assignee_names']) : [];
+                $assignee_count = (int)$task['assignee_count'];
+                if ($assignee_count <= 0) {
+                  $assigned_to = 'Sin asignar';
+                } else {
+                  $visible_names = array_slice($assignee_names, 0, 2);
+                  $assigned_to = implode(', ', $visible_names);
+                  $extra = $assignee_count - count($visible_names);
+                  if ($extra > 0) {
+                    $assigned_to .= ' +' . $extra;
+                  }
+                }
               ?>
               <tr>
                 <td class="col-task">
@@ -204,7 +217,18 @@ $tasks = $st->fetchAll();
             $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
             $status_class = $status_badges[$task['status']] ?? 'badge-muted';
             $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_all.php';
-            $assigned_to = $task['assigned_to'] ?: '-';
+            $assignee_names = $task['assignee_names'] ? explode('||', (string)$task['assignee_names']) : [];
+            $assignee_count = (int)$task['assignee_count'];
+            if ($assignee_count <= 0) {
+              $assigned_to = 'Sin asignar';
+            } else {
+              $visible_names = array_slice($assignee_names, 0, 2);
+              $assigned_to = implode(', ', $visible_names);
+              $extra = $assignee_count - count($visible_names);
+              if ($extra > 0) {
+                $assigned_to .= ' +' . $extra;
+              }
+            }
           ?>
           <article class="task-card">
             <div>

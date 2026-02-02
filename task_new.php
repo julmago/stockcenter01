@@ -82,6 +82,7 @@ if (is_post()) {
       $related_type,
     ]);
     $task_id = (int)$pdo->lastInsertId();
+    $pdo->prepare("DELETE FROM task_assignees WHERE task_id = ?")->execute([$task_id]);
     if ($assigned_ids) {
       $assign = $pdo->prepare("
         INSERT IGNORE INTO task_assignees (task_id, user_id, assigned_by_user_id)
@@ -157,7 +158,7 @@ if (is_post()) {
           <label class="form-field">
             <span class="form-label">Asignar a</span>
             <select class="form-control" name="assigned_user_ids[]" multiple>
-              <option value="" disabled>Seleccionar usuario(s)</option>
+              <option value="" disabled>Seleccionar usuarios</option>
               <?php foreach ($users as $user): ?>
                 <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
                 <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
