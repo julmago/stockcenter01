@@ -24,20 +24,20 @@ $status_badges = [
 $category = get('category');
 $status = get('status');
 $assignee = (int)get('assignee');
-$mine = get('mine') === '1';
-$mine_filter = get('mine_filter');
+$view = get('view', 'mine_active');
 $message = get('message');
 $success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
 
-$allowed_mine_filters = ['all_active', 'pending', 'in_progress', 'all'];
-if (!$mine) {
-  $mine_filter = '';
-} elseif (!in_array($mine_filter, $allowed_mine_filters, true)) {
-  $mine_filter = 'all_active';
+$allowed_views = ['all', 'mine_active', 'mine_pending', 'mine_progress', 'mine_all'];
+if (!in_array($view, $allowed_views, true)) {
+  $view = 'mine_active';
 }
+$is_all_view = $view === 'all';
+$is_mine_view = !$is_all_view;
 
 $where = [];
 $params = [];
+$join_params = [];
 if ($category !== '' && array_key_exists($category, $category_options)) {
   $where[] = 't.category = ?';
   $params[] = $category;
@@ -46,35 +46,35 @@ if ($status !== '' && array_key_exists($status, $statuses)) {
   $where[] = 't.status = ?';
   $params[] = $status;
 }
-if ($mine) {
-  $where[] = 'EXISTS (SELECT 1 FROM task_assignees ta_mine WHERE ta_mine.task_id = t.id AND ta_mine.user_id = ?)';
-  $params[] = $current_user_id;
-  if ($mine_filter === 'all_active') {
+if ($is_mine_view) {
+  $join_params[] = $current_user_id;
+  if ($view === 'mine_active') {
     $where[] = "t.status <> 'completed'";
-  } elseif ($mine_filter === 'pending') {
+  } elseif ($view === 'mine_pending') {
     $where[] = "t.status = 'pending'";
-  } elseif ($mine_filter === 'in_progress') {
+  } elseif ($view === 'mine_progress') {
     $where[] = "t.status = 'in_progress'";
   }
 }
-if (!$mine && $assignee > 0) {
+if ($is_all_view && $assignee > 0) {
   $where[] = 'EXISTS (SELECT 1 FROM task_assignees ta2 WHERE ta2.task_id = t.id AND ta2.user_id = ?)';
   $params[] = $assignee;
 }
 
 $mine_subtitles = [
-  'all_active' => 'Tus tareas activas (sin completadas).',
-  'pending' => 'Tus tareas pendientes.',
-  'in_progress' => 'Tus tareas en progreso.',
-  'all' => 'Todas tus tareas (incluye completadas).',
+  'mine_active' => 'Tus tareas activas (sin completadas).',
+  'mine_pending' => 'Tus tareas pendientes.',
+  'mine_progress' => 'Tus tareas en progreso.',
+  'mine_all' => 'Todas tus tareas (incluye completadas).',
 ];
-$page_title = $mine ? 'Mis tareas' : 'Todas las tareas';
-$header_title = $mine ? 'Mis tareas' : 'Tareas';
-$header_subtitle = $mine ? ($mine_subtitles[$mine_filter] ?? $mine_subtitles['all_active']) : 'Transparencia total del trabajo del equipo.';
-$card_title = $mine ? 'Mis tareas' : 'Vista general';
-$card_subtitle = $mine ? ($mine_subtitles[$mine_filter] ?? $mine_subtitles['all_active']) : 'Todas las tareas (solo lectura, salvo tus propias tareas).';
+$page_title = $is_mine_view ? 'Mis tareas' : 'Todas las tareas';
+$header_title = $is_mine_view ? 'Mis tareas' : 'Tareas';
+$header_subtitle = $is_mine_view ? ($mine_subtitles[$view] ?? $mine_subtitles['mine_active']) : 'Transparencia total del trabajo del equipo.';
+$card_title = $is_mine_view ? 'Mis tareas' : 'Vista general';
+$card_subtitle = $is_mine_view ? ($mine_subtitles[$view] ?? $mine_subtitles['mine_active']) : 'Todas las tareas (solo lectura, salvo tus propias tareas).';
 
 $where_sql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+$mine_join = $is_mine_view ? 'JOIN task_assignees ta_filter ON ta_filter.task_id = t.id AND ta_filter.user_id = ?' : '';
 $st = $pdo->prepare("
   SELECT t.*,
          GROUP_CONCAT(
@@ -86,6 +86,7 @@ $st = $pdo->prepare("
          cu.first_name AS created_first_name, cu.last_name AS created_last_name,
          cu.email AS created_email
   FROM tasks t
+  {$mine_join}
   LEFT JOIN task_assignees ta ON ta.task_id = t.id
   LEFT JOIN users u ON u.id = ta.user_id
   JOIN users cu ON cu.id = t.created_by_user_id
@@ -94,7 +95,7 @@ $st = $pdo->prepare("
   ORDER BY t.created_at DESC
   LIMIT 300
 ");
-$st->execute($params);
+$st->execute(array_merge($join_params, $params));
 $tasks = $st->fetchAll();
 ?>
 <!doctype html>
@@ -133,25 +134,24 @@ $tasks = $st->fetchAll();
           $base_params = array_filter([
             'category' => $category !== '' ? $category : null,
             'status' => $status !== '' ? $status : null,
-            'assignee' => (!$mine && $assignee > 0) ? $assignee : null,
+            'assignee' => ($is_all_view && $assignee > 0) ? $assignee : null,
           ], static fn($value) => $value !== null);
-          $mine_views = [
-            'all_active' => 'Mis tareas',
-            'pending' => 'Mis tareas pendientes',
-            'in_progress' => 'Mis tareas en progreso',
-            'all' => 'Todas mis tareas',
+          $views = [
+            'all' => 'Todas las tareas',
+            'mine_active' => 'Mis tareas',
+            'mine_pending' => 'Mis tareas pendientes',
+            'mine_progress' => 'Mis tareas en progreso',
+            'mine_all' => 'Todas mis tareas',
           ];
+          $is_active = static fn(string $candidate, string $current): string => $candidate === $current ? 'btn-primary' : 'btn-ghost';
           ?>
-          <?php $all_tasks_link = 'tasks_all.php' . ($base_params ? '?' . http_build_query($base_params) : ''); ?>
-          <a class="btn <?= $mine ? 'btn-ghost' : '' ?>" href="<?= e($all_tasks_link) ?>">Todas las tareas</a>
-          <?php foreach ($mine_views as $key => $label): ?>
+          <?php foreach ($views as $key => $label): ?>
             <?php
-            $mine_link = 'tasks_all.php?' . http_build_query(array_merge($base_params, [
-              'mine' => 1,
-              'mine_filter' => $key,
+            $view_link = 'tasks_all.php?' . http_build_query(array_merge($base_params, [
+              'view' => $key,
             ]));
             ?>
-            <a class="btn <?= $mine && $mine_filter === $key ? '' : 'btn-ghost' ?>" href="<?= e($mine_link) ?>">
+            <a class="btn <?= e($is_active($key, $view)) ?>" href="<?= e($view_link) ?>">
               <?= e($label) ?>
             </a>
           <?php endforeach; ?>
@@ -159,10 +159,7 @@ $tasks = $st->fetchAll();
       </div>
 
       <form method="get" action="tasks_all.php" class="stack">
-        <?php if ($mine): ?>
-          <input type="hidden" name="mine" value="1">
-          <input type="hidden" name="mine_filter" value="<?= e($mine_filter) ?>">
-        <?php endif; ?>
+        <input type="hidden" name="view" value="<?= e($view) ?>">
         <div class="filters-grid">
           <label class="form-field">
             <span class="form-label">Categoría</span>
@@ -182,7 +179,7 @@ $tasks = $st->fetchAll();
               <?php endforeach; ?>
             </select>
           </label>
-          <?php if (!$mine): ?>
+          <?php if ($is_all_view): ?>
             <label class="form-field">
               <span class="form-label">Asignado a</span>
               <select class="form-control" name="assignee">
@@ -198,7 +195,7 @@ $tasks = $st->fetchAll();
           <?php endif; ?>
           <div class="filters-actions">
             <button class="btn" type="submit">Filtrar</button>
-            <a class="btn btn-ghost" href="<?= e($mine ? ('tasks_all.php?' . http_build_query(['mine' => 1, 'mine_filter' => $mine_filter])) : 'tasks_all.php') ?>">Limpiar</a>
+            <a class="btn btn-ghost" href="<?= e('tasks_all.php?' . http_build_query(['view' => $view])) ?>">Limpiar</a>
           </div>
         </div>
       </form>
