@@ -4,8 +4,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 
-function task_categories(): array {
-  return [
+function task_categories(?string $selected = null, bool $include_inactive = false): array {
+  $pdo = db();
+  $st = $pdo->query("SELECT name, is_active FROM task_categories ORDER BY sort_order ASC, name ASC");
+  $rows = $st->fetchAll();
+  $fallback = [
     'deposito' => 'Depósito',
     'publicaciones' => 'Publicaciones',
     'sincronizacion' => 'Sincronización',
@@ -13,6 +16,30 @@ function task_categories(): array {
     'administrativo' => 'Administrativo',
     'incidencias' => 'Incidencias',
   ];
+  if (!$rows) {
+    return $fallback;
+  }
+  $options = [];
+  foreach ($rows as $row) {
+    $name = (string)$row['name'];
+    $is_active = (int)$row['is_active'] === 1;
+    if ($include_inactive || $is_active) {
+      $options[$name] = $name;
+    }
+  }
+  if ($selected !== null && $selected !== '' && !array_key_exists($selected, $options)) {
+    $selected_label = $selected;
+    foreach ($rows as $row) {
+      if ((string)$row['name'] === $selected) {
+        if ((int)$row['is_active'] !== 1) {
+          $selected_label = $selected . ' (inactivo)';
+        }
+        break;
+      }
+    }
+    $options[$selected] = $selected_label;
+  }
+  return $options;
 }
 
 function task_priorities(): array {
@@ -31,12 +58,39 @@ function task_statuses(): array {
   ];
 }
 
-function task_related_types(): array {
-  return [
+function task_related_types(?string $selected = null, bool $include_inactive = false): array {
+  $pdo = db();
+  $st = $pdo->query("SELECT name, is_active FROM task_relations ORDER BY sort_order ASC, name ASC");
+  $rows = $st->fetchAll();
+  $fallback = [
     'list' => 'Listado',
     'product' => 'Producto',
     'general' => 'General',
   ];
+  if (!$rows) {
+    return $fallback;
+  }
+  $options = [];
+  foreach ($rows as $row) {
+    $name = (string)$row['name'];
+    $is_active = (int)$row['is_active'] === 1;
+    if ($include_inactive || $is_active) {
+      $options[$name] = $name;
+    }
+  }
+  if ($selected !== null && $selected !== '' && !array_key_exists($selected, $options)) {
+    $selected_label = $selected;
+    foreach ($rows as $row) {
+      if ((string)$row['name'] === $selected) {
+        if ((int)$row['is_active'] !== 1) {
+          $selected_label = $selected . ' (inactivo)';
+        }
+        break;
+      }
+    }
+    $options[$selected] = $selected_label;
+  }
+  return $options;
 }
 
 function task_label(array $map, string $key, string $fallback = ''): string {

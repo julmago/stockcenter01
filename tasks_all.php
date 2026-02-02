@@ -3,10 +3,11 @@ require_once __DIR__ . '/tasks_lib.php';
 require_login();
 
 $pdo = db();
-$categories = task_categories();
+$category_options = task_categories();
+$category_labels = task_categories(null, true);
 $statuses = task_statuses();
 $priorities = task_priorities();
-$related_types = task_related_types();
+$related_types = task_related_types(null, true);
 $users = task_users($pdo);
 $priority_badges = [
   'low' => 'badge-muted',
@@ -27,7 +28,7 @@ $success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
 
 $where = [];
 $params = [];
-if ($category !== '' && array_key_exists($category, $categories)) {
+if ($category !== '' && array_key_exists($category, $category_options)) {
   $where[] = 't.category = ?';
   $params[] = $category;
 }
@@ -100,7 +101,7 @@ $tasks = $st->fetchAll();
             <span class="form-label">Categoría</span>
             <select class="form-control" name="category">
               <option value="">Todas</option>
-              <?php foreach ($categories as $key => $label): ?>
+              <?php foreach ($category_options as $key => $label): ?>
                 <option value="<?= e($key) ?>" <?= $category === $key ? 'selected' : '' ?>><?= e($label) ?></option>
               <?php endforeach; ?>
             </select>
@@ -154,9 +155,6 @@ $tasks = $st->fetchAll();
             <?php foreach ($tasks as $task): ?>
               <?php
                 $related_label = task_label($related_types, (string)$task['related_type']);
-                if (!empty($task['related_id'])) {
-                  $related_label .= ' #' . (int)$task['related_id'];
-                }
                 $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
                 $status_class = $status_badges[$task['status']] ?? 'badge-muted';
                 $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_all.php';
@@ -171,7 +169,7 @@ $tasks = $st->fetchAll();
                   <?php endif; ?>
                 </td>
                 <td class="col-short">
-                  <span class="badge badge-muted"><?= e(task_label($categories, (string)$task['category'])) ?></span>
+                  <span class="badge badge-muted"><?= e(task_label($category_labels, (string)$task['category'])) ?></span>
                 </td>
                 <td class="col-short">
                   <span class="badge <?= e($priority_class) ?>"><?= e(task_label($priorities, (string)$task['priority'])) ?></span>
@@ -196,9 +194,6 @@ $tasks = $st->fetchAll();
         <?php foreach ($tasks as $task): ?>
           <?php
             $related_label = task_label($related_types, (string)$task['related_type']);
-            if (!empty($task['related_id'])) {
-              $related_label .= ' #' . (int)$task['related_id'];
-            }
             $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
             $status_class = $status_badges[$task['status']] ?? 'badge-muted';
             $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_all.php';
@@ -216,7 +211,7 @@ $tasks = $st->fetchAll();
               <div class="task-card__meta-row">
                 <div class="task-card__meta-item">
                   <span class="task-card__meta-label">Categoría</span>
-                  <span class="badge badge-muted"><?= e(task_label($categories, (string)$task['category'])) ?></span>
+                  <span class="badge badge-muted"><?= e(task_label($category_labels, (string)$task['category'])) ?></span>
                 </div>
                 <div class="task-card__meta-item">
                   <span class="task-card__meta-label">Prioridad</span>

@@ -96,13 +96,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   title VARCHAR(190) NOT NULL,
   description TEXT NULL,
-  category ENUM('deposito','publicaciones','sincronizacion','mantenimiento','administrativo','incidencias') NOT NULL DEFAULT 'deposito',
+  category VARCHAR(120) NOT NULL DEFAULT 'deposito',
   priority ENUM('low','medium','high') NOT NULL DEFAULT 'medium',
   status ENUM('pending','in_progress','completed') NOT NULL DEFAULT 'pending',
   assigned_user_id INT UNSIGNED NOT NULL,
   created_by_user_id INT UNSIGNED NOT NULL,
   due_date DATE NULL,
-  related_type ENUM('list','product','general') NOT NULL DEFAULT 'general',
+  related_type VARCHAR(120) NOT NULL DEFAULT 'general',
   related_id INT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -118,6 +118,41 @@ CREATE TABLE IF NOT EXISTS tasks (
     FOREIGN KEY (created_by_user_id) REFERENCES users(id)
     ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS task_categories (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_task_categories_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS task_relations (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_task_relations_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO task_categories (name, is_active, sort_order) VALUES
+('deposito', 1, 10),
+('publicaciones', 1, 20),
+('sincronizacion', 1, 30),
+('mantenimiento', 1, 40),
+('administrativo', 1, 50),
+('incidencias', 1, 60)
+ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+INSERT INTO task_relations (name, is_active, sort_order) VALUES
+('general', 1, 10),
+('list', 1, 20),
+('product', 1, 30)
+ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 
 CREATE TABLE IF NOT EXISTS settings (
