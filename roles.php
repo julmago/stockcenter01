@@ -18,6 +18,7 @@ $sections = [
     'menu_design' => 'Diseño',
     'menu_new_list' => 'Nuevo listado',
     'menu_new_product' => 'Nuevo producto',
+    'tasks_settings' => 'Tareas · Configuración',
   ],
   'Listados' => [
     'list_can_sync' => 'Sincronizar',

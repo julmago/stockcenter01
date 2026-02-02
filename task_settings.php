@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/tasks_lib.php';
 require_login();
+require_permission(hasPerm('tasks_settings'), 'Sin permiso');
 
 $pdo = db();
 
