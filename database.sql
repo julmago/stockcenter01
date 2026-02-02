@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   category VARCHAR(120) NULL DEFAULT NULL,
   priority ENUM('low','medium','high') NOT NULL DEFAULT 'medium',
   status ENUM('pending','in_progress','completed') NOT NULL DEFAULT 'pending',
-  assigned_user_id INT UNSIGNED NOT NULL,
+  assigned_user_id INT UNSIGNED NULL DEFAULT NULL,
   created_by_user_id INT UNSIGNED NOT NULL,
   due_date DATE NULL,
   related_type VARCHAR(120) NULL DEFAULT NULL,
@@ -117,6 +117,21 @@ CREATE TABLE IF NOT EXISTS tasks (
   CONSTRAINT fk_tasks_created_user
     FOREIGN KEY (created_by_user_id) REFERENCES users(id)
     ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS task_assignees (
+  task_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  assigned_by_user_id INT UNSIGNED NULL,
+  PRIMARY KEY (task_id, user_id),
+  KEY idx_task_assignees_user (user_id),
+  CONSTRAINT fk_task_assignees_task
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_task_assignees_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS task_categories (

@@ -26,7 +26,7 @@ $status = get('status');
 $message = get('message');
 $success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
 
-$where = ['t.assigned_user_id = ?'];
+$where = ['ta.user_id = ?'];
 $params = [$current_user_id];
 if ($category !== '' && array_key_exists($category, $category_options)) {
   $where[] = 't.category = ?';
@@ -39,13 +39,11 @@ if ($status !== '' && array_key_exists($status, $statuses)) {
 
 $where_sql = 'WHERE ' . implode(' AND ', $where);
 $st = $pdo->prepare("
-  SELECT t.*, 
-         au.first_name AS assigned_first_name, au.last_name AS assigned_last_name,
-         au.email AS assigned_email,
+  SELECT t.*,
          cu.first_name AS created_first_name, cu.last_name AS created_last_name,
          cu.email AS created_email
   FROM tasks t
-  JOIN users au ON au.id = t.assigned_user_id
+  JOIN task_assignees ta ON ta.task_id = t.id
   JOIN users cu ON cu.id = t.created_by_user_id
   {$where_sql}
   ORDER BY t.created_at DESC
