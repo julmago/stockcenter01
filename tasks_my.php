@@ -3,16 +3,12 @@ require_once __DIR__ . '/tasks_lib.php';
 require_login();
 
 $pdo = db();
-$current_user = current_user();
-$current_user_id = (int)($current_user['id'] ?? 0);
-
-task_handle_action($pdo, $current_user_id, 'tasks_my.php');
+$current_user_id = (int)(current_user()['id'] ?? 0);
 
 $categories = task_categories();
 $statuses = task_statuses();
 $priorities = task_priorities();
 $related_types = task_related_types();
-$users = task_users($pdo);
 $priority_badges = [
   'low' => 'badge-muted',
   'medium' => 'badge-warning',
@@ -26,6 +22,8 @@ $status_badges = [
 
 $category = get('category');
 $status = get('status');
+$message = get('message');
+$success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
 
 $where = ['t.assigned_user_id = ?'];
 $params = [$current_user_id];
@@ -76,6 +74,10 @@ $tasks = $st->fetchAll();
       </div>
     </div>
 
+    <?php if ($success_message): ?>
+      <div class="alert alert-success"><?= e($success_message) ?></div>
+    <?php endif; ?>
+
     <div class="card">
       <div class="card-header">
         <div>
@@ -122,33 +124,31 @@ $tasks = $st->fetchAll();
               <th class="col-short">Categoría</th>
               <th class="col-short">Prioridad</th>
               <th class="col-short">Estado</th>
-              <th class="col-short">Asignado a</th>
               <th class="col-short">Vence</th>
               <th class="col-short">Relación</th>
-              <th class="col-short">Creada por</th>
-              <th class="col-actions">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$tasks): ?>
               <tr>
-                <td colspan="9" class="muted">No tenés tareas asignadas.</td>
+                <td colspan="6" class="muted">No tenés tareas asignadas.</td>
               </tr>
             <?php endif; ?>
             <?php foreach ($tasks as $task): ?>
               <?php
-                $assigned_name = trim(($task['assigned_first_name'] ?? '') . ' ' . ($task['assigned_last_name'] ?? ''));
-                $creator_name = trim(($task['created_first_name'] ?? '') . ' ' . ($task['created_last_name'] ?? ''));
                 $related_label = task_label($related_types, (string)$task['related_type']);
                 if (!empty($task['related_id'])) {
                   $related_label .= ' #' . (int)$task['related_id'];
                 }
                 $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
                 $status_class = $status_badges[$task['status']] ?? 'badge-muted';
+                $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_my.php';
               ?>
               <tr>
                 <td class="col-task">
-                  <div class="task-title"><?= e($task['title']) ?></div>
+                  <div class="task-title">
+                    <a class="task-title-link" href="<?= e($task_url) ?>"><?= e($task['title']) ?></a>
+                  </div>
                   <?php if (!empty($task['description'])): ?>
                     <div class="muted small task-desc"><?= e($task['description']) ?></div>
                   <?php endif; ?>
@@ -162,41 +162,9 @@ $tasks = $st->fetchAll();
                 <td class="col-short">
                   <span class="badge <?= e($status_class) ?>"><?= e(task_label($statuses, (string)$task['status'])) ?></span>
                 </td>
-                <td class="col-short"><?= e($assigned_name !== '' ? $assigned_name : ($task['assigned_email'] ?? '')) ?></td>
                 <td class="col-short"><?= $task['due_date'] ? e($task['due_date']) : '<span class="muted">-</span>' ?></td>
                 <td class="col-short">
                   <span class="badge badge-muted"><?= e($related_label) ?></span>
-                </td>
-                <td class="col-short"><?= e($creator_name !== '' ? $creator_name : ($task['created_email'] ?? '')) ?></td>
-                <td class="col-actions">
-                  <details class="action-menu">
-                    <summary class="btn btn-ghost btn-small">Acciones</summary>
-                    <div class="action-menu__panel">
-                      <form method="post" class="action-form">
-                        <input type="hidden" name="action" value="update_status">
-                        <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
-                        <select class="form-control" name="status">
-                          <?php foreach ($statuses as $key => $label): ?>
-                            <option value="<?= e($key) ?>" <?= $task['status'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-                          <?php endforeach; ?>
-                        </select>
-                        <button class="btn btn-ghost btn-small" type="submit">Guardar estado</button>
-                      </form>
-                      <form method="post" class="action-form">
-                        <input type="hidden" name="action" value="reassign">
-                        <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
-                        <select class="form-control" name="assigned_user_id">
-                          <?php foreach ($users as $user): ?>
-                            <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
-                            <option value="<?= (int)$user['id'] ?>" <?= (int)$task['assigned_user_id'] === (int)$user['id'] ? 'selected' : '' ?>>
-                              <?= e($user_name !== '' ? $user_name : $user['email']) ?>
-                            </option>
-                          <?php endforeach; ?>
-                        </select>
-                        <button class="btn btn-ghost btn-small" type="submit">Reasignar</button>
-                      </form>
-                    </div>
-                  </details>
                 </td>
               </tr>
             <?php endforeach; ?>
@@ -210,18 +178,19 @@ $tasks = $st->fetchAll();
         <?php endif; ?>
         <?php foreach ($tasks as $task): ?>
           <?php
-            $assigned_name = trim(($task['assigned_first_name'] ?? '') . ' ' . ($task['assigned_last_name'] ?? ''));
-            $creator_name = trim(($task['created_first_name'] ?? '') . ' ' . ($task['created_last_name'] ?? ''));
             $related_label = task_label($related_types, (string)$task['related_type']);
             if (!empty($task['related_id'])) {
               $related_label .= ' #' . (int)$task['related_id'];
             }
             $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
             $status_class = $status_badges[$task['status']] ?? 'badge-muted';
+            $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_my.php';
           ?>
           <article class="task-card">
             <div>
-              <div class="task-title"><?= e($task['title']) ?></div>
+              <div class="task-title">
+                <a class="task-title-link" href="<?= e($task_url) ?>"><?= e($task['title']) ?></a>
+              </div>
               <?php if (!empty($task['description'])): ?>
                 <div class="muted small task-desc"><?= e($task['description']) ?></div>
               <?php endif; ?>
@@ -243,10 +212,6 @@ $tasks = $st->fetchAll();
               </div>
               <div class="task-card__meta-row">
                 <div class="task-card__meta-item">
-                  <span class="task-card__meta-label">Asignado</span>
-                  <span><?= e($assigned_name !== '' ? $assigned_name : ($task['assigned_email'] ?? '')) ?></span>
-                </div>
-                <div class="task-card__meta-item">
                   <span class="task-card__meta-label">Vence</span>
                   <span><?= $task['due_date'] ? e($task['due_date']) : '-' ?></span>
                 </div>
@@ -255,42 +220,6 @@ $tasks = $st->fetchAll();
                   <span class="badge badge-muted"><?= e($related_label) ?></span>
                 </div>
               </div>
-              <div class="task-card__meta-row">
-                <div class="task-card__meta-item">
-                  <span class="task-card__meta-label">Creada por</span>
-                  <span><?= e($creator_name !== '' ? $creator_name : ($task['created_email'] ?? '')) ?></span>
-                </div>
-              </div>
-            </div>
-            <div class="task-actions">
-              <details class="action-menu">
-                <summary class="btn btn-ghost btn-small">Acciones</summary>
-                <div class="action-menu__panel">
-                  <form method="post" class="action-form">
-                    <input type="hidden" name="action" value="update_status">
-                    <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
-                    <select class="form-control" name="status">
-                      <?php foreach ($statuses as $key => $label): ?>
-                        <option value="<?= e($key) ?>" <?= $task['status'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                    <button class="btn btn-ghost btn-small" type="submit">Guardar estado</button>
-                  </form>
-                  <form method="post" class="action-form">
-                    <input type="hidden" name="action" value="reassign">
-                    <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
-                    <select class="form-control" name="assigned_user_id">
-                      <?php foreach ($users as $user): ?>
-                        <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
-                        <option value="<?= (int)$user['id'] ?>" <?= (int)$task['assigned_user_id'] === (int)$user['id'] ? 'selected' : '' ?>>
-                          <?= e($user_name !== '' ? $user_name : $user['email']) ?>
-                        </option>
-                      <?php endforeach; ?>
-                    </select>
-                    <button class="btn btn-ghost btn-small" type="submit">Reasignar</button>
-                  </form>
-                </div>
-              </details>
             </div>
           </article>
         <?php endforeach; ?>
