@@ -63,7 +63,7 @@ if (is_post()) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Login</title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">

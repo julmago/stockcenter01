@@ -98,7 +98,7 @@ if ($total_sent > 0) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Sincronización PrestaShop</title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">

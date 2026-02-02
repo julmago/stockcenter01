@@ -78,7 +78,7 @@ $codes = $st->fetchAll();
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Producto <?= e($product['sku']) ?></title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">

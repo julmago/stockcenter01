@@ -290,7 +290,7 @@ $show_subtitle = $list_name !== '' && $list_name !== $page_title;
 <html>
 <head>
   <meta charset="utf-8">
-  <title><?= e($page_title) ?></title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">

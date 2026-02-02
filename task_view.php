@@ -151,7 +151,7 @@ if (is_post() && post('action') === 'update') {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Tarea #<?= (int)$task['id'] ?></title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
