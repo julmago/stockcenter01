@@ -37,21 +37,25 @@ if ($status !== '' && array_key_exists($status, $statuses)) {
   $params[] = $status;
 }
 if ($assignee > 0) {
-  $where[] = 't.assigned_user_id = ?';
+  $where[] = 'EXISTS (SELECT 1 FROM task_assignees ta2 WHERE ta2.task_id = t.id AND ta2.user_id = ?)';
   $params[] = $assignee;
 }
 
 $where_sql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 $st = $pdo->prepare("
-  SELECT t.*, 
-         au.first_name AS assigned_first_name, au.last_name AS assigned_last_name,
-         au.email AS assigned_email,
+  SELECT t.*,
+         GROUP_CONCAT(
+           COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email)
+           SEPARATOR ', '
+         ) AS assigned_to,
          cu.first_name AS created_first_name, cu.last_name AS created_last_name,
          cu.email AS created_email
   FROM tasks t
-  JOIN users au ON au.id = t.assigned_user_id
+  LEFT JOIN task_assignees ta ON ta.task_id = t.id
+  LEFT JOIN users u ON u.id = ta.user_id
   JOIN users cu ON cu.id = t.created_by_user_id
   {$where_sql}
+  GROUP BY t.id
   ORDER BY t.created_at DESC
   LIMIT 300
 ");
@@ -144,12 +148,13 @@ $tasks = $st->fetchAll();
               <th class="col-short">Estado</th>
               <th class="col-short">Vence</th>
               <th class="col-short">Relación</th>
+              <th class="col-short">Asignados</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$tasks): ?>
               <tr>
-                <td colspan="6" class="muted">No hay tareas para mostrar.</td>
+                <td colspan="7" class="muted">No hay tareas para mostrar.</td>
               </tr>
             <?php endif; ?>
             <?php foreach ($tasks as $task): ?>
@@ -158,6 +163,7 @@ $tasks = $st->fetchAll();
                 $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
                 $status_class = $status_badges[$task['status']] ?? 'badge-muted';
                 $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_all.php';
+                $assigned_to = $task['assigned_to'] ?: '-';
               ?>
               <tr>
                 <td class="col-task">
@@ -181,6 +187,7 @@ $tasks = $st->fetchAll();
                 <td class="col-short">
                   <span class="badge badge-muted"><?= e($related_label) ?></span>
                 </td>
+                <td class="col-short"><?= e($assigned_to) ?></td>
               </tr>
             <?php endforeach; ?>
           </tbody>
@@ -197,6 +204,7 @@ $tasks = $st->fetchAll();
             $priority_class = $priority_badges[$task['priority']] ?? 'badge-muted';
             $status_class = $status_badges[$task['status']] ?? 'badge-muted';
             $task_url = 'task_view.php?id=' . (int)$task['id'] . '&from=tasks_all.php';
+            $assigned_to = $task['assigned_to'] ?: '-';
           ?>
           <article class="task-card">
             <div>
@@ -230,6 +238,10 @@ $tasks = $st->fetchAll();
                 <div class="task-card__meta-item">
                   <span class="task-card__meta-label">Relación</span>
                   <span class="badge badge-muted"><?= e($related_label) ?></span>
+                </div>
+                <div class="task-card__meta-item">
+                  <span class="task-card__meta-label">Asignados</span>
+                  <span><?= e($assigned_to) ?></span>
                 </div>
               </div>
             </div>

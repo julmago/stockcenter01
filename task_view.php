@@ -19,12 +19,9 @@ $return_label = $return_to === 'tasks_my.php' ? 'Mis tareas' : 'Todas las tareas
 
 $st = $pdo->prepare("
   SELECT t.*,
-         au.first_name AS assigned_first_name, au.last_name AS assigned_last_name,
-         au.email AS assigned_email,
          cu.first_name AS created_first_name, cu.last_name AS created_last_name,
          cu.email AS created_email
   FROM tasks t
-  JOIN users au ON au.id = t.assigned_user_id
   JOIN users cu ON cu.id = t.created_by_user_id
   WHERE t.id = ?
   LIMIT 1
@@ -34,6 +31,10 @@ $task = $st->fetch();
 if (!$task) {
   abort(404, 'Tarea no encontrada.');
 }
+
+$assigned_ids_st = $pdo->prepare("SELECT user_id FROM task_assignees WHERE task_id = ? ORDER BY user_id ASC");
+$assigned_ids_st->execute([$task_id]);
+$assigned_user_ids = array_map('intval', $assigned_ids_st->fetchAll(PDO::FETCH_COLUMN));
 
 $categories = task_categories((string)$task['category']);
 $category_map = task_categories(null, true);
@@ -46,7 +47,7 @@ $users = task_users($pdo);
 $creator_name = trim(($task['created_first_name'] ?? '') . ' ' . ($task['created_last_name'] ?? ''));
 
 $error = '';
-$can_edit = (int)$task['assigned_user_id'] === $current_user_id;
+$can_edit = in_array($current_user_id, $assigned_user_ids, true);
 $saved = get('saved') === '1';
 if (is_post() && post('action') === 'update') {
   if (!$can_edit) {
@@ -57,7 +58,7 @@ if (is_post() && post('action') === 'update') {
   $category = post('category');
   $priority = post('priority');
   $status = post('status');
-  $assigned_user_id = (int)post('assigned_user_id', '0');
+  $assigned_user_ids = $_POST['assigned_user_ids'] ?? [];
   $due_date = trim((string)post('due_date'));
   $related_type = post('related_type');
 
@@ -69,18 +70,26 @@ if (is_post() && post('action') === 'update') {
     $error = 'La prioridad es obligatoria.';
   } elseif (!array_key_exists($status, $statuses)) {
     $error = 'El estado es obligatorio.';
-  } elseif ($assigned_user_id <= 0) {
-    $error = 'El usuario asignado es obligatorio.';
   } elseif (!array_key_exists($related_type, $related_types_map)) {
     $error = 'El tipo relacionado es inválido.';
   } else {
+    $assigned_ids = array_values(array_unique(array_filter(array_map('intval', (array)$assigned_user_ids))));
+    $assigned_user_ids = $assigned_ids;
     $description = $description === '' ? null : $description;
     $due_date = $due_date === '' ? null : $due_date;
     if ($error === '') {
-      $check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_active = 1");
-      $check->execute([$assigned_user_id]);
-      if (!$check->fetch()) {
-        $error = 'El usuario asignado es inválido.';
+      if ($assigned_ids) {
+        $placeholders = implode(',', array_fill(0, count($assigned_ids), '?'));
+        $check = $pdo->prepare("SELECT id FROM users WHERE id IN ({$placeholders}) AND is_active = 1");
+        $check->execute($assigned_ids);
+        $valid_ids = $check->fetchAll(PDO::FETCH_COLUMN);
+        $valid_ids = array_map('intval', $valid_ids);
+        sort($valid_ids);
+        $requested_ids = $assigned_ids;
+        sort($requested_ids);
+        if ($valid_ids !== $requested_ids) {
+          $error = 'Hay usuarios asignados inválidos.';
+        }
       }
     }
     if ($error === '') {
@@ -91,7 +100,6 @@ if (is_post() && post('action') === 'update') {
             category = ?,
             priority = ?,
             status = ?,
-            assigned_user_id = ?,
             due_date = ?,
             related_type = ?,
             updated_at = NOW()
@@ -103,11 +111,20 @@ if (is_post() && post('action') === 'update') {
         $category,
         $priority,
         $status,
-        $assigned_user_id,
         $due_date,
         $related_type,
         $task_id,
       ]);
+      $pdo->prepare("DELETE FROM task_assignees WHERE task_id = ?")->execute([$task_id]);
+      if ($assigned_ids) {
+        $assign = $pdo->prepare("
+          INSERT IGNORE INTO task_assignees (task_id, user_id, assigned_by_user_id)
+          VALUES (?, ?, ?)
+        ");
+        foreach ($assigned_ids as $user_id) {
+          $assign->execute([$task_id, $user_id, $current_user_id ?: null]);
+        }
+      }
       $redirect_params = [
         'id' => $task_id,
         'saved' => 1,
@@ -210,13 +227,14 @@ if (is_post() && post('action') === 'update') {
           <div class="stack">
             <div class="form-group">
               <label class="form-label" for="task-assigned">Asignado a</label>
-              <select class="form-control" id="task-assigned" name="assigned_user_id" required <?= $can_edit ? '' : 'disabled' ?>>
+              <select class="form-control" id="task-assigned" name="assigned_user_ids[]" multiple <?= $can_edit ? '' : 'disabled' ?>>
+                <option value="" disabled>Seleccionar usuario(s)</option>
                 <?php foreach ($users as $user): ?>
                   <?php
                   $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
                   $user_label = $user_name !== '' ? $user_name : ($user['email'] ?? '');
                   ?>
-                  <option value="<?= (int)$user['id'] ?>" <?= (int)$task['assigned_user_id'] === (int)$user['id'] ? 'selected' : '' ?>>
+                  <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
                     <?= e($user_label) ?>
                   </option>
                 <?php endforeach; ?>

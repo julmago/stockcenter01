@@ -11,7 +11,7 @@ $title = '';
 $description = '';
 $category = '';
 $priority = 'medium';
-$assigned_user_id = '';
+$assigned_user_ids = [];
 $due_date = '';
 $related_type = '';
 
@@ -28,7 +28,7 @@ if (is_post()) {
   $description = post('description');
   $category = post('category', $category);
   $priority = post('priority', $priority);
-  $assigned_user_id = post('assigned_user_id');
+  $assigned_user_ids = $_POST['assigned_user_ids'] ?? [];
   $due_date = post('due_date');
   $related_type = post('related_type', $related_type);
   $categories = task_categories($category);
@@ -51,14 +51,19 @@ if (is_post()) {
     $errors[] = 'El tipo relacionado es inválido.';
   }
 
-  $assigned_id = (int)$assigned_user_id;
-  if ($assigned_id <= 0) {
-    $errors[] = 'Seleccioná un usuario asignado.';
-  } else {
-    $check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_active = 1");
-    $check->execute([$assigned_id]);
-    if (!$check->fetch()) {
-      $errors[] = 'El usuario asignado es inválido.';
+  $assigned_ids = array_values(array_unique(array_filter(array_map('intval', (array)$assigned_user_ids))));
+  $assigned_user_ids = $assigned_ids;
+  if ($assigned_ids) {
+    $placeholders = implode(',', array_fill(0, count($assigned_ids), '?'));
+    $check = $pdo->prepare("SELECT id FROM users WHERE id IN ({$placeholders}) AND is_active = 1");
+    $check->execute($assigned_ids);
+    $valid_ids = $check->fetchAll(PDO::FETCH_COLUMN);
+    $valid_ids = array_map('intval', $valid_ids);
+    sort($valid_ids);
+    $requested_ids = $assigned_ids;
+    sort($requested_ids);
+    if ($valid_ids !== $requested_ids) {
+      $errors[] = 'Hay usuarios asignados inválidos.';
     }
   }
 
@@ -71,11 +76,21 @@ if (is_post()) {
       $description !== '' ? $description : null,
       $category,
       $priority,
-      $assigned_id,
+      $assigned_ids ? $assigned_ids[0] : null,
       $current_user_id,
       $due_date_value,
       $related_type,
     ]);
+    $task_id = (int)$pdo->lastInsertId();
+    if ($assigned_ids) {
+      $assign = $pdo->prepare("
+        INSERT IGNORE INTO task_assignees (task_id, user_id, assigned_by_user_id)
+        VALUES (?, ?, ?)
+      ");
+      foreach ($assigned_ids as $user_id) {
+        $assign->execute([$task_id, $user_id, $current_user_id ?: null]);
+      }
+    }
     redirect('tasks_all.php');
   }
 }
@@ -141,11 +156,11 @@ if (is_post()) {
 
           <label class="form-field">
             <span class="form-label">Asignar a</span>
-            <select class="form-control" name="assigned_user_id" required>
-              <option value="">Seleccionar usuario</option>
+            <select class="form-control" name="assigned_user_ids[]" multiple>
+              <option value="" disabled>Seleccionar usuario(s)</option>
               <?php foreach ($users as $user): ?>
                 <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
-                <option value="<?= (int)$user['id'] ?>" <?= (string)$assigned_user_id === (string)$user['id'] ? 'selected' : '' ?>>
+                <option value="<?= (int)$user['id'] ?>" <?= in_array((int)$user['id'], $assigned_user_ids, true) ? 'selected' : '' ?>>
                   <?= e($user_name !== '' ? $user_name : $user['email']) ?>
                 </option>
               <?php endforeach; ?>

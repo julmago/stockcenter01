@@ -106,14 +106,20 @@ function task_users(PDO $pdo): array {
 }
 
 function task_fetch_by_id(PDO $pdo, int $task_id): ?array {
-  $st = $pdo->prepare("SELECT id, assigned_user_id FROM tasks WHERE id = ?");
+  $st = $pdo->prepare("SELECT id FROM tasks WHERE id = ?");
   $st->execute([$task_id]);
   $task = $st->fetch();
   return $task ?: null;
 }
 
-function task_require_ownership(array $task, int $current_user_id): void {
-  if ((int)$task['assigned_user_id'] !== $current_user_id) {
+function task_user_is_assignee(PDO $pdo, int $task_id, int $current_user_id): bool {
+  $st = $pdo->prepare("SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ? LIMIT 1");
+  $st->execute([$task_id, $current_user_id]);
+  return (bool)$st->fetchColumn();
+}
+
+function task_require_ownership(PDO $pdo, int $task_id, int $current_user_id): void {
+  if (!task_user_is_assignee($pdo, $task_id, $current_user_id)) {
     abort(403, 'No tenés permisos para esta acción');
   }
 }
@@ -135,7 +141,7 @@ function task_handle_action(PDO $pdo, int $current_user_id, string $redirect_to)
   if (!$task) {
     abort(404, 'Tarea no encontrada');
   }
-  task_require_ownership($task, $current_user_id);
+  task_require_ownership($pdo, (int)$task['id'], $current_user_id);
 
   if ($action === 'update_status') {
     $status = post('status');
@@ -157,8 +163,12 @@ function task_handle_action(PDO $pdo, int $current_user_id, string $redirect_to)
     if (!$check->fetch()) {
       abort(400, 'Usuario inválido');
     }
-    $st = $pdo->prepare("UPDATE tasks SET assigned_user_id = ?, updated_at = NOW() WHERE id = ?");
-    $st->execute([$new_user_id, $task_id]);
+    $pdo->prepare("DELETE FROM task_assignees WHERE task_id = ?")->execute([$task_id]);
+    $st = $pdo->prepare("
+      INSERT IGNORE INTO task_assignees (task_id, user_id, assigned_by_user_id)
+      VALUES (?, ?, ?)
+    ");
+    $st->execute([$task_id, $new_user_id, $current_user_id ?: null]);
     redirect($redirect_to);
   }
 }
