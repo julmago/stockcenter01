@@ -536,6 +536,18 @@ select:focus {
   justify-content: flex-end;
 }
 
+.tasks-filters {
+  margin-bottom: var(--space-4);
+}
+
+.tasks-filters .filters-actions {
+  margin-top: var(--space-2);
+}
+
+.tasks-table {
+  margin-top: var(--space-2);
+}
+
 .task-table {
   table-layout: fixed;
 }

@@ -127,7 +127,7 @@ $relations = task_settings_fetch($pdo, $sections['relation']['table']);
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Configuración de tareas</title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">

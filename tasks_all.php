@@ -102,7 +102,7 @@ $tasks = $st->fetchAll();
 <html>
 <head>
   <meta charset="utf-8">
-  <title><?= e($page_title) ?></title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
@@ -158,50 +158,53 @@ $tasks = $st->fetchAll();
         </div>
       </div>
 
-      <form method="get" action="tasks_all.php" class="stack">
-        <input type="hidden" name="view" value="<?= e($view) ?>">
-        <div class="filters-grid">
-          <label class="form-field">
-            <span class="form-label">Categoría</span>
-            <select class="form-control" name="category">
-              <option value="">Todas</option>
-              <?php foreach ($category_options as $key => $label): ?>
-                <option value="<?= e($key) ?>" <?= $category === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <label class="form-field">
-            <span class="form-label">Estado</span>
-            <select class="form-control" name="status">
-              <option value="">Todos</option>
-              <?php foreach ($statuses as $key => $label): ?>
-                <option value="<?= e($key) ?>" <?= $status === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <?php if ($is_all_view): ?>
+      <div class="tasks-filters">
+        <form method="get" action="tasks_all.php" class="stack">
+          <input type="hidden" name="view" value="<?= e($view) ?>">
+          <div class="filters-grid">
             <label class="form-field">
-              <span class="form-label">Asignado a</span>
-              <select class="form-control" name="assignee">
-                <option value="">Todos</option>
-                <?php foreach ($users as $user): ?>
-                  <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
-                  <option value="<?= (int)$user['id'] ?>" <?= $assignee === (int)$user['id'] ? 'selected' : '' ?>>
-                    <?= e($user_name !== '' ? $user_name : $user['email']) ?>
-                  </option>
+              <span class="form-label">Categoría</span>
+              <select class="form-control" name="category">
+                <option value="">Todas</option>
+                <?php foreach ($category_options as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $category === $key ? 'selected' : '' ?>><?= e($label) ?></option>
                 <?php endforeach; ?>
               </select>
             </label>
-          <?php endif; ?>
-          <div class="filters-actions">
-            <button class="btn" type="submit">Filtrar</button>
-            <a class="btn btn-ghost" href="<?= e('tasks_all.php?' . http_build_query(['view' => $view])) ?>">Limpiar</a>
+            <label class="form-field">
+              <span class="form-label">Estado</span>
+              <select class="form-control" name="status">
+                <option value="">Todos</option>
+                <?php foreach ($statuses as $key => $label): ?>
+                  <option value="<?= e($key) ?>" <?= $status === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <?php if ($is_all_view): ?>
+              <label class="form-field">
+                <span class="form-label">Asignado a</span>
+                <select class="form-control" name="assignee">
+                  <option value="">Todos</option>
+                  <?php foreach ($users as $user): ?>
+                    <?php $user_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?>
+                    <option value="<?= (int)$user['id'] ?>" <?= $assignee === (int)$user['id'] ? 'selected' : '' ?>>
+                      <?= e($user_name !== '' ? $user_name : $user['email']) ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+            <?php endif; ?>
+            <div class="filters-actions">
+              <button class="btn" type="submit">Filtrar</button>
+              <a class="btn btn-ghost" href="<?= e('tasks_all.php?' . http_build_query(['view' => $view])) ?>">Limpiar</a>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
 
-      <div class="table-wrap">
-        <table class="table task-table">
+      <div class="tasks-table">
+        <div class="table-wrap">
+          <table class="table task-table">
           <thead>
             <tr>
               <th class="col-task">Tarea</th>
@@ -264,7 +267,8 @@ $tasks = $st->fetchAll();
               </tr>
             <?php endforeach; ?>
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <div class="task-cards">

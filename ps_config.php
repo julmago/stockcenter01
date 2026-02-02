@@ -57,7 +57,7 @@ $prestashop_mode = setting_get('prestashop_mode','replace');
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Config PrestaShop</title>
+  <title>TS WORK</title>
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">

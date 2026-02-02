@@ -15,7 +15,7 @@ if ($display_name === '') {
   <div class="container topbar-content">
     <div class="topbar-left">
       <a class="brand" href="dashboard.php">
-        <span class="brand-title">Entrada de Stock</span>
+        <span class="brand-title">TS WORK</span>
       </a>
       <nav class="nav nav-primary">
         <a class="nav-link" href="dashboard.php">Listas</a>
