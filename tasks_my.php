@@ -23,11 +23,24 @@ $status_badges = [
 
 $category = get('category');
 $status = get('status');
+$view = get('view', 'my');
 $message = get('message');
 $success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
 
+$allowed_views = ['my', 'my_pending', 'my_progress', 'my_all'];
+if (!in_array($view, $allowed_views, true)) {
+  $view = 'my';
+}
+
 $where = ['ta.user_id = ?'];
 $params = [$current_user_id];
+if ($view === 'my') {
+  $where[] = "t.status <> 'completed'";
+} elseif ($view === 'my_pending') {
+  $where[] = "t.status = 'pending'";
+} elseif ($view === 'my_progress') {
+  $where[] = "t.status = 'in_progress'";
+}
 if ($category !== '' && array_key_exists($category, $category_options)) {
   $where[] = 't.category = ?';
   $params[] = $category;
@@ -88,7 +101,27 @@ $tasks = $st->fetchAll();
         </div>
       </div>
 
+      <div class="inline-actions" style="padding: 0 var(--space-4) var(--space-3); flex-wrap: wrap;">
+        <?php
+        $base_params = array_filter([
+          'category' => $category !== '' ? $category : null,
+          'status' => $status !== '' ? $status : null,
+        ], static fn($value) => $value !== null);
+        $views = [
+          'my' => 'Mis tareas',
+          'my_pending' => 'Mis tareas pendientes',
+          'my_progress' => 'Mis tareas en progreso',
+          'my_all' => 'Todas mis tareas',
+        ];
+        ?>
+        <?php foreach ($views as $key => $label): ?>
+          <?php $link = 'tasks_my.php?' . http_build_query(array_merge($base_params, ['view' => $key])); ?>
+          <a class="btn <?= $view === $key ? '' : 'btn-ghost' ?>" href="<?= e($link) ?>"><?= e($label) ?></a>
+        <?php endforeach; ?>
+      </div>
+
       <form method="get" action="tasks_my.php" class="stack">
+        <input type="hidden" name="view" value="<?= e($view) ?>">
         <div class="filters-grid">
           <label class="form-field">
             <span class="form-label">Categoría</span>

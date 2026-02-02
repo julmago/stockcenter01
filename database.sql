@@ -134,6 +134,11 @@ CREATE TABLE IF NOT EXISTS task_assignees (
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+INSERT IGNORE INTO task_assignees (task_id, user_id)
+SELECT id, assigned_user_id
+FROM tasks
+WHERE assigned_user_id IS NOT NULL AND assigned_user_id <> 0;
+
 CREATE TABLE IF NOT EXISTS task_categories (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(120) NOT NULL,

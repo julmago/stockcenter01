@@ -118,8 +118,15 @@ function task_user_is_assignee(PDO $pdo, int $task_id, int $current_user_id): bo
   return (bool)$st->fetchColumn();
 }
 
+function task_user_can_edit(PDO $pdo, int $task_id, int $current_user_id): bool {
+  if (current_role() === 'superadmin') {
+    return true;
+  }
+  return task_user_is_assignee($pdo, $task_id, $current_user_id);
+}
+
 function task_require_ownership(PDO $pdo, int $task_id, int $current_user_id): void {
-  if (!task_user_is_assignee($pdo, $task_id, $current_user_id)) {
+  if (!task_user_can_edit($pdo, $task_id, $current_user_id)) {
     abort(403, 'No tenés permisos para esta acción');
   }
 }
