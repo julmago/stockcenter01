@@ -2,6 +2,27 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 
+if (isset($_GET['logout']) && $_GET['logout'] === '1') {
+  $_SESSION = [];
+  if (ini_get('session.use_cookies')) {
+    $params = session_get_cookie_params();
+    setcookie(
+      session_name(),
+      '',
+      [
+        'expires' => time() - 42000,
+        'path' => $params['path'],
+        'domain' => $params['domain'],
+        'secure' => $params['secure'],
+        'httponly' => $params['httponly'],
+        'samesite' => $params['samesite'] ?? 'Lax',
+      ]
+    );
+  }
+  session_destroy();
+  header('Location: login.php');
+  exit;
+}
 require_gateway();
 if (!empty($_SESSION['logged_in']) && !empty($_SESSION['user'])) {
   redirect('dashboard.php');
@@ -96,6 +117,7 @@ $themes = theme_catalog();
           <h1 class="page-title">¿Quién entra ahora?</h1>
           <p class="muted">Elegí un perfil e ingresá el PIN de 4 dígitos.</p>
         </div>
+        <a class="btn btn-ghost" href="select_profile.php?logout=1">Salir</a>
       </div>
 
       <?php if ($error): ?>
@@ -122,9 +144,6 @@ $themes = theme_catalog();
               </div>
               <p class="muted small"><?= e($profile['last_name'] ?? '') ?></p>
               <p class="muted small">Tema: <?= e($themeName) ?></p>
-              <button class="btn btn-ghost btn-small profile-select" type="button" data-profile-select="<?= $profileId ?>">
-                Usar este perfil
-              </button>
               <form method="post" class="stack profile-pin">
                 <input type="hidden" name="user_id" value="<?= $profileId ?>">
                 <div class="form-group">
@@ -133,6 +152,7 @@ $themes = theme_catalog();
                     class="form-control"
                     type="password"
                     name="pin"
+                    data-profile-input
                     inputmode="numeric"
                     autocomplete="one-time-code"
                     pattern="\d{4}"
@@ -152,7 +172,7 @@ $themes = theme_catalog();
   </main>
   <script>
     const cards = document.querySelectorAll('[data-profile-card]');
-    const buttons = document.querySelectorAll('[data-profile-select]');
+    const inputs = document.querySelectorAll('[data-profile-input]');
     const activateCard = (card) => {
       cards.forEach((item) => item.classList.remove('is-active'));
       if (card) {
@@ -163,9 +183,9 @@ $themes = theme_catalog();
         }
       }
     };
-    buttons.forEach((button) => {
-      button.addEventListener('click', () => {
-        activateCard(button.closest('[data-profile-card]'));
+    inputs.forEach((input) => {
+      input.addEventListener('focus', () => {
+        activateCard(input.closest('[data-profile-card]'));
       });
     });
     const active = document.querySelector('[data-profile-card].is-active');
