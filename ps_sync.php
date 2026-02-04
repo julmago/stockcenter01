@@ -62,14 +62,24 @@ foreach ($items as $it) {
       }
     }
 
+    $cur = ps_get_stock_available($id_sa);
+    $current_qty = (int)$cur['qty'];
     if ($mode === 'add') {
-      $cur = ps_get_stock_available($id_sa);
-      $new_qty = (int)$cur['qty'] + $pending_qty;
+      $new_qty = $current_qty + $pending_qty;
     } else {
       $new_qty = $synced_qty + $pending_qty;
+      if ($new_qty < 0) {
+        $new_qty = 0;
+      }
     }
 
-    if ($new_qty < 0) $new_qty = 0;
+    error_log(sprintf(
+      '[PrestaShop] Sync stock | SKU: %s | current_qty: %d | listado_qty: %d | target_qty: %d',
+      $sku,
+      $current_qty,
+      $pending_qty,
+      $new_qty
+    ));
 
     ps_update_stock_available_quantity($id_sa, $new_qty);
 
