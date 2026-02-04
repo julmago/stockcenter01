@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 $config = require __DIR__ . '/config.php';
+$auth = require __DIR__ . '/config/auth.php';
 
 error_reporting(E_ALL);
 ini_set('log_errors', '1');
@@ -70,13 +71,18 @@ register_shutdown_function(function (): void {
   }
 });
 
-$sessionLifetime = 31536000;
+$sessionDays = (int)($auth['session_lifetime_days'] ?? 30);
+if ($sessionDays <= 0) {
+  $sessionDays = 30;
+}
+$sessionLifetime = $sessionDays * 86400;
 ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
 ini_set('session.cookie_lifetime', (string)$sessionLifetime);
 ini_set('session.use_strict_mode', '1');
+$cookiePath = BASE_PATH !== '' ? BASE_PATH : '/';
 session_set_cookie_params([
   'lifetime' => $sessionLifetime,
-  'path' => '/',
+  'path' => $cookiePath,
   'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
   'httponly' => true,
   'samesite' => 'Lax',
@@ -108,9 +114,23 @@ function redirect(string $to): void {
   exit;
 }
 
-function require_login(): void {
-  if (empty($_SESSION['user'])) {
+function auth_config(): array {
+  global $auth;
+  return $auth ?? [];
+}
+
+function require_gateway(): void {
+  if (empty($_SESSION['gateway_ok'])) {
     redirect('login.php');
+  }
+}
+
+function require_login(): void {
+  if (empty($_SESSION['gateway_ok'])) {
+    redirect('login.php');
+  }
+  if (empty($_SESSION['logged_in']) || empty($_SESSION['user'])) {
+    redirect('select_profile.php');
   }
 }
 
@@ -130,7 +150,10 @@ function require_permission(bool $allowed, string $message = 'Sin permisos'): vo
 }
 
 function current_user(): array {
-  return $_SESSION['user'] ?? [];
+  if (empty($_SESSION['logged_in']) || empty($_SESSION['user'])) {
+    return [];
+  }
+  return $_SESSION['user'];
 }
 
 function current_role(): string {

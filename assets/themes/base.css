@@ -780,6 +780,19 @@ select:focus {
   margin: 10vh auto 0;
 }
 
+.profile-card .profile-pin {
+  display: none;
+  margin-top: var(--space-3);
+}
+
+.profile-card.is-active .profile-pin {
+  display: grid;
+}
+
+.profile-card .profile-select {
+  margin-top: var(--space-2);
+}
+
 .small {
   font-size: 0.85rem;
 }

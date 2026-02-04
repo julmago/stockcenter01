@@ -1,6 +1,6 @@
 -- Entrada de Stock Simple (MySQL 5.7+/8.0+)
 -- NOTA: En este MVP las contraseñas se guardan en texto plano (NO recomendado).
--- Cambiar a password_hash/password_verify cuando quieras.
+-- El login actual usa PIN con hash (pin_hash) y un gateway global.
 
 CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_name  VARCHAR(80) NOT NULL,
   email      VARCHAR(190) NOT NULL,
   password_plain VARCHAR(190) NOT NULL,
+  pin_hash VARCHAR(255) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   theme VARCHAR(32) NOT NULL DEFAULT 'theme_default',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

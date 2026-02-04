@@ -1,44 +1,40 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
-require_once __DIR__ . '/db.php';
-
-if (!empty($_SESSION['user'])) {
+if (!empty($_SESSION['logged_in']) && !empty($_SESSION['user'])) {
   redirect('dashboard.php');
+}
+if (!empty($_SESSION['gateway_ok'])) {
+  redirect('select_profile.php');
 }
 
 $error = '';
 if (is_post()) {
-  $email = post('email');
+  $email = trim(post('email'));
   $pass  = post('password');
   if ($email === '' || $pass === '') {
     $error = 'Completá email y contraseña.';
   } else {
     try {
-      error_log(sprintf('[%s] Login attempt for %s', date('c'), $email));
-      $st = db()->prepare(
-        "SELECT id, role, first_name, last_name, email, password_plain, is_active, theme
-         FROM users
-         WHERE email = ? AND is_active = 1
-         LIMIT 1"
-      );
-      $st->execute([$email]);
-      $u = $st->fetch();
-      if ($u === false) {
-        error_log(sprintf('[%s] Login user not found or inactive for %s', date('c'), $email));
-        $error = 'Usuario no encontrado o inactivo.';
-      } elseif ($u['password_plain'] !== $pass) {
-        error_log(sprintf('[%s] Login password mismatch for %s', date('c'), $email));
-        $error = 'Contraseña incorrecta.';
+      $auth = auth_config();
+      $gatewayEmail = (string)($auth['gateway_email'] ?? '');
+      $gatewayHash = (string)($auth['gateway_password_hash'] ?? '');
+      error_log(sprintf('[%s] Gateway login attempt for %s', date('c'), $email));
+      if ($email !== $gatewayEmail) {
+        error_log(sprintf('[%s] Gateway login email mismatch for %s', date('c'), $email));
+        $error = 'Credenciales inválidas.';
+      } elseif (!password_verify($pass, $gatewayHash)) {
+        error_log(sprintf('[%s] Gateway login password mismatch for %s', date('c'), $email));
+        $error = 'Credenciales inválidas.';
       } else {
-        error_log(sprintf('[%s] Login success for %s', date('c'), $email));
+        error_log(sprintf('[%s] Gateway login success for %s', date('c'), $email));
         session_regenerate_id(true);
-        unset($u['password_plain']);
-        $_SESSION['user'] = $u;
-        redirect('dashboard.php');
+        $_SESSION['gateway_ok'] = true;
+        unset($_SESSION['user'], $_SESSION['logged_in']);
+        redirect('select_profile.php');
       }
     } catch (Throwable $e) {
       error_log(sprintf(
-        '[%s] Login error for %s: %s in %s:%d',
+        '[%s] Gateway login error for %s: %s in %s:%d',
         date('c'),
         $email,
         $e->getMessage(),
@@ -71,8 +67,8 @@ if (is_post()) {
     <div class="container">
       <div class="card login-card">
         <div class="card-header">
-          <h2 class="card-title">Ingreso</h2>
-          <span class="muted small">Entrada de Stock</span>
+          <h2 class="card-title">Gateway</h2>
+          <span class="muted small">Validación inicial</span>
         </div>
         <?php if ($error): ?>
           <div class="alert alert-danger"><?= e($error) ?></div>
@@ -84,14 +80,14 @@ if (is_post()) {
           </div>
           <div class="form-group">
             <label class="form-label">Contraseña</label>
-            <input class="form-control" type="text" name="password" required>
+            <input class="form-control" type="password" name="password" required>
           </div>
           <div class="form-actions">
             <button class="btn" type="submit">Ingresar</button>
           </div>
         </form>
         <p class="muted small">
-          Los usuarios se crean por base de datos (tabla <span class="code">users</span>).
+          El gateway habilita la selección de perfiles internos.
         </p>
       </div>
     </div>
