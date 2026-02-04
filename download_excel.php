@@ -58,7 +58,10 @@ if (!function_exists('require_login')) {
     if (session_status() !== PHP_SESSION_ACTIVE) {
       session_start();
     }
-    if (empty($_SESSION['user'])) {
+    if (empty($_SESSION['gateway_ok'])) {
+      abort(403, 'No tenés permisos para descargar este archivo.');
+    }
+    if (empty($_SESSION['logged_in']) || empty($_SESSION['user'])) {
       abort(403, 'No tenés permisos para descargar este archivo.');
     }
   }
