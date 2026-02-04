@@ -9,10 +9,10 @@ if (!function_exists('env')) {
   }
 }
 return [
-  'gateway_email' => env('GATEWAY_EMAIL', 'gateway@tswork.local'),
+  'gateway_email' => env('GATEWAY_EMAIL', 'tswork@tsmayorista.com.ar'),
   'gateway_password_hash' => env(
     'GATEWAY_PASSWORD_HASH',
-    '$2y$12$C33HqhxyaqvKi/tTjduh0u2JNEOB/yumj8zQkwk4bKI4jLRit91Vm'
+    '$2y$12$.R6KXw1K7AlBlj/4SXLc8.ghhSO5k70FZVbe/WmY3YuEFn0xVjTPm'
   ),
   'session_lifetime_days' => (int)env('SESSION_LIFETIME_DAYS', '30'),
 ];
