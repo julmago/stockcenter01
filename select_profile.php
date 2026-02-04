@@ -1,28 +1,6 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
-
-if (isset($_GET['logout']) && $_GET['logout'] === '1') {
-  $_SESSION = [];
-  if (ini_get('session.use_cookies')) {
-    $params = session_get_cookie_params();
-    setcookie(
-      session_name(),
-      '',
-      [
-        'expires' => time() - 42000,
-        'path' => $params['path'],
-        'domain' => $params['domain'],
-        'secure' => $params['secure'],
-        'httponly' => $params['httponly'],
-        'samesite' => $params['samesite'] ?? 'Lax',
-      ]
-    );
-  }
-  session_destroy();
-  header('Location: login.php');
-  exit;
-}
 require_gateway();
 if (!empty($_SESSION['logged_in']) && !empty($_SESSION['user'])) {
   redirect('dashboard.php');
@@ -89,10 +67,11 @@ if (is_post()) {
 $profiles = [];
 try {
   $st = db()->query(
-    "SELECT id, first_name, last_name, role, theme
-     FROM users
-     WHERE is_active = 1
-     ORDER BY first_name ASC, last_name ASC"
+    "SELECT u.id, u.first_name, u.last_name, u.role, u.theme, r.role_name
+     FROM users u
+     LEFT JOIN roles r ON r.role_key = u.role
+     WHERE u.is_active = 1
+     ORDER BY u.first_name ASC, u.last_name ASC"
   );
   $profiles = $st->fetchAll();
 } catch (Throwable $e) {
@@ -117,7 +96,7 @@ $themes = theme_catalog();
           <h1 class="page-title">¿Quién entra ahora?</h1>
           <p class="muted">Elegí un perfil e ingresá el PIN de 4 dígitos.</p>
         </div>
-        <a class="btn btn-ghost" href="select_profile.php?logout=1">Salir</a>
+        <a class="btn btn-ghost" href="logout.php?mode=full">Salir del sistema</a>
       </div>
 
       <?php if ($error): ?>
@@ -140,7 +119,7 @@ $themes = theme_catalog();
             <div class="card profile-card<?= $isActive ? ' is-active' : '' ?>" data-profile-card>
               <div class="card-header">
                 <h2 class="card-title"><?= e($profile['first_name'] ?? '') ?></h2>
-                <span class="muted small"><?= e($profile['role'] ?? '') ?></span>
+                <span class="muted small"><?= e($profile['role_name'] ?: ($profile['role'] ?? '')) ?></span>
               </div>
               <p class="muted small"><?= e($profile['last_name'] ?? '') ?></p>
               <p class="muted small">Tema: <?= e($themeName) ?></p>

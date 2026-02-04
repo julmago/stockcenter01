@@ -36,7 +36,8 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
       <span class="muted small">
         <?= e($u['first_name'] . ' ' . $u['last_name']) ?> · <?= e($u['email']) ?>
       </span>
-      <a class="btn btn-ghost" href="logout.php">Salir</a>
+      <a class="btn btn-ghost" href="logout.php?mode=profile">Cambiar perfil</a>
+      <a class="btn btn-ghost" href="logout.php?mode=full">Salir del sistema</a>
     </div>
   </div>
 </header>

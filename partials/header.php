@@ -44,7 +44,8 @@ if ($display_name === '') {
           <?= e($display_name) ?> <span aria-hidden="true">▾</span>
         </button>
         <div class="user-menu-dropdown" role="menu">
-          <a class="user-menu-item" href="logout.php" role="menuitem">Salir</a>
+          <a class="user-menu-item" href="logout.php?mode=profile" role="menuitem">Cambiar perfil</a>
+          <a class="user-menu-item" href="logout.php?mode=full" role="menuitem">Salir del sistema</a>
         </div>
       </div>
     </div>
