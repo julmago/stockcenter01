@@ -15,12 +15,12 @@ if (is_post()) {
   $pin = trim(post('pin'));
   if ($activeUserId <= 0) {
     $error = 'Seleccioná un perfil válido.';
-  } elseif (!preg_match('/^\d{4}$/', $pin)) {
+  } elseif (!ctype_digit($pin) || strlen($pin) !== 4) {
     $error = 'El PIN debe tener 4 dígitos numéricos.';
   } else {
     try {
       $st = db()->prepare(
-        "SELECT id, role, first_name, last_name, email, theme, pin_hash, is_active
+        "SELECT id, role, first_name, last_name, email, theme, pin, is_active
          FROM users
          WHERE id = ? AND is_active = 1
          LIMIT 1"
@@ -29,13 +29,13 @@ if (is_post()) {
       $u = $st->fetch();
       if (!$u) {
         $error = 'Perfil no encontrado o inactivo.';
-      } elseif (empty($u['pin_hash'])) {
+      } elseif (empty($u['pin'])) {
         $error = 'PIN no configurado.';
-      } elseif (!password_verify($pin, $u['pin_hash'])) {
+      } elseif ($pin !== $u['pin']) {
         $error = 'PIN incorrecto.';
       } else {
         session_regenerate_id(true);
-        unset($u['pin_hash']);
+        unset($u['pin']);
         $_SESSION['user'] = $u;
         $_SESSION['logged_in'] = true;
         $_SESSION['gateway_ok'] = true;
