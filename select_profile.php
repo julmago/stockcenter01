@@ -2,12 +2,16 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_gateway();
-if (!empty($_SESSION['logged_in']) && !empty($_SESSION['user'])) {
+if (!empty($_SESSION['profile_user_id'])) {
   redirect('dashboard.php');
 }
 
 $error = '';
+$notice = '';
 $activeUserId = null;
+if (get('expired') === '1') {
+  $notice = 'Sesión de perfil expirada por inactividad.';
+}
 
 if (is_post()) {
   $activeUserId = (int)post('user_id', '0');
@@ -38,6 +42,9 @@ if (is_post()) {
         $_SESSION['user'] = $u;
         $_SESSION['logged_in'] = true;
         $_SESSION['gateway_ok'] = true;
+        $_SESSION['profile_user_id'] = (int)$u['id'];
+        $_SESSION['profile_last_activity'] = time();
+        refresh_gateway_session_cookie();
         redirect('dashboard.php');
       }
     } catch (Throwable $e) {
@@ -96,11 +103,14 @@ $themes = theme_catalog();
           <h1 class="page-title">¿Quién entra ahora?</h1>
           <p class="muted">Elegí un perfil e ingresá el PIN de 4 dígitos.</p>
         </div>
-        <a class="btn btn-ghost" href="logout.php?mode=full">Salir del sistema</a>
+        <a class="btn btn-ghost" href="logout_all.php">Salir del sistema</a>
       </div>
 
       <?php if ($error): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
+      <?php endif; ?>
+      <?php if ($notice): ?>
+        <div class="alert alert-warning"><?= e($notice) ?></div>
       <?php endif; ?>
 
       <?php if (empty($profiles)): ?>
