@@ -122,7 +122,23 @@ img {
   position: relative;
 }
 
+.config-menu {
+  position: relative;
+}
+
 .user-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.config-menu-button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -136,6 +152,11 @@ img {
 
 .user-menu-button:hover,
 .user-menu-button:focus-visible {
+  background: var(--card);
+}
+
+.config-menu-button:hover,
+.config-menu-button:focus-visible {
   background: var(--card);
 }
 
@@ -153,7 +174,28 @@ img {
   z-index: 60;
 }
 
+.config-menu-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  min-width: 200px;
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+
 .user-menu-item {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius);
+  color: inherit;
+}
+
+.config-menu-item {
   display: block;
   padding: 0.35rem 0.6rem;
   border-radius: var(--radius);
@@ -166,8 +208,18 @@ img {
   text-decoration: none;
 }
 
+.config-menu-item:hover,
+.config-menu-item:focus-visible {
+  background: var(--bg-2);
+  text-decoration: none;
+}
+
 .user-menu:hover .user-menu-dropdown,
 .user-menu--open .user-menu-dropdown {
+  display: block;
+}
+
+.config-menu--open .config-menu-dropdown {
   display: block;
 }
 
