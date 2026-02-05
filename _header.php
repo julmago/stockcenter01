@@ -3,6 +3,10 @@ require_once __DIR__ . '/bootstrap.php';
 require_login();
 $u = current_user();
 $is_superadmin = ($u['role'] ?? '') === 'superadmin';
+$can_manage_tasks_settings = hasPerm('tasks_settings');
+$can_manage_prestashop = hasPerm('menu_config_prestashop');
+$can_view_design = hasPerm('menu_design');
+$show_config_menu = $can_manage_tasks_settings || $can_manage_prestashop || $can_view_design || $is_superadmin;
 ?>
 <header class="topbar">
   <div class="container topbar-content">
@@ -22,14 +26,26 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
       <?php if (can_import_csv()): ?>
         <a class="nav-link" href="product_import.php">Importar CSV</a>
       <?php endif; ?>
-      <?php if (hasPerm('menu_config_prestashop')): ?>
-        <a class="nav-link" href="ps_config.php">Config PrestaShop</a>
-      <?php endif; ?>
-      <?php if (hasPerm('menu_design')): ?>
-        <a class="nav-link" href="design.php">Diseño</a>
-      <?php endif; ?>
-      <?php if ($is_superadmin): ?>
-        <a class="nav-link" href="roles.php">Roles</a>
+      <?php if ($show_config_menu): ?>
+        <div class="config-menu" data-config-menu>
+          <button class="config-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
+            Config <span aria-hidden="true">▾</span>
+          </button>
+          <div class="config-menu-dropdown" role="menu">
+            <?php if ($can_manage_tasks_settings): ?>
+              <a class="config-menu-item" href="task_settings.php" role="menuitem">Tareas · Configuración</a>
+            <?php endif; ?>
+            <?php if ($can_manage_prestashop): ?>
+              <a class="config-menu-item" href="ps_config.php" role="menuitem">Config PrestaShop</a>
+            <?php endif; ?>
+            <?php if ($can_view_design): ?>
+              <a class="config-menu-item" href="design.php" role="menuitem">Diseño</a>
+            <?php endif; ?>
+            <?php if ($is_superadmin): ?>
+              <a class="config-menu-item" href="roles.php" role="menuitem">Roles</a>
+            <?php endif; ?>
+          </div>
+        </div>
       <?php endif; ?>
     </nav>
     <div class="topbar-user">
@@ -41,3 +57,30 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
     </div>
   </div>
 </header>
+<script>
+  (() => {
+    const menu = document.querySelector('[data-config-menu]');
+    if (!menu) return;
+    const button = menu.querySelector('.config-menu-button');
+    const close = () => {
+      menu.classList.remove('config-menu--open');
+      button?.setAttribute('aria-expanded', 'false');
+    };
+    const toggle = () => {
+      const isOpen = menu.classList.toggle('config-menu--open');
+      button?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    };
+    button?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggle();
+    });
+    menu.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', close);
+    });
+    document.addEventListener('click', (event) => {
+      if (!menu.contains(event.target)) {
+        close();
+      }
+    });
+  })();
+</script>
