@@ -1,14 +1,6 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 
-$mode = (string)($_GET['mode'] ?? 'full');
-
-if ($mode === 'profile') {
-  clear_profile_session();
-  header('Location: select_profile.php');
-  exit;
-}
-
 $params = session_get_cookie_params();
 $_SESSION = [];
 if (ini_get('session.use_cookies')) {
@@ -26,5 +18,4 @@ if (ini_get('session.use_cookies')) {
   );
 }
 session_destroy();
-header('Location: login.php');
-exit;
+redirect('login.php');

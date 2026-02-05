@@ -71,7 +71,11 @@ register_shutdown_function(function (): void {
   }
 });
 
+$gatewayCookieDays = (int)($auth['gateway_cookie_lifetime_days'] ?? 0);
 $sessionDays = (int)($auth['session_lifetime_days'] ?? 30);
+if ($gatewayCookieDays > 0) {
+  $sessionDays = $gatewayCookieDays;
+}
 if ($sessionDays <= 0) {
   $sessionDays = 30;
 }
@@ -119,20 +123,7 @@ function auth_config(): array {
   return $auth ?? [];
 }
 
-function require_gateway(): void {
-  if (empty($_SESSION['gateway_ok'])) {
-    redirect('login.php');
-  }
-}
-
-function require_login(): void {
-  if (empty($_SESSION['gateway_ok'])) {
-    redirect('login.php');
-  }
-  if (empty($_SESSION['logged_in']) || empty($_SESSION['user'])) {
-    redirect('select_profile.php');
-  }
-}
+require_once __DIR__ . '/auth.php';
 
 function require_role(array $roles, string $message = 'Sin permisos'): void {
   require_login();

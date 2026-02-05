@@ -14,5 +14,6 @@ return [
     'GATEWAY_PASSWORD_HASH',
     '$2y$12$.R6KXw1K7AlBlj/4SXLc8.ghhSO5k70FZVbe/WmY3YuEFn0xVjTPm'
   ),
-  'session_lifetime_days' => (int)env('SESSION_LIFETIME_DAYS', '30'),
+  'session_lifetime_days' => (int)env('SESSION_LIFETIME_DAYS', '365'),
+  'gateway_cookie_lifetime_days' => (int)env('GATEWAY_COOKIE_LIFETIME_DAYS', '365'),
 ];
