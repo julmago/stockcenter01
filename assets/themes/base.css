@@ -429,6 +429,24 @@ img {
   font-weight: 600;
 }
 
+.form-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.form-label-row .form-label {
+  margin: 0;
+}
+
+.form-help {
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .form-control,
 select {
   width: 100%;
@@ -476,6 +494,17 @@ select:focus {
   margin-top: 6px;
   line-height: 1.2;
   color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .form-label-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .form-help {
+    white-space: normal;
+  }
 }
 
 .form-actions {

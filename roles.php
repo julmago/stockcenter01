@@ -205,9 +205,11 @@ foreach ($role_keys as $role_key) {
         <input type="hidden" name="action" value="create_role">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">ID (role_key)</label>
-            <input class="form-control" type="text" name="role_key" value="<?= e($create_role_key) ?>" required maxlength="32" pattern="[a-z0-9_]{3,32}">
-            <small class="muted">3-32 caracteres, solo a-z, 0-9 y _</small>
+            <div class="form-label-row">
+              <label class="form-label" for="role_key">ID (role_key)</label>
+              <span class="form-help muted">3-32 caracteres, solo a-z, 0-9 y _</span>
+            </div>
+            <input class="form-control" id="role_key" type="text" name="role_key" value="<?= e($create_role_key) ?>" required maxlength="32" pattern="[a-z0-9_]{3,32}">
           </div>
           <div class="form-group">
             <label class="form-label">Nombre visible</label>
