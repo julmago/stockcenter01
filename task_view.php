@@ -55,8 +55,29 @@ $creator_name = trim(($task['created_first_name'] ?? '') . ' ' . ($task['created
 
 $error = '';
 $can_edit = task_user_can_edit($pdo, $task_id, $current_user_id);
+$can_delete_task = can_delete_task();
 $saved = get('saved') === '1';
 $status_updated = get('status_updated') === '1';
+if (is_post() && post('action') === 'delete') {
+  if (!$can_delete_task) {
+    abort(403, 'No autorizado.');
+  }
+  if (!csrf_is_valid(post('csrf_token'))) {
+    abort(403, 'Token inválido.');
+  }
+  try {
+    $pdo->beginTransaction();
+    $pdo->prepare("DELETE FROM task_assignees WHERE task_id = ?")->execute([$task_id]);
+    $pdo->prepare("DELETE FROM tasks WHERE id = ?")->execute([$task_id]);
+    $pdo->commit();
+  } catch (Throwable $t) {
+    if ($pdo->inTransaction()) {
+      $pdo->rollBack();
+    }
+    abort(500, 'No se pudo eliminar la tarea.');
+  }
+  redirect('tasks_all.php?message=deleted');
+}
 if (is_post() && post('action') === 'update') {
   if (!$can_edit) {
     abort(403, 'No tenés permisos para editar esta tarea.');
@@ -182,7 +203,7 @@ if (is_post() && post('action') === 'update') {
     </div>
   <?php endif; ?>
 
-  <form method="post" class="stack">
+  <form method="post" class="stack" id="task-update-form">
     <input type="hidden" name="action" value="update">
     <div class="card">
       <div class="card-header">
@@ -300,13 +321,27 @@ if (is_post() && post('action') === 'update') {
       </div>
     </div>
 
-    <?php if ($can_edit): ?>
-      <div class="form-actions">
-        <button class="btn" type="submit">Guardar cambios</button>
-        <a class="btn btn-ghost" href="<?= e($return_to) ?>">Cancelar</a>
-      </div>
-    <?php endif; ?>
   </form>
+
+  <?php if ($can_edit || $can_delete_task): ?>
+    <div class="form-actions" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <?php if ($can_edit): ?>
+          <button class="btn" type="submit" form="task-update-form">Guardar cambios</button>
+          <a class="btn btn-ghost" href="<?= e($return_to) ?>">Cancelar</a>
+        <?php endif; ?>
+      </div>
+      <?php if ($can_delete_task): ?>
+        <div style="flex:1 1 180px; display:flex; justify-content:flex-end;">
+          <form method="post" onsubmit="return confirm('¿Eliminar esta tarea? Esta acción no se puede deshacer.');">
+            <input type="hidden" name="action" value="delete">
+            <?= csrf_field() ?>
+            <button class="btn btn-outline-danger" type="submit">Eliminar tarea</button>
+          </form>
+        </div>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
 </main>
 
 </body>

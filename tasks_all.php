@@ -26,7 +26,12 @@ $status = get('status');
 $assignee = (int)get('assignee');
 $view = get('view', 'mine_active');
 $message = get('message');
-$success_message = $message === 'updated' ? 'Tarea actualizada.' : '';
+$success_message = '';
+if ($message === 'updated') {
+  $success_message = 'Tarea actualizada.';
+} elseif ($message === 'deleted') {
+  $success_message = 'Tarea eliminada.';
+}
 
 $allowed_views = ['all', 'mine_active', 'mine_pending', 'mine_progress', 'mine_all'];
 if (!in_array($view, $allowed_views, true)) {

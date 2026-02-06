@@ -204,6 +204,12 @@ function permission_default_definitions(): array {
       'vendedor' => false,
       'lectura' => false,
     ],
+    'tasks_delete' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
     'list_can_sync' => [
       'superadmin' => true,
       'admin' => true,
@@ -376,6 +382,10 @@ function can_reopen_list(): bool {
   return hasPerm('list_can_open');
 }
 
+function can_delete_task(): bool {
+  return hasPerm('tasks_delete');
+}
+
 function can_edit_product(): bool {
   return hasPerm('product_can_edit');
 }
@@ -394,6 +404,22 @@ function post(string $key, string $default=''): string {
 
 function get(string $key, string $default=''): string {
   return isset($_GET[$key]) ? trim((string)$_GET[$key]) : $default;
+}
+
+function csrf_token(): string {
+  if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+  }
+  return (string)$_SESSION['csrf_token'];
+}
+
+function csrf_field(): string {
+  return '<input type="hidden" name="csrf_token" value="' . e(csrf_token()) . '">';
+}
+
+function csrf_is_valid(string $token): bool {
+  $session_token = (string)($_SESSION['csrf_token'] ?? '');
+  return $session_token !== '' && hash_equals($session_token, $token);
 }
 
 function theme_catalog(): array {
