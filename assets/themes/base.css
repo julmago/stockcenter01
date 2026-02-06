@@ -422,6 +422,7 @@ img {
 .form-group {
   display: grid;
   gap: var(--space-2);
+  position: relative;
 }
 
 .form-label {
@@ -467,6 +468,14 @@ select:focus {
   display: grid;
   gap: var(--space-3);
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.form-group small.muted {
+  display: block;
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.2;
+  color: var(--muted);
 }
 
 .form-actions {
