@@ -80,13 +80,13 @@ if ($sessionDays <= 0) {
   $sessionDays = 30;
 }
 $sessionDays = max($sessionDays, $gatewayCookieDays);
-$sessionLifetime = $sessionDays * 86400;
-ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
-ini_set('session.cookie_lifetime', (string)$sessionLifetime);
+$sessionGcLifetime = $sessionDays * 86400;
+ini_set('session.gc_maxlifetime', (string)$sessionGcLifetime);
+ini_set('session.cookie_lifetime', '0');
 ini_set('session.use_strict_mode', '1');
 $cookiePath = BASE_PATH !== '' ? BASE_PATH : '/';
 session_set_cookie_params([
-  'lifetime' => $sessionLifetime,
+  'lifetime' => 0,
   'path' => $cookiePath,
   'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
   'httponly' => true,

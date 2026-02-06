@@ -104,7 +104,7 @@ $themes = theme_catalog();
           <h1 class="page-title">¿Quién entra ahora?</h1>
           <p class="muted">Elegí un perfil e ingresá el PIN de 4 dígitos.</p>
         </div>
-        <a class="btn btn-ghost" href="logout_profile.php">Salir</a>
+        <a class="btn btn-ghost" href="logout.php">Salir del sistema</a>
       </div>
 
       <?php if ($error): ?>
