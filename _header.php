@@ -52,8 +52,8 @@ $show_config_menu = $can_manage_tasks_settings || $can_manage_prestashop || $can
       <span class="muted small">
         <?= e($u['first_name'] . ' ' . $u['last_name']) ?> · <?= e($u['email']) ?>
       </span>
-      <a class="btn btn-ghost" href="logout_profile.php">Cambiar perfil</a>
-      <a class="btn btn-ghost" href="logout_profile.php">Salir</a>
+      <a class="btn btn-ghost" href="logout_profile.php">Cerrar perfil</a>
+      <a class="btn btn-ghost" href="logout.php">Salir del sistema</a>
     </div>
   </div>
 </header>
