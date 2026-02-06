@@ -29,6 +29,9 @@ $sections = [
     'product_can_edit' => 'Editar producto',
     'product_can_add_code' => 'Agregar códigos',
   ],
+  'Tareas' => [
+    'tasks_delete' => 'Eliminar tareas',
+  ],
 ];
 
 $message = '';
@@ -266,7 +269,14 @@ foreach ($role_keys as $role_key) {
               <strong><?= e($title) ?></strong>
               <div class="form-row" style="flex-wrap:wrap;">
                 <?php foreach ($perm_list as $perm_key => $label): ?>
-                  <?php $checked = !empty($perm_map[$role_key][$perm_key]); ?>
+                  <?php
+                    if ($perm_key === 'tasks_delete' && $is_system && !$is_locked) {
+                      continue;
+                    }
+                    $checked = $perm_key === 'tasks_delete' && $is_locked
+                      ? true
+                      : !empty($perm_map[$role_key][$perm_key]);
+                  ?>
                   <label class="form-check" style="min-width:220px;">
                     <input type="checkbox" name="perm_<?= e($perm_key) ?>" value="1" <?= $checked ? 'checked' : '' ?> <?= $is_locked ? 'disabled' : '' ?>>
                     <span><?= e($label) ?></span>
