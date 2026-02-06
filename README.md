@@ -34,6 +34,14 @@ INSERT INTO users(role, first_name, last_name, email, password_plain)
 VALUES ('superadmin','Admin','Principal','admin@local','1234');
 ```
 
+### Migrar roles dinámicos (instalaciones existentes)
+Si ya tenés la base creada con `users.role` como `ENUM`, corré esta migración una sola vez:
+```sql
+ALTER TABLE users
+  MODIFY role VARCHAR(32) NOT NULL;
+```
+> Recomendación: hacé backup antes de ejecutar la migración.
+
 ## Requisitos
 - PHP 8.0+ recomendado (funciona desde 7.4 con pequeños cambios)
 - MySQL 5.7+ / 8.0+

@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  role ENUM('superadmin','admin','vendedor','lectura') NOT NULL DEFAULT 'superadmin',
+  role VARCHAR(32) NOT NULL DEFAULT 'superadmin',
   first_name VARCHAR(80) NOT NULL,
   last_name  VARCHAR(80) NOT NULL,
   email      VARCHAR(190) NOT NULL,

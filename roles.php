@@ -6,8 +6,6 @@ require_role(['superadmin'], 'Solo superadmin puede administrar roles.');
 
 ensure_roles_defaults();
 
-$roles_def = role_default_definitions();
-$role_keys = array_keys($roles_def);
 $perm_defaults = permission_default_definitions();
 $perm_keys = array_keys($perm_defaults);
 
@@ -35,10 +33,94 @@ $sections = [
 
 $message = '';
 $error = '';
+$create_role_key = '';
+$create_role_name = '';
+
+if (is_post() && post('action') === 'create_role') {
+  $create_role_key = trim((string)post('role_key'));
+  $create_role_name = trim((string)post('role_name'));
+  if ($create_role_key === 'superadmin') {
+    $error = 'El rol superadmin no se puede crear.';
+  } elseif (!preg_match('/^[a-z0-9_]{3,32}$/', $create_role_key)) {
+    $error = 'El ID debe tener entre 3 y 32 caracteres (a-z, 0-9, _).';
+  } elseif ($create_role_name === '') {
+    $error = 'El nombre visible es obligatorio.';
+  } elseif (mb_strlen($create_role_name) > 60) {
+    $error = 'El nombre visible debe tener hasta 60 caracteres.';
+  } else {
+    $st = db()->prepare("SELECT COUNT(*) FROM roles WHERE role_key = ?");
+    $st->execute([$create_role_key]);
+    $exists = (int)$st->fetchColumn() > 0;
+    if ($exists) {
+      $error = 'Ya existe un rol con ese ID.';
+    } else {
+      try {
+        db()->beginTransaction();
+        $st = db()->prepare("INSERT INTO roles (role_key, role_name, is_system) VALUES (?, ?, 0)");
+        $st->execute([$create_role_key, $create_role_name]);
+
+        $perm_st = db()->prepare("INSERT IGNORE INTO role_permissions(role_key, perm_key, perm_value) VALUES(?, ?, ?)");
+        foreach ($perm_keys as $perm_key) {
+          $perm_st->execute([$create_role_key, $perm_key, 0]);
+        }
+        db()->commit();
+        $message = 'Rol creado.';
+        $create_role_key = '';
+        $create_role_name = '';
+      } catch (Throwable $t) {
+        if (db()->inTransaction()) {
+          db()->rollBack();
+        }
+        $error = 'No se pudo crear el rol.';
+      }
+    }
+  }
+}
+
+if (is_post() && post('action') === 'delete_role') {
+  $role_key = (string)post('role_key');
+  if ($role_key === 'superadmin') {
+    $error = 'El rol superadmin no se puede eliminar.';
+  } else {
+    $st = db()->prepare("SELECT role_key, is_system FROM roles WHERE role_key = ? LIMIT 1");
+    $st->execute([$role_key]);
+    $role_row = $st->fetch();
+    if (!$role_row) {
+      $error = 'Rol inválido.';
+    } elseif ((int)$role_row['is_system'] === 1) {
+      $error = 'Solo se pueden eliminar roles personalizados.';
+    } else {
+      $st = db()->prepare("SELECT COUNT(*) FROM users WHERE role = ?");
+      $st->execute([$role_key]);
+      $count = (int)$st->fetchColumn();
+      if ($count > 0) {
+        $error = "Hay {$count} usuarios con este rol. Reasignalos antes de eliminar.";
+      } else {
+        try {
+          db()->beginTransaction();
+          $st = db()->prepare("DELETE FROM role_permissions WHERE role_key = ?");
+          $st->execute([$role_key]);
+          $st = db()->prepare("DELETE FROM roles WHERE role_key = ?");
+          $st->execute([$role_key]);
+          db()->commit();
+          $message = 'Rol eliminado.';
+        } catch (Throwable $t) {
+          if (db()->inTransaction()) {
+            db()->rollBack();
+          }
+          $error = 'No se pudo eliminar el rol.';
+        }
+      }
+    }
+  }
+}
 
 if (is_post() && post('action') === 'save_role') {
-  $role_key = post('role_key');
-  if (!in_array($role_key, $role_keys, true)) {
+  $role_key = (string)post('role_key');
+  $st = db()->prepare("SELECT role_key FROM roles WHERE role_key = ? LIMIT 1");
+  $st->execute([$role_key]);
+  $role_row = $st->fetch();
+  if (!$role_row) {
     $error = 'Rol inválido.';
   } elseif ($role_key === 'superadmin') {
     $error = 'El rol superadmin no se puede editar.';
@@ -46,6 +128,8 @@ if (is_post() && post('action') === 'save_role') {
     $role_name = trim(post('role_name'));
     if ($role_name === '') {
       $error = 'El nombre visible es obligatorio.';
+    } elseif (mb_strlen($role_name) > 60) {
+      $error = 'El nombre visible debe tener hasta 60 caracteres.';
     } else {
       try {
         db()->beginTransaction();
@@ -70,14 +154,13 @@ if (is_post() && post('action') === 'save_role') {
   }
 }
 
-$placeholders = implode(',', array_fill(0, count($role_keys), '?'));
-$order = implode(',', array_map(fn($key) => "'" . $key . "'", $role_keys));
-$st = db()->prepare("SELECT role_key, role_name, is_system FROM roles WHERE role_key IN ({$placeholders}) ORDER BY FIELD(role_key, {$order})");
-$st->execute($role_keys);
+$st = db()->query("SELECT role_key, role_name, is_system FROM roles ORDER BY is_system DESC, role_name ASC");
 $roles = $st->fetchAll();
+$role_keys = array_map(static fn($role) => $role['role_key'], $roles);
 
 $perm_map = [];
-if ($roles) {
+if ($role_keys) {
+  $placeholders = implode(',', array_fill(0, count($role_keys), '?'));
   $st = db()->prepare("SELECT role_key, perm_key, perm_value FROM role_permissions WHERE role_key IN ({$placeholders})");
   $st->execute($role_keys);
   $perm_rows = $st->fetchAll();
@@ -114,18 +197,54 @@ foreach ($role_keys as $role_key) {
     <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
+    <div class="card stack" style="margin-bottom:16px;">
+      <div class="card-header">
+        <h3 class="card-title">Crear rol</h3>
+      </div>
+      <form method="post" class="stack">
+        <input type="hidden" name="action" value="create_role">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">ID (role_key)</label>
+            <input class="form-control" type="text" name="role_key" value="<?= e($create_role_key) ?>" required maxlength="32" pattern="[a-z0-9_]{3,32}">
+            <small class="muted">3-32 caracteres, solo a-z, 0-9 y _</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nombre visible</label>
+            <input class="form-control" type="text" name="role_name" value="<?= e($create_role_name) ?>" required maxlength="60">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">Crear</button>
+        </div>
+      </form>
+    </div>
+
     <?php foreach ($roles as $role): ?>
       <?php
         $role_key = (string)$role['role_key'];
         $is_system = (bool)$role['is_system'];
-        $is_locked = $role_key === 'superadmin' || $is_system;
+        $is_locked = $role_key === 'superadmin';
+        $can_delete = !$is_system && $role_key !== 'superadmin';
       ?>
       <div class="card stack" style="margin-bottom:16px;">
         <div class="card-header">
           <h3 class="card-title"><?= e($role_key) ?></h3>
-          <?php if ($is_locked): ?>
-            <span class="badge badge-muted">Superadmin no se puede editar</span>
-          <?php endif; ?>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <?php if ($is_system): ?>
+              <span class="badge badge-muted">Sistema</span>
+            <?php endif; ?>
+            <?php if ($is_locked): ?>
+              <span class="badge badge-muted">Superadmin no se puede editar</span>
+            <?php endif; ?>
+            <?php if ($can_delete): ?>
+              <form method="post" onsubmit="return confirm('¿Eliminar rol <?= e($role_key) ?>?');">
+                <input type="hidden" name="action" value="delete_role">
+                <input type="hidden" name="role_key" value="<?= e($role_key) ?>">
+                <button class="btn btn-danger" type="submit">Eliminar</button>
+              </form>
+            <?php endif; ?>
+          </div>
         </div>
 
         <form method="post" class="stack">
