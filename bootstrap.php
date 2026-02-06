@@ -72,13 +72,14 @@ register_shutdown_function(function (): void {
 });
 
 $gatewayCookieDays = (int)($auth['gateway_cookie_lifetime_days'] ?? 0);
-$sessionDays = (int)($auth['session_lifetime_days'] ?? 30);
-if ($gatewayCookieDays > 0) {
-  $sessionDays = $gatewayCookieDays;
+if ($gatewayCookieDays <= 0) {
+  $gatewayCookieDays = 3650;
 }
+$sessionDays = (int)($auth['session_lifetime_days'] ?? 30);
 if ($sessionDays <= 0) {
   $sessionDays = 30;
 }
+$sessionDays = max($sessionDays, $gatewayCookieDays);
 $sessionLifetime = $sessionDays * 86400;
 ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
 ini_set('session.cookie_lifetime', (string)$sessionLifetime);

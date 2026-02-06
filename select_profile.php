@@ -41,7 +41,8 @@ if (is_post()) {
         unset($u['pin']);
         $_SESSION['user'] = $u;
         $_SESSION['logged_in'] = true;
-        $_SESSION['gateway_ok'] = true;
+        $_SESSION['gateway_logged'] = true;
+        $_SESSION['profile_logged'] = true;
         $_SESSION['profile_user_id'] = (int)$u['id'];
         $_SESSION['profile_last_activity'] = time();
         refresh_gateway_session_cookie();
@@ -103,7 +104,7 @@ $themes = theme_catalog();
           <h1 class="page-title">¿Quién entra ahora?</h1>
           <p class="muted">Elegí un perfil e ingresá el PIN de 4 dígitos.</p>
         </div>
-        <a class="btn btn-ghost" href="logout_all.php">Salir del sistema</a>
+        <a class="btn btn-ghost" href="logout_profile.php">Salir</a>
       </div>
 
       <?php if ($error): ?>

@@ -56,7 +56,7 @@ if ($display_name === '') {
         </button>
         <div class="user-menu-dropdown" role="menu">
           <a class="user-menu-item" href="logout_profile.php" role="menuitem">Cambiar perfil</a>
-          <a class="user-menu-item" href="logout_all.php" role="menuitem">Salir del sistema</a>
+          <a class="user-menu-item" href="logout_profile.php" role="menuitem">Salir</a>
         </div>
       </div>
     </div>
