@@ -58,10 +58,13 @@ if (!function_exists('require_login')) {
     if (session_status() !== PHP_SESSION_ACTIVE) {
       session_start();
     }
-    if (empty($_SESSION['gateway_ok'])) {
+    $gatewayActive = function_exists('has_gateway_session')
+      ? has_gateway_session()
+      : (!empty($_SESSION['gateway_logged']) || !empty($_SESSION['gateway_ok']));
+    if (!$gatewayActive) {
       abort(403, 'No tenés permisos para descargar este archivo.');
     }
-    if (empty($_SESSION['logged_in']) || empty($_SESSION['user'])) {
+    if (empty($_SESSION['profile_logged']) || empty($_SESSION['logged_in']) || empty($_SESSION['user'])) {
       abort(403, 'No tenés permisos para descargar este archivo.');
     }
   }

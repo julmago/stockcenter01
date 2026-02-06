@@ -3,7 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 if (!empty($_SESSION['profile_user_id'])) {
   redirect('dashboard.php');
 }
-if (!empty($_SESSION['gateway_ok'])) {
+if (has_gateway_session()) {
   redirect('select_profile.php');
 }
 
@@ -28,8 +28,14 @@ if (is_post()) {
       } else {
         error_log(sprintf('[%s] Gateway login success for %s', date('c'), $email));
         session_regenerate_id(true);
-        $_SESSION['gateway_ok'] = true;
-        unset($_SESSION['user'], $_SESSION['logged_in'], $_SESSION['profile_user_id'], $_SESSION['profile_last_activity']);
+        $_SESSION['gateway_logged'] = true;
+        unset(
+          $_SESSION['user'],
+          $_SESSION['logged_in'],
+          $_SESSION['profile_logged'],
+          $_SESSION['profile_user_id'],
+          $_SESSION['profile_last_activity']
+        );
         refresh_gateway_session_cookie();
         redirect('select_profile.php');
       }
