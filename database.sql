@@ -90,7 +90,7 @@ JOIN (
   SELECT 2000 AS value, 40 AS sort_order UNION ALL
   SELECT 10000 AS value, 50 AS sort_order UNION ALL
   SELECT 20000 AS value, 60 AS sort_order
-) d
+) d ON 1=1
 ON DUPLICATE KEY UPDATE value = VALUES(value);
 
 CREATE TABLE IF NOT EXISTS products (
