@@ -21,6 +21,16 @@ function normalize_base_path(string $path): string {
 }
 
 function detect_base_path(): string {
+  $docRoot = realpath((string)($_SERVER['DOCUMENT_ROOT'] ?? ''));
+  $projectRoot = realpath(__DIR__);
+  if ($docRoot && $projectRoot) {
+    $docRoot = str_replace('\\', '/', $docRoot);
+    $projectRoot = str_replace('\\', '/', $projectRoot);
+    if (str_starts_with($projectRoot, $docRoot)) {
+      $relative = trim(substr($projectRoot, strlen($docRoot)), '/');
+      return $relative === '' ? '' : '/' . $relative;
+    }
+  }
   $scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '');
   if ($scriptName === '') {
     return '';
