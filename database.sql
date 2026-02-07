@@ -34,6 +34,65 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS cashboxes (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_by_user_id INT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_cashboxes_active (is_active),
+  CONSTRAINT fk_cashboxes_created_by
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cash_movements (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  cashbox_id INT UNSIGNED NOT NULL,
+  type ENUM('entry','exit') NOT NULL,
+  detail VARCHAR(255) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_cash_movements_cashbox_date (cashbox_id, created_at),
+  KEY idx_cash_movements_cashbox_type (cashbox_id, type),
+  CONSTRAINT fk_cash_movements_cashbox
+    FOREIGN KEY (cashbox_id) REFERENCES cashboxes(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_cash_movements_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cash_denominations (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  cashbox_id INT UNSIGNED NOT NULL,
+  value INT NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cash_denoms_value (cashbox_id, value),
+  KEY idx_cash_denoms_active (cashbox_id, is_active),
+  CONSTRAINT fk_cash_denoms_cashbox
+    FOREIGN KEY (cashbox_id) REFERENCES cashboxes(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO cash_denominations (cashbox_id, value, is_active, sort_order)
+SELECT c.id, d.value, 1, d.sort_order
+FROM cashboxes c
+JOIN (
+  SELECT 100 AS value, 10 AS sort_order UNION ALL
+  SELECT 500 AS value, 20 AS sort_order UNION ALL
+  SELECT 1000 AS value, 30 AS sort_order UNION ALL
+  SELECT 2000 AS value, 40 AS sort_order UNION ALL
+  SELECT 10000 AS value, 50 AS sort_order UNION ALL
+  SELECT 20000 AS value, 60 AS sort_order
+) d
+ON DUPLICATE KEY UPDATE value = VALUES(value);
+
 CREATE TABLE IF NOT EXISTS products (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   sku VARCHAR(80) NOT NULL,
