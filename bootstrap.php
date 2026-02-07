@@ -47,6 +47,11 @@ $basePath = normalize_base_path($configuredBasePath !== '' ? $configuredBasePath
 if (!defined('BASE_PATH')) {
   define('BASE_PATH', $basePath);
 }
+$configuredBaseUrl = (string)($config['base_url'] ?? '');
+$baseUrl = normalize_base_path($configuredBaseUrl !== '' ? $configuredBaseUrl : $basePath);
+if (!defined('BASE_URL')) {
+  define('BASE_URL', $baseUrl);
+}
 
 $logDir = dirname(__DIR__) . '/storage/logs';
 if (!is_dir($logDir)) {
@@ -121,7 +126,12 @@ function e(string $s): string {
 
 function asset_url(string $path): string {
   $path = ltrim($path, '/');
-  return BASE_PATH . '/' . $path;
+  return BASE_URL . '/assets/' . $path;
+}
+
+function cash_asset_url(string $path): string {
+  $path = ltrim($path, '/');
+  return BASE_URL . '/cash/assets/' . $path;
 }
 
 function redirect(string $to): void {
@@ -500,7 +510,7 @@ function current_theme(): string {
 
 function theme_css_links(): string {
   $theme = current_theme();
-  $base = '<link rel="stylesheet" href="' . asset_url('assets/themes/base.css') . '">';
-  $theme_css = '<link rel="stylesheet" href="' . asset_url('assets/themes/' . $theme . '.css') . '" id="theme-stylesheet">';
+  $base = '<link rel="stylesheet" href="' . asset_url('themes/base.css') . '">';
+  $theme_css = '<link rel="stylesheet" href="' . asset_url('themes/' . $theme . '.css') . '" id="theme-stylesheet">';
   return $base . $theme_css;
 }
