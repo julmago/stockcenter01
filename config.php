@@ -22,4 +22,6 @@ return [
   'debug' => true,
   // Base path del proyecto (ej: /stockcenter). Dejá vacío para auto-detección.
   'base_path' => env('BASE_PATH', ''),
+  // Base URL del proyecto (ej: /tswork). Sin barra final.
+  'base_url' => env('BASE_URL', '/tswork'),
 ];
