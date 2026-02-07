@@ -126,6 +126,10 @@ img {
   position: relative;
 }
 
+.cash-menu {
+  position: relative;
+}
+
 .user-menu-button {
   display: inline-flex;
   align-items: center;
@@ -150,6 +154,18 @@ img {
   cursor: pointer;
 }
 
+.cash-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .user-menu-button:hover,
 .user-menu-button:focus-visible {
   background: var(--card);
@@ -157,6 +173,11 @@ img {
 
 .config-menu-button:hover,
 .config-menu-button:focus-visible {
+  background: var(--card);
+}
+
+.cash-menu-button:hover,
+.cash-menu-button:focus-visible {
   background: var(--card);
 }
 
@@ -188,6 +209,20 @@ img {
   z-index: 60;
 }
 
+.cash-menu-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  min-width: 220px;
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+
 .user-menu-item {
   display: block;
   padding: 0.35rem 0.6rem;
@@ -202,6 +237,24 @@ img {
   color: inherit;
 }
 
+.cash-menu-item {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius);
+  color: inherit;
+}
+
+.cash-menu-item--active {
+  background: var(--bg-2);
+  font-weight: 600;
+}
+
+.cash-menu-empty {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  color: var(--muted);
+}
+
 .user-menu-item:hover,
 .user-menu-item:focus-visible {
   background: var(--bg-2);
@@ -214,12 +267,22 @@ img {
   text-decoration: none;
 }
 
+.cash-menu-item:hover,
+.cash-menu-item:focus-visible {
+  background: var(--bg-2);
+  text-decoration: none;
+}
+
 .user-menu:hover .user-menu-dropdown,
 .user-menu--open .user-menu-dropdown {
   display: block;
 }
 
 .config-menu--open .config-menu-dropdown {
+  display: block;
+}
+
+.cash-menu--open .cash-menu-dropdown {
   display: block;
 }
 
@@ -282,6 +345,109 @@ img {
 .grid {
   display: grid;
   gap: var(--space-4);
+}
+
+.cash-actions {
+  margin-top: var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.cash-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: inherit;
+  font-weight: 600;
+  font-size: 1.2rem;
+  text-align: center;
+}
+
+.cash-action-card:hover,
+.cash-action-card:focus-visible {
+  background: var(--bg-2);
+  text-decoration: none;
+}
+
+.cash-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.cash-widget {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.denom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.denom-row input {
+  max-width: 120px;
+  text-align: right;
+}
+
+.calculator-display {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  font-size: 1.1rem;
+  text-align: right;
+}
+
+.calculator-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.calculator-grid button {
+  padding: 0.55rem 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calculator-grid button:hover,
+.calculator-grid button:focus-visible {
+  background: var(--bg-2);
+}
+
+.cash-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+}
+
+.cash-table th,
+.cash-table td {
+  padding: 0.55rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+@media (max-width: 900px) {
+  .cash-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .grid-3 {

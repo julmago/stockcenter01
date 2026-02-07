@@ -252,6 +252,42 @@ function permission_default_definitions(): array {
       'vendedor' => true,
       'lectura' => false,
     ],
+    'cashbox_access' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'cashbox_manage_boxes' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'cashbox_view_balance' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'cashbox_create_entry' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'cashbox_create_exit' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
+    'cashbox_config_denoms' => [
+      'superadmin' => true,
+      'admin' => false,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
   ];
 }
 

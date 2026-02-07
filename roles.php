@@ -32,6 +32,14 @@ $sections = [
   'Tareas' => [
     'tasks_delete' => 'Eliminar tareas',
   ],
+  'Caja' => [
+    'cashbox_access' => 'Ver módulo Caja',
+    'cashbox_manage_boxes' => 'Administrar cajas',
+    'cashbox_view_balance' => 'Ver balance',
+    'cashbox_create_entry' => 'Crear entradas',
+    'cashbox_create_exit' => 'Crear salidas',
+    'cashbox_config_denoms' => 'Configurar billetes',
+  ],
 ];
 
 $message = '';
