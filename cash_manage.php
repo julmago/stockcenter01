@@ -147,12 +147,12 @@ $cashboxes = $list_st->fetchAll();
           </thead>
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
-              <?php $is_active = ((int)$cashbox['is_active'] === 1); ?>
+              <?php $is_active = ((int)($cashbox['is_active'] ?? 0) === 1); ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
                 <td><?= $is_active ? 'Activa' : 'Inactiva' ?></td>
-                <td><?= (int)$cashbox['entradas_count'] ?></td>
-                <td><?= (int)$cashbox['salidas_count'] ?></td>
+                <td><?= (int)($cashbox['entradas_count'] ?? 0) ?></td>
+                <td><?= (int)($cashbox['salidas_count'] ?? 0) ?></td>
                 <td>
                   <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
                     <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
