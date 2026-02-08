@@ -205,7 +205,9 @@ if ($responsible_name === '') {
 
     const display = document.querySelector('[data-calculator-display]');
     const keypad = document.querySelector('[data-calculator]');
+    const calculatorCard = document.querySelector('.cash-calculator');
     let expression = '0';
+    let calculatorActive = false;
 
     const setDisplay = (value) => {
       expression = value;
@@ -279,12 +281,52 @@ if ($responsible_name === '') {
       applyCalculatorInput({ value, action });
     });
 
+    const setCalculatorActive = (active) => {
+      calculatorActive = active;
+    };
+
+    const isEditableElement = (element) => {
+      if (!element) return false;
+      const tagName = element.tagName;
+      return (
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        tagName === 'SELECT' ||
+        element.isContentEditable
+      );
+    };
+
+    const isWithinCalculator = (element) => {
+      if (!calculatorCard || !element) return false;
+      return calculatorCard.contains(element);
+    };
+
+    calculatorCard?.addEventListener('click', () => setCalculatorActive(true));
+    calculatorCard?.addEventListener('focusin', () => setCalculatorActive(true));
+
+    document.addEventListener('click', (event) => {
+      if (!calculatorCard) return;
+      if (!calculatorCard.contains(event.target)) {
+        setCalculatorActive(false);
+      }
+    });
+
+    document.addEventListener('focusin', (event) => {
+      if (!calculatorCard) return;
+      if (!calculatorCard.contains(event.target)) {
+        setCalculatorActive(false);
+      }
+    });
+
     document.addEventListener('keydown', (event) => {
-      if (!display) return;
+      if (!display || !calculatorCard) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const active = document.activeElement;
-      const tagName = active?.tagName;
-      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || active?.isContentEditable) {
+      const editable = isEditableElement(active);
+      if (editable && !isWithinCalculator(active)) {
+        return;
+      }
+      if (!calculatorActive && !isWithinCalculator(active)) {
         return;
       }
 

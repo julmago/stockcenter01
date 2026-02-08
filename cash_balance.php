@@ -60,12 +60,22 @@ $balance = $total_entries - $total_exits;
           <h3 class="card-title">Total Entradas</h3>
         </div>
         <strong style="font-size: 1.4rem;">$<?= number_format($total_entries, 2, ',', '.') ?></strong>
+        <?php if ($cashbox): ?>
+          <div class="form-actions" style="margin-top: var(--space-3);">
+            <a class="btn btn-ghost" href="<?= url_path('cash_entries_list.php') ?>">Ver detalle</a>
+          </div>
+        <?php endif; ?>
       </div>
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">Total Salidas</h3>
         </div>
         <strong style="font-size: 1.4rem;">$<?= number_format($total_exits, 2, ',', '.') ?></strong>
+        <?php if ($cashbox): ?>
+          <div class="form-actions" style="margin-top: var(--space-3);">
+            <a class="btn btn-ghost" href="<?= url_path('cash_exits_list.php') ?>">Ver detalle</a>
+          </div>
+        <?php endif; ?>
       </div>
       <div class="card">
         <div class="card-header">
