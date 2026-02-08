@@ -52,6 +52,9 @@ $baseUrl = normalize_base_path($configuredBaseUrl !== '' ? $configuredBaseUrl : 
 if (!defined('BASE_URL')) {
   define('BASE_URL', $baseUrl);
 }
+if (!defined('APP_BASE')) {
+  define('APP_BASE', BASE_URL);
+}
 
 $logDir = dirname(__DIR__) . '/storage/logs';
 if (!is_dir($logDir)) {
@@ -125,13 +128,19 @@ function e(string $s): string {
 }
 
 function asset_url(string $path): string {
-  $path = ltrim($path, '/');
-  return BASE_URL . '/assets/' . $path;
+  return asset_path($path);
 }
 
 function cash_asset_url(string $path): string {
-  $path = ltrim($path, '/');
-  return BASE_URL . '/cash/assets/' . $path;
+  return asset_path($path);
+}
+
+function url_path(string $path): string {
+  return rtrim(APP_BASE, '/') . '/' . ltrim($path, '/');
+}
+
+function asset_path(string $path): string {
+  return url_path('assets/' . ltrim($path, '/'));
 }
 
 function redirect(string $to): void {

@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/db.php';
 
 function cashbox_selected_id(): int {
   return (int)($_SESSION['cashbox_id'] ?? 0);
@@ -29,12 +29,12 @@ function fetch_active_cashboxes(): array {
 function require_cashbox_selected(bool $only_active = true): array {
   $cashbox_id = cashbox_selected_id();
   if ($cashbox_id <= 0) {
-    redirect('cash/cash_select.php');
+    redirect(url_path('cash_select.php'));
   }
   $cashbox = fetch_cashbox_by_id($cashbox_id, $only_active);
   if (!$cashbox) {
     unset($_SESSION['cashbox_id']);
-    redirect('cash/cash_select.php');
+    redirect(url_path('cash_select.php'));
   }
   return $cashbox;
 }

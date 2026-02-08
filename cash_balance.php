@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 require_permission(hasPerm('cashbox_view_balance'), 'Sin permiso para ver el balance.');
@@ -26,7 +26,7 @@ $balance = $total_entries - $total_exits;
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/../partials/header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
@@ -57,7 +57,7 @@ $balance = $total_entries - $total_exits;
     </div>
 
     <div class="form-actions" style="margin-top: var(--space-4);">
-      <a class="btn btn-ghost" href="cash_select.php">Volver</a>
+      <a class="btn btn-ghost" href="<?= url_path('cash_select.php') ?>">Volver</a>
     </div>
   </div>
 </main>
