@@ -40,13 +40,14 @@ $can_cashbox_access = !empty($cashboxes);
               Caja <span aria-hidden="true">▾</span>
             </button>
             <div class="cash-menu-dropdown" role="menu">
+              <?php $cash_redirect = url_path('cash_select.php'); ?>
               <?php foreach ($cashboxes as $cashbox): ?>
                 <?php
                   $cashbox_id = (int)$cashbox['id'];
                   $is_active = $cashbox_id === $active_cashbox_id;
                 ?>
                 <a class="cash-menu-item<?= $is_active ? ' cash-menu-item--active' : '' ?>"
-                   href="<?= url_path('cash_select.php?cashbox_id=' . $cashbox_id) ?>"
+                   href="<?= url_path('cash_set.php?id=' . $cashbox_id . '&redirect=' . rawurlencode($cash_redirect)) ?>"
                    role="menuitem">
                   <?= e($cashbox['name']) ?>
                 </a>
