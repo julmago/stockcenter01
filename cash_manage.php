@@ -97,12 +97,14 @@ if (is_post() && post('action') === 'delete_cashbox') {
 
 $list_st = db()->query("SELECT c.id,
   c.name,
-  c.is_active,
+  COALESCE(c.is_active, 0) AS is_active,
   c.created_at,
-  COUNT(m.id) AS movement_count
+  (
+    SELECT COUNT(*)
+    FROM cash_movements m
+    WHERE m.cashbox_id = c.id
+  ) AS movement_count
 FROM cashboxes c
-LEFT JOIN cash_movements m ON m.cashbox_id = c.id
-GROUP BY c.id, c.name, c.is_active, c.created_at
 ORDER BY c.created_at DESC");
 $cashboxes = $list_st->fetchAll();
 ?>
