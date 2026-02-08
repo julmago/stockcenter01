@@ -4,18 +4,33 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 
-$cashbox = require_cashbox_selected();
-require_permission(hasCashboxPerm('can_view_balance', (int)$cashbox['id']), 'Sin permiso para ver el balance.');
+$cashbox_id = (int)($_SESSION['cashbox_id'] ?? 0);
+$cashbox_name = '—';
+if ($cashbox_id > 0) {
+  $name_st = db()->prepare("SELECT name FROM cashboxes WHERE id = ? LIMIT 1");
+  $name_st->execute([$cashbox_id]);
+  $cashbox_name = $name_st->fetchColumn() ?: '—';
+}
 
-$st = db()->prepare("SELECT
-  SUM(CASE WHEN type = 'entry' THEN amount ELSE 0 END) AS total_entries,
-  SUM(CASE WHEN type = 'exit' THEN amount ELSE 0 END) AS total_exits
-  FROM cash_movements
-  WHERE cashbox_id = ?");
-$st->execute([(int)$cashbox['id']]);
-$totals = $st->fetch();
-$total_entries = (float)($totals['total_entries'] ?? 0);
-$total_exits = (float)($totals['total_exits'] ?? 0);
+$cashbox = null;
+if ($cashbox_id > 0) {
+  $cashbox = require_cashbox_selected();
+  require_permission(hasCashboxPerm('can_view_balance', (int)$cashbox['id']), 'Sin permiso para ver el balance.');
+}
+
+$total_entries = 0.0;
+$total_exits = 0.0;
+if ($cashbox) {
+  $st = db()->prepare("SELECT
+    SUM(CASE WHEN type = 'entry' THEN amount ELSE 0 END) AS total_entries,
+    SUM(CASE WHEN type = 'exit' THEN amount ELSE 0 END) AS total_exits
+    FROM cash_movements
+    WHERE cashbox_id = ?");
+  $st->execute([(int)$cashbox['id']]);
+  $totals = $st->fetch();
+  $total_entries = (float)($totals['total_entries'] ?? 0);
+  $total_exits = (float)($totals['total_exits'] ?? 0);
+}
 $balance = $total_entries - $total_exits;
 ?>
 <!doctype html>
@@ -32,8 +47,12 @@ $balance = $total_entries - $total_exits;
   <div class="container">
     <div class="page-header">
       <h2 class="page-title">Balance de caja</h2>
-      <span class="muted">Caja activa: <?= e($cashbox['name']) ?></span>
+      <span class="muted">Caja activa: <?= e($cashbox_name) ?></span>
     </div>
+
+    <?php if (!$cashbox): ?>
+      <div class="alert alert-warning">Seleccioná una caja activa para ver el balance.</div>
+    <?php endif; ?>
 
     <div class="grid grid-3">
       <div class="card">

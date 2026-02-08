@@ -4,24 +4,43 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 
-$cashbox = require_cashbox_selected();
-require_permission(hasCashboxPerm('can_create_entries', (int)$cashbox['id']), 'Sin permiso para crear entradas.');
+$cashbox_id = (int)($_SESSION['cashbox_id'] ?? 0);
+$cashbox_name = '—';
+if ($cashbox_id > 0) {
+  $name_st = db()->prepare("SELECT name FROM cashboxes WHERE id = ? LIMIT 1");
+  $name_st->execute([$cashbox_id]);
+  $cashbox_name = $name_st->fetchColumn() ?: '—';
+}
+
+$cashbox = null;
+if ($cashbox_id > 0) {
+  $cashbox = require_cashbox_selected();
+  require_permission(hasCashboxPerm('can_create_entries', (int)$cashbox['id']), 'Sin permiso para crear entradas.');
+}
 $user = current_user();
 
 $message = '';
 $error = '';
 
-$denom_st = db()->prepare("SELECT id, value FROM cash_denominations WHERE cashbox_id = ? AND is_active = 1 ORDER BY sort_order ASC, value ASC");
-$denom_st->execute([(int)$cashbox['id']]);
-$denominations = $denom_st->fetchAll();
+$denominations = [];
+if ($cashbox) {
+  $denom_st = db()->prepare("SELECT id, value FROM cash_denominations WHERE cashbox_id = ? AND is_active = 1 ORDER BY sort_order ASC, value ASC");
+  $denom_st->execute([(int)$cashbox['id']]);
+  $denominations = $denom_st->fetchAll();
+}
 
 if (is_post() && post('action') === 'create_entry') {
+  if (!$cashbox) {
+    $error = 'Seleccioná una caja activa para continuar.';
+  }
   $detail = trim((string)post('detail'));
   $amount_raw = trim((string)post('amount'));
   $amount_raw = str_replace([' ', ','], ['', '.'], $amount_raw);
   $amount = (float)$amount_raw;
 
-  if ($detail === '') {
+  if ($error !== '') {
+    // no-op, keep error
+  } elseif ($detail === '') {
     $error = 'El detalle es obligatorio.';
   } elseif ($amount <= 0) {
     $error = 'El efectivo debe ser mayor a 0.';
@@ -31,15 +50,6 @@ if (is_post() && post('action') === 'create_entry') {
     $message = 'Entrada registrada correctamente.';
   }
 }
-
-$recent_st = db()->prepare("SELECT cm.detail, cm.amount, cm.created_at, u.first_name, u.last_name
-  FROM cash_movements cm
-  JOIN users u ON u.id = cm.user_id
-  WHERE cm.cashbox_id = ? AND cm.type = 'entry'
-  ORDER BY cm.created_at DESC
-  LIMIT 10");
-$recent_st->execute([(int)$cashbox['id']]);
-$recent_movements = $recent_st->fetchAll();
 
 $responsible_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
 if ($responsible_name === '') {
@@ -60,69 +70,74 @@ if ($responsible_name === '') {
   <div class="container">
     <div class="page-header">
       <h2 class="page-title">Entrada de caja</h2>
-      <span class="muted">Caja activa: <?= e($cashbox['name']) ?></span>
+      <span class="muted">Caja activa: <?= e($cashbox_name) ?></span>
     </div>
 
     <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
-    <div class="cash-layout">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Nueva entrada</h3>
-        </div>
-        <form method="post" class="stack">
-          <input type="hidden" name="action" value="create_entry">
-          <div class="form-group">
-            <label class="form-label">Detalle</label>
-            <input class="form-control" type="text" name="detail" required maxlength="255">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Efectivo</label>
-            <input class="form-control" type="number" name="amount" step="0.01" min="0" required>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Responsable</label>
-              <input class="form-control" type="text" value="<?= e($responsible_name) ?>" readonly>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Fecha y hora</label>
-              <input class="form-control" type="text" value="<?= e(date('d/m/Y H:i')) ?>" readonly>
-            </div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" type="submit">Registrar entrada</button>
-            <a class="btn btn-ghost" href="<?= url_path('cash_select.php') ?>">Volver</a>
-          </div>
-        </form>
+    <?php if (!$cashbox): ?>
+      <div class="alert alert-warning">Seleccioná una caja activa para registrar movimientos.</div>
+      <div class="form-actions">
+        <a class="btn" href="<?= url_path('cash_select.php') ?>">Elegir caja</a>
       </div>
+    <?php else: ?>
+      <div class="cash-layout">
+        <div class="card cash-form">
+          <div class="card-header">
+            <h3 class="card-title">Nueva entrada</h3>
+          </div>
+          <form method="post" class="stack">
+            <input type="hidden" name="action" value="create_entry">
+            <div class="form-group">
+              <label class="form-label">Detalle</label>
+              <input class="form-control" type="text" name="detail" required maxlength="255">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Efectivo</label>
+              <input class="form-control" type="number" name="amount" step="0.01" min="0" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Responsable</label>
+                <input class="form-control" type="text" value="<?= e($responsible_name) ?>" readonly>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Fecha y hora</label>
+                <input class="form-control" type="text" value="<?= e(date('d/m/Y H:i')) ?>" readonly>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn" type="submit">Registrar entrada</button>
+              <a class="btn btn-ghost" href="<?= url_path('cash_select.php') ?>">Volver</a>
+            </div>
+          </form>
+        </div>
 
-      <div class="cash-widget">
-        <div class="card">
+        <div class="card cash-bills">
           <div class="card-header">
             <h3 class="card-title">Contador de billetes</h3>
           </div>
           <?php if ($denominations): ?>
-            <?php foreach ($denominations as $denom): ?>
-              <div class="denom-row">
-                <span>$<?= number_format((int)$denom['value'], 0, ',', '.') ?></span>
-                <input class="form-control" type="number" min="0" value="0" data-denom-value="<?= (int)$denom['value'] ?>">
-              </div>
-            <?php endforeach; ?>
-            <div class="denom-row">
-              <strong>Total</strong>
-              <strong data-denom-total>0</strong>
+            <div class="denom-list">
+              <?php foreach ($denominations as $denom): ?>
+                <div class="denom-row">
+                  <span>$<?= number_format((int)$denom['value'], 0, ',', '.') ?></span>
+                  <input class="form-control" type="number" min="0" value="0" data-denom-value="<?= (int)$denom['value'] ?>">
+                </div>
+              <?php endforeach; ?>
             </div>
-            <div class="form-actions">
-              <button class="btn btn-ghost" type="button" data-denom-copy>Usar total como efectivo</button>
+            <div class="denom-total">
+              <span>Total</span>
+              <span data-denom-total>0</span>
             </div>
+            <button class="btn btn-ghost denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
           <?php else: ?>
             <div class="alert alert-info">No hay billetes configurados para esta caja.</div>
           <?php endif; ?>
         </div>
 
-        <div class="card">
+        <div class="card cash-calculator">
           <div class="card-header">
             <h3 class="card-title">Calculadora</h3>
           </div>
@@ -151,37 +166,7 @@ if ($responsible_name === '') {
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">Últimas entradas</h3>
-      </div>
-      <?php if ($recent_movements): ?>
-        <table class="cash-table">
-          <thead>
-            <tr>
-              <th>Detalle</th>
-              <th>Importe</th>
-              <th>Responsable</th>
-              <th>Fecha/Hora</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($recent_movements as $movement): ?>
-              <tr>
-                <td><?= e($movement['detail']) ?></td>
-                <td>$<?= number_format((float)$movement['amount'], 2, ',', '.') ?></td>
-                <td><?= e(trim(($movement['first_name'] ?? '') . ' ' . ($movement['last_name'] ?? ''))) ?></td>
-                <td><?= e(date('d/m/Y H:i', strtotime($movement['created_at']))) ?></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      <?php else: ?>
-        <div class="alert alert-info">Todavía no hay entradas registradas.</div>
-      <?php endif; ?>
-    </div>
+    <?php endif; ?>
   </div>
 </main>
 
@@ -246,12 +231,7 @@ if ($responsible_name === '') {
       return null;
     };
 
-    keypad?.addEventListener('click', (event) => {
-      const target = event.target.closest('button');
-      if (!target) return;
-      const value = target.getAttribute('data-value');
-      const action = target.getAttribute('data-action');
-
+    const applyCalculatorInput = ({ value, action }) => {
       if (action === 'clear') {
         setDisplay('0');
         return;
@@ -288,6 +268,55 @@ if ($responsible_name === '') {
       if (value) {
         const next = expression === '0' ? value : `${expression}${value}`;
         setDisplay(next);
+      }
+    };
+
+    keypad?.addEventListener('click', (event) => {
+      const target = event.target.closest('button');
+      if (!target) return;
+      const value = target.getAttribute('data-value');
+      const action = target.getAttribute('data-action');
+      applyCalculatorInput({ value, action });
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (!display) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const active = document.activeElement;
+      const tagName = active?.tagName;
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || active?.isContentEditable) {
+        return;
+      }
+
+      const key = event.key;
+      if (/^\d$/.test(key)) {
+        event.preventDefault();
+        applyCalculatorInput({ value: key });
+        return;
+      }
+      if (['+', '-', '*', '/'].includes(key)) {
+        event.preventDefault();
+        applyCalculatorInput({ value: key });
+        return;
+      }
+      if (key === 'Enter') {
+        event.preventDefault();
+        applyCalculatorInput({ action: 'equals' });
+        return;
+      }
+      if (key === 'Backspace') {
+        event.preventDefault();
+        applyCalculatorInput({ action: 'back' });
+        return;
+      }
+      if (key === 'Escape') {
+        event.preventDefault();
+        applyCalculatorInput({ action: 'clear' });
+        return;
+      }
+      if (key === '.' || key === ',') {
+        event.preventDefault();
+        applyCalculatorInput({ value: '.' });
       }
     });
   })();
