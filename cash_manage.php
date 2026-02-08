@@ -44,31 +44,6 @@ if (is_post() && post('action') === 'create_cashbox') {
   }
 }
 
-if (is_post() && post('action') === 'toggle_cashbox') {
-  $cashbox_id = (int)post('cashbox_id');
-  $is_active = post('is_active') === '1' ? 1 : 0;
-  try {
-    db()->beginTransaction();
-    if ($is_active === 1) {
-      db()->exec("UPDATE cashboxes SET is_active = 0");
-    }
-    $st = db()->prepare("UPDATE cashboxes SET is_active = ? WHERE id = ?");
-    $st->execute([$is_active, $cashbox_id]);
-    db()->commit();
-    if ($is_active === 1) {
-      $_SESSION['cashbox_id'] = $cashbox_id;
-    } elseif (cashbox_selected_id() === $cashbox_id) {
-      unset($_SESSION['cashbox_id']);
-    }
-    $message = 'Estado actualizado.';
-  } catch (Throwable $t) {
-    if (db()->inTransaction()) {
-      db()->rollBack();
-    }
-    $error = 'No se pudo actualizar el estado.';
-  }
-}
-
 if (is_post() && post('action') === 'delete_cashbox') {
   $cashbox_id = (int)post('cashbox_id');
   if (!$is_superadmin) {
@@ -97,12 +72,8 @@ if (is_post() && post('action') === 'delete_cashbox') {
 
 $list_st = db()->query("SELECT c.id,
   c.name,
-  c.is_active,
-  c.created_at,
-  COALESCE(COUNT(m.id), 0) AS movement_count
+  c.created_at
 FROM cashboxes c
-LEFT JOIN cash_movements m ON m.cashbox_id = c.id
-GROUP BY c.id, c.name, c.is_active, c.created_at
 ORDER BY c.created_at DESC");
 $cashboxes = $list_st->fetchAll();
 ?>
@@ -120,7 +91,7 @@ $cashboxes = $list_st->fetchAll();
   <div class="container">
     <div class="page-header">
       <h2 class="page-title">Administrar cajas</h2>
-      <span class="muted">Creá, activá o eliminá cajas.</span>
+      <span class="muted">Creá o eliminá cajas.</span>
     </div>
 
     <?php if ($message): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
@@ -153,31 +124,21 @@ $cashboxes = $list_st->fetchAll();
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Estado</th>
-              <th>Movimientos</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
-              <?php $is_active = ((int)($cashbox['is_active'] ?? 0)) === 1; ?>
-              <?php $movement_count = (int)($cashbox['movement_count'] ?? 0); ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
-                <td><?= $is_active ? 'Activa' : 'Inactiva' ?></td>
-                <td><?= $movement_count ?></td>
                 <td>
-                  <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
-                    <input type="hidden" name="action" value="toggle_cashbox">
-                    <input type="hidden" name="is_active" value="<?= $is_active ? '0' : '1' ?>">
-                    <button class="btn btn-ghost" type="submit"><?= $is_active ? 'Desactivar' : 'Activar' ?></button>
-                  </form>
-                  <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
-                    <input type="hidden" name="action" value="delete_cashbox">
-                    <button class="btn btn-ghost" type="submit" <?= $is_superadmin ? 'onclick="return confirm(\'¿Eliminar esta caja y sus movimientos?\')"' : 'disabled' ?>>Eliminar</button>
-                  </form>
+                  <?php if ($is_superadmin): ?>
+                    <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
+                      <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
+                      <input type="hidden" name="action" value="delete_cashbox">
+                      <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta caja y sus movimientos?')">Eliminar</button>
+                    </form>
+                  <?php endif; ?>
                 </td>
               </tr>
             <?php endforeach; ?>
