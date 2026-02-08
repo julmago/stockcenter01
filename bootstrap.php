@@ -189,9 +189,6 @@ function getRoleKeyFromSession(): string {
 function role_default_definitions(): array {
   return [
     'superadmin' => ['name' => 'Superadmin', 'is_system' => true],
-    'admin' => ['name' => 'Admin', 'is_system' => false],
-    'vendedor' => ['name' => 'Vendedor', 'is_system' => false],
-    'lectura' => ['name' => 'Lectura', 'is_system' => false],
   ];
 }
 
@@ -381,26 +378,27 @@ function ensure_roles_defaults(): void {
     return;
   }
   ensure_roles_schema();
+  ensure_superadmin_role_exists();
+  $seeded = true;
+}
+
+function ensure_superadmin_role_exists(): void {
+  ensure_roles_schema();
   require_once __DIR__ . '/db.php';
   $pdo = db();
-
-  $roles = role_default_definitions();
-  foreach ($roles as $role_key => $data) {
-    $st = $pdo->prepare("INSERT INTO roles(role_key, role_name, is_system) VALUES(?, ?, ?)
-      ON DUPLICATE KEY UPDATE role_name = role_name, is_system = is_system");
-    $st->execute([$role_key, $data['name'], $data['is_system'] ? 1 : 0]);
+  $st = $pdo->prepare("SELECT 1 FROM roles WHERE role_key = 'superadmin' LIMIT 1");
+  $st->execute();
+  if ($st->fetchColumn()) {
+    return;
   }
-
+  $role = role_default_definitions()['superadmin'];
+  $insert = $pdo->prepare("INSERT INTO roles(role_key, role_name, is_system) VALUES(?, ?, ?)");
+  $insert->execute(['superadmin', $role['name'], $role['is_system'] ? 1 : 0]);
   $permission_defaults = permission_default_definitions();
-  foreach ($permission_defaults as $perm_key => $values) {
-    foreach ($roles as $role_key => $_data) {
-      $value = !empty($values[$role_key]) ? 1 : 0;
-      $st = $pdo->prepare("INSERT INTO role_permissions(role_key, perm_key, perm_value) VALUES(?, ?, ?)
-        ON DUPLICATE KEY UPDATE perm_value = perm_value");
-      $st->execute([$role_key, $perm_key, $value]);
-    }
+  $perm_st = $pdo->prepare("INSERT INTO role_permissions(role_key, perm_key, perm_value) VALUES(?, ?, ?)");
+  foreach ($permission_defaults as $perm_key => $_values) {
+    $perm_st->execute(['superadmin', $perm_key, 1]);
   }
-  $seeded = true;
 }
 
 function hasPerm(string $perm_key): bool {
