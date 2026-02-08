@@ -26,6 +26,24 @@ function fetch_active_cashboxes(): array {
   return $st->fetchAll();
 }
 
+function fetch_accessible_cashboxes(string $perm_key): array {
+  if (getRoleKeyFromSession() === 'superadmin') {
+    return fetch_active_cashboxes();
+  }
+  if (!in_array($perm_key, cashbox_permission_keys(), true)) {
+    return [];
+  }
+  $sql = "SELECT c.id, c.name
+    FROM cashboxes c
+    JOIN role_cashbox_permissions rcp
+      ON rcp.cashbox_id = c.id AND rcp.role_key = ?
+    WHERE c.is_active = 1 AND rcp.{$perm_key} = 1
+    ORDER BY c.name ASC";
+  $st = db()->prepare($sql);
+  $st->execute([getRoleKeyFromSession()]);
+  return $st->fetchAll();
+}
+
 function fetch_cashboxes(): array {
   $st = db()->query("SELECT id, name, is_active FROM cashboxes ORDER BY name ASC");
   return $st->fetchAll();

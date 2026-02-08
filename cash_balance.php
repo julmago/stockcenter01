@@ -3,9 +3,9 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
-require_permission(hasPerm('cashbox_view_balance'), 'Sin permiso para ver el balance.');
 
 $cashbox = require_cashbox_selected();
+require_permission(hasCashboxPerm('can_view_balance', (int)$cashbox['id']), 'Sin permiso para ver el balance.');
 
 $st = db()->prepare("SELECT
   SUM(CASE WHEN type = 'entry' THEN amount ELSE 0 END) AS total_entries,

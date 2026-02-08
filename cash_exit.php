@@ -3,9 +3,9 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
-require_permission(hasPerm('cashbox_create_exit'), 'Sin permiso para crear salidas.');
 
 $cashbox = require_cashbox_selected();
+require_permission(hasCashboxPerm('can_create_exits', (int)$cashbox['id']), 'Sin permiso para crear salidas.');
 $user = current_user();
 
 $message = '';

@@ -4,7 +4,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 
 require_login();
-require_permission(hasPerm('cashbox_manage_boxes'), 'Sin permiso para administrar cajas.');
+require_permission(hasAnyCashboxPerm('can_manage_cashboxes'), 'Sin permiso para administrar cajas.');
 
 $message = '';
 $error = '';
@@ -21,8 +21,14 @@ if (is_post()) {
   $action = (string)post('action');
 
   if ($action === 'create_cashbox') {
+    if (!$is_superadmin && !hasAnyCashboxPerm('can_manage_cashboxes')) {
+      http_response_code(403);
+      $error = 'No autorizado para crear cajas.';
+    }
     $name = trim((string)post('name'));
-    if ($name === '') {
+    if ($error !== '') {
+      // Error already set.
+    } elseif ($name === '') {
       $error = 'El nombre de la caja es obligatorio.';
     } elseif (mb_strlen($name) > 120) {
       $error = 'El nombre debe tener hasta 120 caracteres.';
@@ -53,12 +59,17 @@ if (is_post()) {
 
   if ($action === 'toggle') {
     $cashbox_id = (int)post('id');
+    if (!$is_superadmin && !hasCashboxPerm('can_manage_cashboxes', $cashbox_id)) {
+      http_response_code(403);
+      $error = 'No autorizado para actualizar esta caja.';
+    } else {
     try {
       $st = db()->prepare("UPDATE cashboxes SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?");
       $st->execute([$cashbox_id]);
       $message = 'Estado de la caja actualizado.';
     } catch (Throwable $t) {
       $error = 'No se pudo actualizar el estado de la caja.';
+    }
     }
   }
 
@@ -150,7 +161,8 @@ $cashboxes = $list_st->fetchAll(PDO::FETCH_ASSOC);
               $is_active = isset($row['is_active']) ? (int)$row['is_active'] : null;
               $created_by_user_id = $row['created_by_user_id'] ?? '';
               $created_at = $row['created_at'] ?? '';
-              $can_toggle = $is_active !== null && $cashbox_id > 0;
+              $can_manage_cashbox = $is_superadmin || hasCashboxPerm('can_manage_cashboxes', $cashbox_id);
+              $can_toggle = $can_manage_cashbox && $is_active !== null && $cashbox_id > 0;
               $toggle_label = $is_active === 1 ? 'Pausar' : 'Activar';
               $status_label = $is_active === null ? '—' : (string)$is_active;
               ?>

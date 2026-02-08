@@ -32,14 +32,16 @@ $sections = [
   'Tareas' => [
     'tasks_delete' => 'Eliminar tareas',
   ],
-  'Caja' => [
-    'cashbox_access' => 'Ver módulo Caja',
-    'cashbox_manage_boxes' => 'Administrar cajas',
-    'cashbox_view_balance' => 'Ver balance',
-    'cashbox_create_entry' => 'Crear entradas',
-    'cashbox_create_exit' => 'Crear salidas',
-    'cashbox_config_denoms' => 'Configurar billetes',
-  ],
+];
+
+$cashbox_perm_labels = [
+  'can_view' => 'Mostrar caja',
+  'can_open_module' => 'Ver módulo Caja',
+  'can_manage_cashboxes' => 'Administrar cajas',
+  'can_view_balance' => 'Ver balance',
+  'can_create_entries' => 'Crear entradas',
+  'can_create_exits' => 'Crear salidas',
+  'can_configure_bills' => 'Configurar billetes',
 ];
 
 $message = '';
@@ -111,6 +113,8 @@ if (is_post() && post('action') === 'delete_role') {
           db()->beginTransaction();
           $st = db()->prepare("DELETE FROM role_permissions WHERE role_key = ?");
           $st->execute([$role_key]);
+          $st = db()->prepare("DELETE FROM role_cashbox_permissions WHERE role_key = ?");
+          $st->execute([$role_key]);
           $st = db()->prepare("DELETE FROM roles WHERE role_key = ?");
           $st->execute([$role_key]);
           db()->commit();
@@ -153,6 +157,55 @@ if (is_post() && post('action') === 'save_role') {
             ON DUPLICATE KEY UPDATE perm_value = VALUES(perm_value)");
           $st->execute([$role_key, $perm_key, $value]);
         }
+
+        $cashboxes = db()->query("SELECT id FROM cashboxes ORDER BY name ASC")->fetchAll();
+        if ($cashboxes) {
+          $cashbox_st = db()->prepare(
+            "INSERT INTO role_cashbox_permissions
+              (role_key, cashbox_id, can_view, can_open_module, can_manage_cashboxes, can_view_balance,
+               can_create_entries, can_create_exits, can_configure_bills)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               can_view = VALUES(can_view),
+               can_open_module = VALUES(can_open_module),
+               can_manage_cashboxes = VALUES(can_manage_cashboxes),
+               can_view_balance = VALUES(can_view_balance),
+               can_create_entries = VALUES(can_create_entries),
+               can_create_exits = VALUES(can_create_exits),
+               can_configure_bills = VALUES(can_configure_bills)"
+          );
+          foreach ($cashboxes as $cashbox) {
+            $cashbox_id = (int)$cashbox['id'];
+            $can_view = post('cashbox_' . $cashbox_id . '_can_view') === '1' ? 1 : 0;
+            $can_open_module = post('cashbox_' . $cashbox_id . '_can_open_module') === '1' ? 1 : 0;
+            $can_manage_cashboxes = post('cashbox_' . $cashbox_id . '_can_manage_cashboxes') === '1' ? 1 : 0;
+            $can_view_balance = post('cashbox_' . $cashbox_id . '_can_view_balance') === '1' ? 1 : 0;
+            $can_create_entries = post('cashbox_' . $cashbox_id . '_can_create_entries') === '1' ? 1 : 0;
+            $can_create_exits = post('cashbox_' . $cashbox_id . '_can_create_exits') === '1' ? 1 : 0;
+            $can_configure_bills = post('cashbox_' . $cashbox_id . '_can_configure_bills') === '1' ? 1 : 0;
+
+            if ($can_view === 0) {
+              $can_open_module = 0;
+              $can_manage_cashboxes = 0;
+              $can_view_balance = 0;
+              $can_create_entries = 0;
+              $can_create_exits = 0;
+              $can_configure_bills = 0;
+            }
+
+            $cashbox_st->execute([
+              $role_key,
+              $cashbox_id,
+              $can_view,
+              $can_open_module,
+              $can_manage_cashboxes,
+              $can_view_balance,
+              $can_create_entries,
+              $can_create_exits,
+              $can_configure_bills,
+            ]);
+          }
+        }
         db()->commit();
         $message = 'Cambios guardados.';
       } catch (Throwable $t) {
@@ -169,6 +222,8 @@ $st = db()->query("SELECT role_key, role_name, is_system FROM roles ORDER BY is_
 $roles = $st->fetchAll();
 $role_keys = array_map(static fn($role) => $role['role_key'], $roles);
 
+$cashboxes = db()->query("SELECT id, name FROM cashboxes ORDER BY name ASC")->fetchAll();
+
 $perm_map = [];
 if ($role_keys) {
   $placeholders = implode(',', array_fill(0, count($role_keys), '?'));
@@ -184,6 +239,40 @@ foreach ($role_keys as $role_key) {
   foreach ($perm_keys as $perm_key) {
     if (!isset($perm_map[$role_key][$perm_key])) {
       $perm_map[$role_key][$perm_key] = !empty($perm_defaults[$perm_key][$role_key]);
+    }
+  }
+}
+
+$cashbox_perm_map = [];
+if ($role_keys) {
+  $placeholders = implode(',', array_fill(0, count($role_keys), '?'));
+  $st = db()->prepare(
+    "SELECT role_key, cashbox_id, can_view, can_open_module, can_manage_cashboxes, can_view_balance,
+      can_create_entries, can_create_exits, can_configure_bills
+     FROM role_cashbox_permissions WHERE role_key IN ({$placeholders})"
+  );
+  $st->execute($role_keys);
+  $cashbox_rows = $st->fetchAll();
+  foreach ($cashbox_rows as $row) {
+    $role_key = $row['role_key'];
+    $cashbox_id = (int)$row['cashbox_id'];
+    $cashbox_perm_map[$role_key][$cashbox_id] = [
+      'can_view' => (bool)$row['can_view'],
+      'can_open_module' => (bool)$row['can_open_module'],
+      'can_manage_cashboxes' => (bool)$row['can_manage_cashboxes'],
+      'can_view_balance' => (bool)$row['can_view_balance'],
+      'can_create_entries' => (bool)$row['can_create_entries'],
+      'can_create_exits' => (bool)$row['can_create_exits'],
+      'can_configure_bills' => (bool)$row['can_configure_bills'],
+    ];
+  }
+}
+
+foreach ($role_keys as $role_key) {
+  foreach ($cashboxes as $cashbox) {
+    $cashbox_id = (int)$cashbox['id'];
+    if (!isset($cashbox_perm_map[$role_key][$cashbox_id])) {
+      $cashbox_perm_map[$role_key][$cashbox_id] = array_fill_keys(array_keys($cashbox_perm_labels), false);
     }
   }
 }
@@ -294,6 +383,41 @@ foreach ($role_keys as $role_key) {
             </div>
           <?php endforeach; ?>
 
+          <?php if ($cashboxes): ?>
+            <div class="card stack" style="padding:16px;">
+              <strong>Caja</strong>
+              <?php foreach ($cashboxes as $cashbox): ?>
+                <?php
+                  $cashbox_id = (int)$cashbox['id'];
+                  $cashbox_name = (string)$cashbox['name'];
+                  $cashbox_perms = $cashbox_perm_map[$role_key][$cashbox_id] ?? array_fill_keys(array_keys($cashbox_perm_labels), false);
+                ?>
+                <div class="card" style="padding:12px;" data-cashbox-permissions>
+                  <strong><?= e("Caja: {$cashbox_name}") ?></strong>
+                  <div class="form-row" style="flex-wrap:wrap; margin-top:8px;">
+                    <?php foreach ($cashbox_perm_labels as $perm_key => $label): ?>
+                      <?php
+                        $checked = $is_locked ? true : !empty($cashbox_perms[$perm_key]);
+                        $is_master = $perm_key === 'can_view';
+                      ?>
+                      <label class="form-check" style="min-width:220px;">
+                        <input
+                          type="checkbox"
+                          name="cashbox_<?= e((string)$cashbox_id) ?>_<?= e($perm_key) ?>"
+                          value="1"
+                          <?= $checked ? 'checked' : '' ?>
+                          <?= $is_locked ? 'disabled' : '' ?>
+                          <?= $is_master ? 'data-cashbox-master' : 'data-cashbox-secondary' ?>
+                        >
+                        <span><?= e($label) ?></span>
+                      </label>
+                    <?php endforeach; ?>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+
           <?php if (!$is_locked): ?>
             <div class="form-actions">
               <button class="btn" type="submit">Guardar cambios</button>
@@ -304,5 +428,30 @@ foreach ($role_keys as $role_key) {
     <?php endforeach; ?>
   </div>
 </main>
+<script>
+  (() => {
+    const sections = document.querySelectorAll('[data-cashbox-permissions]');
+    const sync = (section) => {
+      const master = section.querySelector('[data-cashbox-master]');
+      if (!master || master.disabled) {
+        return;
+      }
+      const enabled = master.checked;
+      section.querySelectorAll('[data-cashbox-secondary]').forEach((input) => {
+        if (!enabled) {
+          input.checked = false;
+        }
+        input.disabled = !enabled;
+      });
+    };
+    sections.forEach((section) => {
+      const master = section.querySelector('[data-cashbox-master]');
+      if (master) {
+        master.addEventListener('change', () => sync(section));
+      }
+      sync(section);
+    });
+  })();
+</script>
 </body>
 </html>
