@@ -7,7 +7,7 @@ $is_superadmin = $role === 'superadmin';
 $can_manage_tasks_settings = hasPerm('tasks_settings');
 $can_manage_prestashop = hasPerm('menu_config_prestashop');
 $can_view_design = hasPerm('menu_design');
-$can_cashbox_access = hasPerm('cashbox_access');
+$can_cashbox_access = false;
 $can_cashbox_manage = hasPerm('cashbox_manage_boxes');
 $show_config_menu = $can_manage_tasks_settings || $can_manage_prestashop || $can_view_design || $can_cashbox_manage || $is_superadmin;
 $display_name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
@@ -17,12 +17,12 @@ if ($display_name === '') {
 
 $cashboxes = [];
 $active_cashbox_id = 0;
-$cash_redirect_target = url_path('cash_select.php');
-if ($can_cashbox_access) {
+if ($is_superadmin || hasAnyCashboxPerm('can_view')) {
   require_once __DIR__ . '/../cash_helpers.php';
-  $cashboxes = fetch_cashboxes();
+  $cashboxes = getAllowedCashboxes(db(), $u);
   $active_cashbox_id = cashbox_selected_id();
 }
+$can_cashbox_access = !empty($cashboxes);
 ?>
 <header class="topbar">
   <div class="container topbar-content">
@@ -40,21 +40,17 @@ if ($can_cashbox_access) {
               Caja <span aria-hidden="true">▾</span>
             </button>
             <div class="cash-menu-dropdown" role="menu">
-              <?php if ($cashboxes): ?>
-                <?php foreach ($cashboxes as $cashbox): ?>
-                  <?php
-                    $cashbox_id = (int)$cashbox['id'];
-                    $is_active = $cashbox_id === $active_cashbox_id;
-                  ?>
-                  <a class="cash-menu-item<?= $is_active ? ' cash-menu-item--active' : '' ?>"
-                     href="<?= url_path('cash_set.php') ?>?id=<?= $cashbox_id ?>&redirect=<?= urlencode($cash_redirect_target) ?>"
-                     role="menuitem">
-                    <?= e($cashbox['name']) ?>
-                  </a>
-                <?php endforeach; ?>
-              <?php else: ?>
-                <span class="cash-menu-empty">No hay cajas creadas.</span>
-              <?php endif; ?>
+              <?php foreach ($cashboxes as $cashbox): ?>
+                <?php
+                  $cashbox_id = (int)$cashbox['id'];
+                  $is_active = $cashbox_id === $active_cashbox_id;
+                ?>
+                <a class="cash-menu-item<?= $is_active ? ' cash-menu-item--active' : '' ?>"
+                   href="<?= url_path('cash_select.php?cashbox_id=' . $cashbox_id) ?>"
+                   role="menuitem">
+                  <?= e($cashbox['name']) ?>
+                </a>
+              <?php endforeach; ?>
             </div>
           </div>
         <?php endif; ?>
