@@ -607,6 +607,10 @@ function theme_catalog(): array {
       'name' => 'Rojo & Oro',
       'description' => 'Estética elegante en rojo profundo con acentos dorados suaves.',
     ],
+    'theme_ares' => [
+      'name' => 'Ares',
+      'description' => 'Oscuro y futurista, con neón rojo y acentos dorados.',
+    ],
   ];
 }
 
