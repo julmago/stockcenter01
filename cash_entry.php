@@ -164,6 +164,9 @@ if ($responsible_name === '') {
             <button type="button" data-action="vat-minus">- IVA</button>
             <button type="button" data-action="equals">=</button>
           </div>
+          <button class="btn btn-ghost calculator-copy" type="button" data-calculator-copy>
+            Usar total como efectivo
+          </button>
         </div>
       </div>
     <?php endif; ?>
@@ -206,6 +209,7 @@ if ($responsible_name === '') {
     const display = document.querySelector('[data-calculator-display]');
     const keypad = document.querySelector('[data-calculator]');
     const calculatorCard = document.querySelector('.cash-calculator');
+    const calculatorCopyButton = document.querySelector('[data-calculator-copy]');
     let expression = '0';
     let calculatorActive = false;
 
@@ -279,6 +283,21 @@ if ($responsible_name === '') {
       const value = target.getAttribute('data-value');
       const action = target.getAttribute('data-action');
       applyCalculatorInput({ value, action });
+    });
+
+    calculatorCopyButton?.addEventListener('click', () => {
+      if (!display || !amountInput) return;
+      const evaluated = evaluateExpression();
+      let parsed = evaluated;
+      if (parsed === null) {
+        const raw = display.value || '';
+        const normalized = raw.replace(/[^0-9,.\-]/g, '').replace(',', '.');
+        parsed = Number.parseFloat(normalized);
+      }
+      if (Number.isFinite(parsed)) {
+        amountInput.value = parsed.toFixed(2);
+        amountInput.focus();
+      }
     });
 
     const setCalculatorActive = (active) => {

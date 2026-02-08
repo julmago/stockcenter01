@@ -4,6 +4,9 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 
+$can_view_entries_detail = hasPerm('cash.view_entries_detail');
+require_permission($can_view_entries_detail, 'Sin permiso para ver el detalle de entradas.');
+
 $cashbox_id = (int)($_SESSION['cashbox_id'] ?? 0);
 $cashbox_name = '—';
 if ($cashbox_id > 0) {
@@ -13,21 +16,21 @@ if ($cashbox_id > 0) {
 }
 
 $cashbox = null;
-$can_manage_entries = false;
+$can_edit_entries = hasPerm('cash.entries.edit');
+$can_delete_entries = hasPerm('cash.entries.delete');
+$show_entry_actions = $can_edit_entries || $can_delete_entries;
 if ($cashbox_id > 0) {
   $cashbox = require_cashbox_selected();
   require_permission(hasCashboxPerm('can_view_balance', (int)$cashbox['id']), 'Sin permiso para ver el balance.');
-  $can_manage_entries = hasCashboxPerm('can_create_entries', (int)$cashbox['id']);
 }
 
 $message = '';
 $error = '';
 
 if (is_post() && post('action') === 'delete_entry') {
+  require_permission($can_delete_entries, 'Sin permiso para eliminar entradas.');
   if (!$cashbox) {
     $error = 'Seleccioná una caja activa para continuar.';
-  } elseif (!$can_manage_entries) {
-    $error = 'Sin permiso para eliminar entradas.';
   } else {
     $entry_id = (int)post('id');
     if ($entry_id <= 0) {
@@ -94,7 +97,9 @@ if ($cashbox) {
               <th>Responsable</th>
               <th>Detalle</th>
               <th>Monto</th>
-              <th>Acciones</th>
+              <?php if ($show_entry_actions): ?>
+                <th>Acciones</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody>
@@ -115,18 +120,20 @@ if ($cashbox) {
                 <td><?= e($responsible) ?></td>
                 <td><?= e($detail) ?></td>
                 <td>$<?= number_format($amount, 2, ',', '.') ?></td>
-                <td class="table-actions">
-                  <?php if ($can_manage_entries): ?>
-                    <a class="btn btn-ghost" href="<?= url_path('cash_entry_edit.php?id=' . $entry_id) ?>">Modificar</a>
-                    <form method="post" style="display: inline-flex; gap: 0.5rem;">
-                      <input type="hidden" name="action" value="delete_entry">
-                      <input type="hidden" name="id" value="<?= $entry_id ?>">
-                      <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta entrada?')">Eliminar</button>
-                    </form>
-                  <?php else: ?>
-                    <span class="muted">Sin permisos</span>
-                  <?php endif; ?>
-                </td>
+                <?php if ($show_entry_actions): ?>
+                  <td class="table-actions">
+                    <?php if ($can_edit_entries): ?>
+                      <a class="btn btn-ghost" href="<?= url_path('cash_entry_edit.php?id=' . $entry_id) ?>">Modificar</a>
+                    <?php endif; ?>
+                    <?php if ($can_delete_entries): ?>
+                      <form method="post" style="display: inline-flex; gap: 0.5rem;">
+                        <input type="hidden" name="action" value="delete_entry">
+                        <input type="hidden" name="id" value="<?= $entry_id ?>">
+                        <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta entrada?')">Eliminar</button>
+                      </form>
+                    <?php endif; ?>
+                  </td>
+                <?php endif; ?>
               </tr>
             <?php endforeach; ?>
           </tbody>

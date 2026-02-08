@@ -17,6 +17,8 @@ if ($cashbox_id > 0) {
   $cashbox = require_cashbox_selected();
   require_permission(hasCashboxPerm('can_view_balance', (int)$cashbox['id']), 'Sin permiso para ver el balance.');
 }
+$can_view_entries_detail = hasPerm('cash.view_entries_detail');
+$can_view_exits_detail = hasPerm('cash.view_exits_detail');
 
 $total_entries = 0.0;
 $total_exits = 0.0;
@@ -60,7 +62,7 @@ $balance = $total_entries - $total_exits;
           <h3 class="card-title">Total Entradas</h3>
         </div>
         <strong style="font-size: 1.4rem;">$<?= number_format($total_entries, 2, ',', '.') ?></strong>
-        <?php if ($cashbox): ?>
+        <?php if ($cashbox && $can_view_entries_detail): ?>
           <div class="form-actions" style="margin-top: var(--space-3);">
             <a class="btn btn-ghost" href="<?= url_path('cash_entries_list.php') ?>">Ver detalle</a>
           </div>
@@ -71,7 +73,7 @@ $balance = $total_entries - $total_exits;
           <h3 class="card-title">Total Salidas</h3>
         </div>
         <strong style="font-size: 1.4rem;">$<?= number_format($total_exits, 2, ',', '.') ?></strong>
-        <?php if ($cashbox): ?>
+        <?php if ($cashbox && $can_view_exits_detail): ?>
           <div class="form-actions" style="margin-top: var(--space-3);">
             <a class="btn btn-ghost" href="<?= url_path('cash_exits_list.php') ?>">Ver detalle</a>
           </div>

@@ -15,7 +15,7 @@ if ($cashbox_id > 0) {
 $cashbox = null;
 if ($cashbox_id > 0) {
   $cashbox = require_cashbox_selected();
-  require_permission(hasCashboxPerm('can_create_exits', (int)$cashbox['id']), 'Sin permiso para modificar salidas.');
+  require_permission(hasPerm('cash.exits.edit'), 'Sin permiso para modificar salidas.');
 }
 
 $exit_id = (int)get('id');

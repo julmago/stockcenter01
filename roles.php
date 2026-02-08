@@ -32,6 +32,14 @@ $sections = [
   'Tareas' => [
     'tasks_delete' => 'Eliminar tareas',
   ],
+  'Caja' => [
+    'cash.view_entries_detail' => 'Ver detalle de entradas',
+    'cash.view_exits_detail' => 'Ver detalle de salidas',
+    'cash.entries.edit' => 'Modificar entradas',
+    'cash.entries.delete' => 'Eliminar entradas',
+    'cash.exits.edit' => 'Modificar salidas',
+    'cash.exits.delete' => 'Eliminar salidas',
+  ],
 ];
 
 $cashbox_perm_labels = [
