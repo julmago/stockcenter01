@@ -29,7 +29,6 @@ if (is_post()) {
     } else {
       try {
         db()->beginTransaction();
-        db()->exec("UPDATE cashboxes SET is_active = 0");
         $st = db()->prepare("INSERT INTO cashboxes (name, is_active, created_by_user_id) VALUES (?, 1, ?)");
         $st->execute([$name, (int)$user['id']]);
         $cashbox_id = (int)db()->lastInsertId();
