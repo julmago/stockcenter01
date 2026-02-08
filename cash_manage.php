@@ -97,7 +97,7 @@ if (is_post() && post('action') === 'delete_cashbox') {
 
 $list_st = db()->query("SELECT c.id,
   c.name,
-  COALESCE(CAST(c.is_active AS UNSIGNED), 0) AS is_active,
+  c.is_active AS is_active,
   c.created_at,
   (
     SELECT COUNT(*)
@@ -162,7 +162,7 @@ $cashboxes = $list_st->fetchAll();
           </thead>
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
-              <?php $is_active = (int)($cashbox['is_active'] ?? 0) === 1; ?>
+              <?php $is_active = cashbox_is_active($cashbox['is_active'] ?? 0); ?>
               <?php $movement_count = (int)($cashbox['movement_count'] ?? 0); ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
