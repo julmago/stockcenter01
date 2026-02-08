@@ -70,11 +70,26 @@ if (is_post() && post('action') === 'delete_cashbox') {
   }
 }
 
+if (is_post() && post('action') === 'toggle_cashbox') {
+  $cashbox_id = (int)post('cashbox_id');
+  try {
+    $st = db()->prepare("UPDATE cashboxes SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?");
+    $st->execute([$cashbox_id]);
+    $message = 'Estado de la caja actualizado.';
+  } catch (Throwable $t) {
+    $error = 'No se pudo actualizar el estado de la caja.';
+  }
+}
+
 $list_st = db()->query("SELECT c.id,
   c.name,
-  c.created_at
+  c.is_active,
+  COALESCE(SUM(CASE WHEN cm.type = 'entry' THEN 1 ELSE 0 END), 0) AS entradas_count,
+  COALESCE(SUM(CASE WHEN cm.type = 'exit' THEN 1 ELSE 0 END), 0) AS salidas_count
 FROM cashboxes c
-ORDER BY c.created_at DESC");
+LEFT JOIN cash_movements cm ON cm.cashbox_id = c.id
+GROUP BY c.id, c.name, c.is_active
+ORDER BY c.name");
 $cashboxes = $list_st->fetchAll();
 ?>
 <!doctype html>
@@ -124,14 +139,26 @@ $cashboxes = $list_st->fetchAll();
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Estado</th>
+              <th>Entradas</th>
+              <th>Salidas</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
+              <?php $is_active = ((int)$cashbox['is_active'] === 1); ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
+                <td><?= $is_active ? 'Activa' : 'Inactiva' ?></td>
+                <td><?= (int)$cashbox['entradas_count'] ?></td>
+                <td><?= (int)$cashbox['salidas_count'] ?></td>
                 <td>
+                  <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
+                    <input type="hidden" name="action" value="toggle_cashbox">
+                    <button class="btn btn-ghost" type="submit"><?= $is_active ? 'Pausar' : 'Activar' ?></button>
+                  </form>
                   <?php if ($is_superadmin): ?>
                     <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
                       <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
