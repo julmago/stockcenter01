@@ -81,16 +81,21 @@ if (is_post() && post('action') === 'toggle_cashbox') {
   }
 }
 
-$list_st = db()->query("SELECT c.id,
-  c.name,
-  c.is_active,
+$list_sql = "SELECT cb.id,
+  cb.name,
+  cb.is_active AS is_active,
   COALESCE(SUM(CASE WHEN cm.type = 'entry' THEN 1 ELSE 0 END), 0) AS entradas_count,
   COALESCE(SUM(CASE WHEN cm.type = 'exit' THEN 1 ELSE 0 END), 0) AS salidas_count
-FROM cashboxes c
-LEFT JOIN cash_movements cm ON cm.cashbox_id = c.id
-GROUP BY c.id, c.name, c.is_active
-ORDER BY c.name");
-$cashboxes = $list_st->fetchAll();
+FROM cashboxes cb
+LEFT JOIN cash_movements cm ON cm.cashbox_id = cb.id
+GROUP BY cb.id, cb.name, cb.is_active
+ORDER BY cb.id DESC";
+error_log('[cash_manage] cashboxes SQL: ' . $list_sql);
+$list_st = db()->query($list_sql);
+$cashboxes = $list_st->fetchAll(PDO::FETCH_ASSOC);
+if (!empty($cashboxes)) {
+  error_log('[cash_manage] cashbox row: ' . print_r($cashboxes[0], true));
+}
 ?>
 <!doctype html>
 <html>
@@ -148,29 +153,31 @@ $cashboxes = $list_st->fetchAll();
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
               <?php
-              $cashbox = array_merge([
-                'id' => 0,
-                'name' => '',
-                'is_active' => 0,
-                'entradas_count' => 0,
-                'salidas_count' => 0,
-              ], is_array($cashbox) ? $cashbox : []);
-              $is_active = ((int)$cashbox['is_active'] === 1);
+              if (is_array($cashbox)) {
+                error_log('[cash_manage] cashbox row (loop): ' . print_r($cashbox, true));
+              }
+              $cashbox = is_array($cashbox) ? $cashbox : [];
+              $cashbox_id = (int)($cashbox['id'] ?? 0);
+              $cashbox_name = $cashbox['name'] ?? '';
+              $is_active_value = isset($cashbox['is_active']) ? (int)$cashbox['is_active'] : 0;
+              $is_active = ($is_active_value === 1);
+              $entradas_count = (int)($cashbox['entradas_count'] ?? 0);
+              $salidas_count = (int)($cashbox['salidas_count'] ?? 0);
               ?>
               <tr>
-                <td><?= e($cashbox['name']) ?></td>
-                <td><?= e($cashbox['is_active']) ?></td>
-                <td><?= (int)($cashbox['entradas_count'] ?? 0) ?></td>
-                <td><?= (int)($cashbox['salidas_count'] ?? 0) ?></td>
+                <td><?= e($cashbox_name) ?></td>
+                <td><?= e($is_active_value) ?></td>
+                <td><?= $entradas_count ?></td>
+                <td><?= $salidas_count ?></td>
                 <td>
                   <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
+                    <input type="hidden" name="cashbox_id" value="<?= $cashbox_id ?>">
                     <input type="hidden" name="action" value="toggle_cashbox">
                     <button class="btn btn-ghost" type="submit"><?= $is_active ? 'Pausar' : 'Activar' ?></button>
                   </form>
                   <?php if ($is_superadmin): ?>
                     <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
-                      <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
+                      <input type="hidden" name="cashbox_id" value="<?= $cashbox_id ?>">
                       <input type="hidden" name="action" value="delete_cashbox">
                       <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta caja y sus movimientos?')">Eliminar</button>
                     </form>
