@@ -148,7 +148,14 @@ $cashboxes = $list_st->fetchAll();
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
               <?php
-              $is_active = ((int)($cashbox['is_active'] ?? 0) === 1);
+              $cashbox = array_merge([
+                'id' => 0,
+                'name' => '',
+                'is_active' => 0,
+                'entradas_count' => 0,
+                'salidas_count' => 0,
+              ], is_array($cashbox) ? $cashbox : []);
+              $is_active = ((int)$cashbox['is_active'] === 1);
               $status_label = $is_active ? 'Activa' : 'Pausada';
               ?>
               <tr>
