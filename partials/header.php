@@ -9,7 +9,7 @@ $can_manage_prestashop = hasPerm('menu_config_prestashop');
 $can_view_design = hasPerm('menu_design');
 $can_cashbox_access = hasPerm('cashbox_access');
 $can_cashbox_manage = hasPerm('cashbox_manage_boxes');
-$show_config_menu = $can_manage_tasks_settings || $can_manage_prestashop || $can_view_design || $is_superadmin;
+$show_config_menu = $can_manage_tasks_settings || $can_manage_prestashop || $can_view_design || $can_cashbox_manage || $is_superadmin;
 $display_name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
 if ($display_name === '') {
   $display_name = $u['email'] ?? 'Usuario';
@@ -68,9 +68,6 @@ if ($can_cashbox_access) {
                 <span class="cash-menu-empty">No hay cajas activas.</span>
               <?php endif; ?>
               <a class="cash-menu-item" href="<?= url_path('cash_select.php') ?>" role="menuitem">Ir a Caja</a>
-              <?php if ($can_cashbox_manage): ?>
-                <a class="cash-menu-item" href="<?= url_path('cash_manage.php') ?>" role="menuitem">Administrar cajas</a>
-              <?php endif; ?>
             </div>
           </div>
         <?php endif; ?>
@@ -91,6 +88,9 @@ if ($can_cashbox_access) {
               <?php endif; ?>
               <?php if ($is_superadmin): ?>
                 <a class="config-menu-item" href="<?= url_path('roles.php') ?>" role="menuitem">Roles</a>
+              <?php endif; ?>
+              <?php if ($can_cashbox_manage): ?>
+                <a class="config-menu-item" href="<?= url_path('cash_manage.php') ?>" role="menuitem">Administrar cajas</a>
               <?php endif; ?>
             </div>
           </div>

@@ -8,6 +8,9 @@ require_permission(hasPerm('cashbox_manage_boxes'), 'Sin permiso para administra
 $message = '';
 $error = '';
 $default_denoms = [100, 500, 1000, 2000, 10000, 20000];
+$user = current_user();
+$role = $user['role'] ?? '';
+$is_superadmin = $role === 'superadmin';
 
 if (is_post() && post('action') === 'create_cashbox') {
   $name = trim((string)post('name'));
@@ -18,8 +21,9 @@ if (is_post() && post('action') === 'create_cashbox') {
   } else {
     try {
       db()->beginTransaction();
+      db()->exec("UPDATE cashboxes SET is_active = 0");
       $st = db()->prepare("INSERT INTO cashboxes (name, is_active, created_by_user_id) VALUES (?, 1, ?)");
-      $st->execute([$name, (int)current_user()['id']]);
+      $st->execute([$name, (int)$user['id']]);
       $cashbox_id = (int)db()->lastInsertId();
 
       $denom_st = db()->prepare("INSERT INTO cash_denominations (cashbox_id, value, is_active, sort_order) VALUES (?, ?, 1, ?)");
@@ -29,6 +33,7 @@ if (is_post() && post('action') === 'create_cashbox') {
         $sort += 10;
       }
       db()->commit();
+      $_SESSION['cashbox_id'] = $cashbox_id;
       $message = 'Caja creada correctamente.';
     } catch (Throwable $t) {
       if (db()->inTransaction()) {
@@ -42,22 +47,51 @@ if (is_post() && post('action') === 'create_cashbox') {
 if (is_post() && post('action') === 'toggle_cashbox') {
   $cashbox_id = (int)post('cashbox_id');
   $is_active = post('is_active') === '1' ? 1 : 0;
-  $st = db()->prepare("UPDATE cashboxes SET is_active = ? WHERE id = ?");
-  $st->execute([$is_active, $cashbox_id]);
-  $message = 'Estado actualizado.';
+  try {
+    db()->beginTransaction();
+    if ($is_active === 1) {
+      db()->exec("UPDATE cashboxes SET is_active = 0");
+    }
+    $st = db()->prepare("UPDATE cashboxes SET is_active = ? WHERE id = ?");
+    $st->execute([$is_active, $cashbox_id]);
+    db()->commit();
+    if ($is_active === 1) {
+      $_SESSION['cashbox_id'] = $cashbox_id;
+    } elseif (cashbox_selected_id() === $cashbox_id) {
+      unset($_SESSION['cashbox_id']);
+    }
+    $message = 'Estado actualizado.';
+  } catch (Throwable $t) {
+    if (db()->inTransaction()) {
+      db()->rollBack();
+    }
+    $error = 'No se pudo actualizar el estado.';
+  }
 }
 
 if (is_post() && post('action') === 'delete_cashbox') {
   $cashbox_id = (int)post('cashbox_id');
-  $st = db()->prepare("SELECT COUNT(*) FROM cash_movements WHERE cashbox_id = ?");
-  $st->execute([$cashbox_id]);
-  $movements = (int)$st->fetchColumn();
-  if ($movements > 0) {
-    $error = 'No se puede eliminar la caja porque tiene movimientos.';
+  if (!$is_superadmin) {
+    http_response_code(403);
+    $error = 'No autorizado para eliminar cajas.';
   } else {
-    $st = db()->prepare("DELETE FROM cashboxes WHERE id = ?");
-    $st->execute([$cashbox_id]);
-    $message = 'Caja eliminada.';
+    try {
+      db()->beginTransaction();
+      $st = db()->prepare("DELETE FROM cash_movements WHERE cashbox_id = ?");
+      $st->execute([$cashbox_id]);
+      $st = db()->prepare("DELETE FROM cashboxes WHERE id = ?");
+      $st->execute([$cashbox_id]);
+      db()->commit();
+      if (cashbox_selected_id() === $cashbox_id) {
+        unset($_SESSION['cashbox_id']);
+      }
+      $message = 'Caja eliminada.';
+    } catch (Throwable $t) {
+      if (db()->inTransaction()) {
+        db()->rollBack();
+      }
+      $error = 'No se pudo eliminar la caja.';
+    }
   }
 }
 
@@ -142,7 +176,7 @@ $cashboxes = $list_st->fetchAll();
                   <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
                     <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
                     <input type="hidden" name="action" value="delete_cashbox">
-                    <button class="btn btn-ghost" type="submit" <?= $movement_count > 0 ? 'disabled' : '' ?>>Eliminar</button>
+                    <button class="btn btn-ghost" type="submit" <?= $is_superadmin ? 'onclick="return confirm(\'¿Eliminar esta caja y sus movimientos?\')"' : 'disabled' ?>>Eliminar</button>
                   </form>
                 </td>
               </tr>
