@@ -15,7 +15,7 @@ if ($cashbox_id > 0) {
 $cashbox = null;
 if ($cashbox_id > 0) {
   $cashbox = require_cashbox_selected();
-  require_permission(hasCashboxPerm('can_create_entries', (int)$cashbox['id']), 'Sin permiso para modificar entradas.');
+  require_permission(hasPerm('cash.entries.edit'), 'Sin permiso para modificar entradas.');
 }
 
 $entry_id = (int)get('id');

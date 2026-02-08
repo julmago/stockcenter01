@@ -4,6 +4,9 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 
+$can_view_exits_detail = hasPerm('cash.view_exits_detail');
+require_permission($can_view_exits_detail, 'Sin permiso para ver el detalle de salidas.');
+
 $cashbox_id = (int)($_SESSION['cashbox_id'] ?? 0);
 $cashbox_name = '—';
 if ($cashbox_id > 0) {
@@ -13,21 +16,21 @@ if ($cashbox_id > 0) {
 }
 
 $cashbox = null;
-$can_manage_exits = false;
+$can_edit_exits = hasPerm('cash.exits.edit');
+$can_delete_exits = hasPerm('cash.exits.delete');
+$show_exit_actions = $can_edit_exits || $can_delete_exits;
 if ($cashbox_id > 0) {
   $cashbox = require_cashbox_selected();
   require_permission(hasCashboxPerm('can_view_balance', (int)$cashbox['id']), 'Sin permiso para ver el balance.');
-  $can_manage_exits = hasCashboxPerm('can_create_exits', (int)$cashbox['id']);
 }
 
 $message = '';
 $error = '';
 
 if (is_post() && post('action') === 'delete_exit') {
+  require_permission($can_delete_exits, 'Sin permiso para eliminar salidas.');
   if (!$cashbox) {
     $error = 'Seleccioná una caja activa para continuar.';
-  } elseif (!$can_manage_exits) {
-    $error = 'Sin permiso para eliminar salidas.';
   } else {
     $exit_id = (int)post('id');
     if ($exit_id <= 0) {
@@ -94,7 +97,9 @@ if ($cashbox) {
               <th>Responsable</th>
               <th>Detalle</th>
               <th>Monto</th>
-              <th>Acciones</th>
+              <?php if ($show_exit_actions): ?>
+                <th>Acciones</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody>
@@ -115,18 +120,20 @@ if ($cashbox) {
                 <td><?= e($responsible) ?></td>
                 <td><?= e($detail) ?></td>
                 <td>$<?= number_format($amount, 2, ',', '.') ?></td>
-                <td class="table-actions">
-                  <?php if ($can_manage_exits): ?>
-                    <a class="btn btn-ghost" href="<?= url_path('cash_exit_edit.php?id=' . $exit_id) ?>">Modificar</a>
-                    <form method="post" style="display: inline-flex; gap: 0.5rem;">
-                      <input type="hidden" name="action" value="delete_exit">
-                      <input type="hidden" name="id" value="<?= $exit_id ?>">
-                      <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta salida?')">Eliminar</button>
-                    </form>
-                  <?php else: ?>
-                    <span class="muted">Sin permisos</span>
-                  <?php endif; ?>
-                </td>
+                <?php if ($show_exit_actions): ?>
+                  <td class="table-actions">
+                    <?php if ($can_edit_exits): ?>
+                      <a class="btn btn-ghost" href="<?= url_path('cash_exit_edit.php?id=' . $exit_id) ?>">Modificar</a>
+                    <?php endif; ?>
+                    <?php if ($can_delete_exits): ?>
+                      <form method="post" style="display: inline-flex; gap: 0.5rem;">
+                        <input type="hidden" name="action" value="delete_exit">
+                        <input type="hidden" name="id" value="<?= $exit_id ?>">
+                        <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta salida?')">Eliminar</button>
+                      </form>
+                    <?php endif; ?>
+                  </td>
+                <?php endif; ?>
               </tr>
             <?php endforeach; ?>
           </tbody>
