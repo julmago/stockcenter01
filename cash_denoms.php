@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 require_permission(hasPerm('cashbox_config_denoms'), 'Sin permiso para configurar billetes.');
@@ -61,7 +61,7 @@ $denominations = $list_st->fetchAll();
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/../partials/header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
@@ -131,7 +131,7 @@ $denominations = $list_st->fetchAll();
           </table>
           <div class="form-actions" style="margin-top: var(--space-3);">
             <button class="btn" type="submit">Guardar orden</button>
-            <a class="btn btn-ghost" href="cash_select.php">Volver</a>
+            <a class="btn btn-ghost" href="<?= url_path('cash_select.php') ?>">Volver</a>
           </div>
         </form>
         <?php foreach ($denominations as $denom): ?>

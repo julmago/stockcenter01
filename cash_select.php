@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 require_permission(hasPerm('cashbox_access'), 'Sin permiso para acceder a Caja.');
@@ -38,7 +38,7 @@ $can_view_balance = hasPerm('cashbox_view_balance');
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/../partials/header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
@@ -81,10 +81,10 @@ $can_view_balance = hasPerm('cashbox_view_balance');
     </div>
 
     <div class="cash-actions">
-      <a class="cash-action-card" href="cash_entry.php">ENTRADA</a>
-      <a class="cash-action-card" href="cash_exit.php">SALIDA</a>
+      <a class="cash-action-card" href="<?= url_path('cash_entry.php') ?>">ENTRADA</a>
+      <a class="cash-action-card" href="<?= url_path('cash_exit.php') ?>">SALIDA</a>
       <?php if ($can_view_balance): ?>
-        <a class="cash-action-card" href="cash_balance.php">CAJA</a>
+        <a class="cash-action-card" href="<?= url_path('cash_balance.php') ?>">CAJA</a>
       <?php endif; ?>
     </div>
   </div>

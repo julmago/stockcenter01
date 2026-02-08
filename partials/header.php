@@ -18,9 +18,9 @@ if ($display_name === '') {
 $cashboxes = [];
 $active_cashbox_id = 0;
 $active_cashbox_name = 'Sin caja';
-$cash_redirect_target = (string)($_SERVER['REQUEST_URI'] ?? 'dashboard.php');
+$cash_redirect_target = (string)($_SERVER['REQUEST_URI'] ?? url_path('dashboard.php'));
 if ($can_cashbox_access) {
-  require_once __DIR__ . '/../cash/cash_helpers.php';
+  require_once __DIR__ . '/../cash_helpers.php';
   $cashboxes = fetch_active_cashboxes();
   $active_cashbox_id = cashbox_selected_id();
   $active_cashbox = $active_cashbox_id > 0 ? fetch_cashbox_by_id($active_cashbox_id, false) : null;
@@ -34,13 +34,13 @@ if ($can_cashbox_access) {
 <header class="topbar">
   <div class="container topbar-content">
     <div class="topbar-left">
-      <a class="brand" href="dashboard.php">
+      <a class="brand" href="<?= url_path('dashboard.php') ?>">
         <span class="brand-title">TS WORK</span>
       </a>
       <nav class="nav nav-primary">
-        <a class="nav-link" href="dashboard.php">Listas</a>
-        <a class="nav-link" href="product_list.php">Productos</a>
-        <a class="nav-link" href="tasks_all.php">Tareas</a>
+        <a class="nav-link" href="<?= url_path('dashboard.php') ?>">Listas</a>
+        <a class="nav-link" href="<?= url_path('product_list.php') ?>">Productos</a>
+        <a class="nav-link" href="<?= url_path('tasks_all.php') ?>">Tareas</a>
       </nav>
     </div>
     <div class="topbar-center" aria-hidden="true"></div>
@@ -59,7 +59,7 @@ if ($can_cashbox_access) {
                     $is_active = $cashbox_id === $active_cashbox_id;
                   ?>
                   <a class="cash-menu-item<?= $is_active ? ' cash-menu-item--active' : '' ?>"
-                     href="cash/cash_set.php?id=<?= $cashbox_id ?>&redirect=<?= urlencode($cash_redirect_target) ?>"
+                     href="<?= url_path('cash_set.php') ?>?id=<?= $cashbox_id ?>&redirect=<?= urlencode($cash_redirect_target) ?>"
                      role="menuitem">
                     <?= e($cashbox['name']) ?>
                   </a>
@@ -67,9 +67,9 @@ if ($can_cashbox_access) {
               <?php else: ?>
                 <span class="cash-menu-empty">No hay cajas activas.</span>
               <?php endif; ?>
-              <a class="cash-menu-item" href="cash/cash_select.php" role="menuitem">Ir a Caja</a>
+              <a class="cash-menu-item" href="<?= url_path('cash_select.php') ?>" role="menuitem">Ir a Caja</a>
               <?php if ($can_cashbox_manage): ?>
-                <a class="cash-menu-item" href="cash/cash_manage.php" role="menuitem">Administrar cajas</a>
+                <a class="cash-menu-item" href="<?= url_path('cash_manage.php') ?>" role="menuitem">Administrar cajas</a>
               <?php endif; ?>
             </div>
           </div>
@@ -81,16 +81,16 @@ if ($can_cashbox_access) {
             </button>
             <div class="config-menu-dropdown" role="menu">
               <?php if ($can_manage_tasks_settings): ?>
-                <a class="config-menu-item" href="task_settings.php" role="menuitem">Tareas · Configuración</a>
+                <a class="config-menu-item" href="<?= url_path('task_settings.php') ?>" role="menuitem">Tareas · Configuración</a>
               <?php endif; ?>
               <?php if ($can_manage_prestashop): ?>
-                <a class="config-menu-item" href="ps_config.php" role="menuitem">Config PrestaShop</a>
+                <a class="config-menu-item" href="<?= url_path('ps_config.php') ?>" role="menuitem">Config PrestaShop</a>
               <?php endif; ?>
               <?php if ($can_view_design): ?>
-                <a class="config-menu-item" href="design.php" role="menuitem">Diseño</a>
+                <a class="config-menu-item" href="<?= url_path('design.php') ?>" role="menuitem">Diseño</a>
               <?php endif; ?>
               <?php if ($is_superadmin): ?>
-                <a class="config-menu-item" href="roles.php" role="menuitem">Roles</a>
+                <a class="config-menu-item" href="<?= url_path('roles.php') ?>" role="menuitem">Roles</a>
               <?php endif; ?>
             </div>
           </div>
@@ -101,8 +101,8 @@ if ($can_cashbox_access) {
           <?= e($display_name) ?> <span aria-hidden="true">▾</span>
         </button>
         <div class="user-menu-dropdown" role="menu">
-          <a class="user-menu-item" href="logout_profile.php" role="menuitem">Cerrar perfil</a>
-          <a class="user-menu-item" href="logout_system.php" role="menuitem">Salir del sistema</a>
+          <a class="user-menu-item" href="<?= url_path('logout_profile.php') ?>" role="menuitem">Cerrar perfil</a>
+          <a class="user-menu-item" href="<?= url_path('logout_system.php') ?>" role="menuitem">Salir del sistema</a>
         </div>
       </div>
     </div>

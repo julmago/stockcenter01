@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 require_permission(hasPerm('cashbox_create_exit'), 'Sin permiso para crear salidas.');
@@ -54,7 +54,7 @@ if ($responsible_name === '') {
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/../partials/header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
@@ -93,7 +93,7 @@ if ($responsible_name === '') {
           </div>
           <div class="form-actions">
             <button class="btn" type="submit">Registrar salida</button>
-            <a class="btn btn-ghost" href="cash_select.php">Volver</a>
+            <a class="btn btn-ghost" href="<?= url_path('cash_select.php') ?>">Volver</a>
           </div>
         </form>
       </div>

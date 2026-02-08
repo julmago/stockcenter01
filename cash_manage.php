@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
 require_permission(hasPerm('cashbox_manage_boxes'), 'Sin permiso para administrar cajas.');
@@ -76,7 +76,7 @@ $cashboxes = $list_st->fetchAll();
   <?= theme_css_links() ?>
 </head>
 <body class="app-body">
-<?php require __DIR__ . '/../partials/header.php'; ?>
+<?php require __DIR__ . '/partials/header.php'; ?>
 
 <main class="page">
   <div class="container">
