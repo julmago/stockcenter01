@@ -119,19 +119,23 @@ if ($responsible_name === '') {
             <h3 class="card-title">Contador de billetes</h3>
           </div>
           <?php if ($denominations): ?>
-            <div class="denom-list">
-              <?php foreach ($denominations as $denom): ?>
-                <div class="denom-row">
-                  <span>$<?= number_format((int)$denom['value'], 0, ',', '.') ?></span>
-                  <input class="form-control" type="number" min="0" value="" placeholder="0" data-denom-value="<?= (int)$denom['value'] ?>">
-                </div>
-              <?php endforeach; ?>
+            <div class="cash-bills-content">
+              <div class="denom-list">
+                <?php foreach ($denominations as $denom): ?>
+                  <div class="denom-row">
+                    <span>$<?= number_format((int)$denom['value'], 0, ',', '.') ?></span>
+                    <input class="form-control" type="number" min="0" value="" placeholder="0" data-denom-value="<?= (int)$denom['value'] ?>">
+                  </div>
+                <?php endforeach; ?>
+              </div>
+              <div class="denom-total">
+                <span>Total</span>
+                <span data-denom-total>0</span>
+              </div>
             </div>
-            <div class="denom-total">
-              <span>Total</span>
-              <span data-denom-total>0</span>
+            <div class="cash-card-actions">
+              <button class="btn btn-ghost btn-block denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
             </div>
-            <button class="btn btn-ghost btn-block denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
           <?php else: ?>
             <div class="alert alert-info">No hay billetes configurados para esta caja.</div>
           <?php endif; ?>
@@ -141,30 +145,32 @@ if ($responsible_name === '') {
           <div class="card-header">
             <h3 class="card-title">Calculadora</h3>
           </div>
-          <input class="calculator-display" type="text" data-calculator-display value="0" readonly>
-          <div class="calculator-grid" data-calculator>
-            <button type="button" data-value="7">7</button>
-            <button type="button" data-value="8">8</button>
-            <button type="button" data-value="9">9</button>
-            <button type="button" data-value="/">/</button>
-            <button type="button" data-value="4">4</button>
-            <button type="button" data-value="5">5</button>
-            <button type="button" data-value="6">6</button>
-            <button type="button" data-value="*">*</button>
-            <button type="button" data-value="1">1</button>
-            <button type="button" data-value="2">2</button>
-            <button type="button" data-value="3">3</button>
-            <button type="button" data-value="-">-</button>
-            <button type="button" data-value="0">0</button>
-            <button type="button" data-value=".">.</button>
-            <button type="button" data-action="back">⌫</button>
-            <button type="button" data-value="+">+</button>
-            <button type="button" data-action="clear">C</button>
-            <button type="button" data-action="vat-plus">+ IVA</button>
-            <button type="button" data-action="vat-minus">- IVA</button>
-            <button type="button" data-action="equals">=</button>
+          <div class="cash-calculator-content">
+            <input class="calculator-display" type="text" data-calculator-display value="0" readonly>
+            <div class="calculator-grid" data-calculator>
+              <button type="button" data-value="7">7</button>
+              <button type="button" data-value="8">8</button>
+              <button type="button" data-value="9">9</button>
+              <button type="button" data-value="/">/</button>
+              <button type="button" data-value="4">4</button>
+              <button type="button" data-value="5">5</button>
+              <button type="button" data-value="6">6</button>
+              <button type="button" data-value="*">*</button>
+              <button type="button" data-value="1">1</button>
+              <button type="button" data-value="2">2</button>
+              <button type="button" data-value="3">3</button>
+              <button type="button" data-value="-">-</button>
+              <button type="button" data-value="0">0</button>
+              <button type="button" data-value=".">.</button>
+              <button type="button" data-action="back">⌫</button>
+              <button type="button" data-value="+">+</button>
+              <button type="button" data-action="clear">C</button>
+              <button type="button" data-action="vat-plus">+ IVA</button>
+              <button type="button" data-action="vat-minus">- IVA</button>
+              <button type="button" data-action="equals">=</button>
+            </div>
           </div>
-          <div class="calculator-actions">
+          <div class="cash-card-actions">
             <button class="btn btn-ghost btn-block calculator-copy" type="button" data-calculator-copy>
               Usar total como efectivo
             </button>

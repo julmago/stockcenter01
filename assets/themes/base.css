@@ -388,6 +388,22 @@ img {
   grid-column: 1 / -1;
 }
 
+.cash-bills,
+.cash-calculator {
+  display: flex;
+  flex-direction: column;
+}
+
+.cash-bills-content,
+.cash-calculator-content {
+  flex: 1;
+}
+
+.cash-card-actions {
+  margin-top: auto;
+  padding-top: var(--space-3);
+}
+
 .denom-list {
   display: grid;
   gap: var(--space-2);
@@ -423,10 +439,6 @@ img {
 .btn-block {
   width: 100%;
   justify-content: center;
-}
-
-.calculator-actions {
-  margin-top: var(--space-2);
 }
 
 .calculator-display {
