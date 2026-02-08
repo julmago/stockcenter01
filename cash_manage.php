@@ -97,7 +97,7 @@ if (is_post() && post('action') === 'delete_cashbox') {
 
 $list_st = db()->query("SELECT c.id,
   c.name,
-  COALESCE(CAST(c.is_active AS UNSIGNED), 0) AS is_active,
+  IF(c.is_active = 1, 1, 0) AS is_active,
   c.created_at,
   (
     SELECT COUNT(*)
