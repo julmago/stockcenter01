@@ -6,7 +6,7 @@ require_login();
 require_permission(hasPerm('cashbox_access'), 'Sin permiso para acceder a Caja.');
 
 $cashbox_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$cashbox = fetch_cashbox_by_id($cashbox_id, true);
+$cashbox = fetch_cashbox_by_id($cashbox_id, false);
 $redirect = urldecode((string)($_GET['redirect'] ?? ''));
 
 if ($redirect === '') {

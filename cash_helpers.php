@@ -26,6 +26,11 @@ function fetch_active_cashboxes(): array {
   return $st->fetchAll();
 }
 
+function fetch_cashboxes(): array {
+  $st = db()->query("SELECT id, name, is_active FROM cashboxes ORDER BY name ASC");
+  return $st->fetchAll();
+}
+
 function cashbox_is_active($value): bool {
   if (is_string($value)) {
     $trimmed = trim($value);
