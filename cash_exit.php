@@ -123,7 +123,7 @@ if ($responsible_name === '') {
               <?php foreach ($denominations as $denom): ?>
                 <div class="denom-row">
                   <span>$<?= number_format((int)$denom['value'], 0, ',', '.') ?></span>
-                  <input class="form-control" type="number" min="0" value="0" data-denom-value="<?= (int)$denom['value'] ?>">
+                  <input class="form-control" type="number" min="0" value="" placeholder="0" data-denom-value="<?= (int)$denom['value'] ?>">
                 </div>
               <?php endforeach; ?>
             </div>
@@ -131,7 +131,7 @@ if ($responsible_name === '') {
               <span>Total</span>
               <span data-denom-total>0</span>
             </div>
-            <button class="btn btn-ghost denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
+            <button class="btn btn-ghost btn-block denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
           <?php else: ?>
             <div class="alert alert-info">No hay billetes configurados para esta caja.</div>
           <?php endif; ?>
@@ -163,6 +163,11 @@ if ($responsible_name === '') {
             <button type="button" data-action="vat-plus">+ IVA</button>
             <button type="button" data-action="vat-minus">- IVA</button>
             <button type="button" data-action="equals">=</button>
+          </div>
+          <div class="calculator-actions">
+            <button class="btn btn-ghost btn-block calculator-copy" type="button" data-calculator-copy>
+              Usar total como efectivo
+            </button>
           </div>
         </div>
       </div>
@@ -206,6 +211,7 @@ if ($responsible_name === '') {
     const display = document.querySelector('[data-calculator-display]');
     const keypad = document.querySelector('[data-calculator]');
     const calculatorCard = document.querySelector('.cash-calculator');
+    const calculatorCopyButton = document.querySelector('[data-calculator-copy]');
     let expression = '0';
     let calculatorActive = false;
 
@@ -279,6 +285,21 @@ if ($responsible_name === '') {
       const value = target.getAttribute('data-value');
       const action = target.getAttribute('data-action');
       applyCalculatorInput({ value, action });
+    });
+
+    calculatorCopyButton?.addEventListener('click', () => {
+      if (!display || !amountInput) return;
+      const evaluated = evaluateExpression();
+      let parsed = evaluated;
+      if (parsed === null) {
+        const raw = display.value || '';
+        const normalized = raw.replace(/[^0-9,.\-]/g, '').replace(',', '.');
+        parsed = Number.parseFloat(normalized);
+      }
+      if (Number.isFinite(parsed)) {
+        amountInput.value = parsed.toFixed(2);
+        amountInput.focus();
+      }
     });
 
     const setCalculatorActive = (active) => {
