@@ -123,7 +123,7 @@ if ($responsible_name === '') {
               <?php foreach ($denominations as $denom): ?>
                 <div class="denom-row">
                   <span>$<?= number_format((int)$denom['value'], 0, ',', '.') ?></span>
-                  <input class="form-control" type="number" min="0" value="0" data-denom-value="<?= (int)$denom['value'] ?>">
+                  <input class="form-control" type="number" min="0" value="" placeholder="0" data-denom-value="<?= (int)$denom['value'] ?>">
                 </div>
               <?php endforeach; ?>
             </div>
@@ -131,7 +131,7 @@ if ($responsible_name === '') {
               <span>Total</span>
               <span data-denom-total>0</span>
             </div>
-            <button class="btn btn-ghost denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
+            <button class="btn btn-ghost btn-block denom-copy" type="button" data-denom-copy>Usar total como efectivo</button>
           <?php else: ?>
             <div class="alert alert-info">No hay billetes configurados para esta caja.</div>
           <?php endif; ?>
@@ -164,9 +164,11 @@ if ($responsible_name === '') {
             <button type="button" data-action="vat-minus">- IVA</button>
             <button type="button" data-action="equals">=</button>
           </div>
-          <button class="btn btn-ghost calculator-copy" type="button" data-calculator-copy>
-            Usar total como efectivo
-          </button>
+          <div class="calculator-actions">
+            <button class="btn btn-ghost btn-block calculator-copy" type="button" data-calculator-copy>
+              Usar total como efectivo
+            </button>
+          </div>
         </div>
       </div>
     <?php endif; ?>
