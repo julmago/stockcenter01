@@ -17,18 +17,11 @@ if ($display_name === '') {
 
 $cashboxes = [];
 $active_cashbox_id = 0;
-$active_cashbox_name = 'Sin caja';
-$cash_redirect_target = (string)($_SERVER['REQUEST_URI'] ?? url_path('dashboard.php'));
+$cash_redirect_target = url_path('cash_select.php');
 if ($can_cashbox_access) {
   require_once __DIR__ . '/../cash_helpers.php';
-  $cashboxes = fetch_active_cashboxes();
+  $cashboxes = fetch_cashboxes();
   $active_cashbox_id = cashbox_selected_id();
-  $active_cashbox = $active_cashbox_id > 0 ? fetch_cashbox_by_id($active_cashbox_id, false) : null;
-  if ($active_cashbox) {
-    $active_cashbox_name = $active_cashbox['name'];
-  } elseif ($cashboxes) {
-    $active_cashbox_name = 'Sin seleccionar';
-  }
 }
 ?>
 <header class="topbar">
@@ -41,15 +34,10 @@ if ($can_cashbox_access) {
         <a class="nav-link" href="<?= url_path('dashboard.php') ?>">Listas</a>
         <a class="nav-link" href="<?= url_path('product_list.php') ?>">Productos</a>
         <a class="nav-link" href="<?= url_path('tasks_all.php') ?>">Tareas</a>
-      </nav>
-    </div>
-    <div class="topbar-center" aria-hidden="true"></div>
-    <div class="topbar-right">
-      <nav class="nav nav-utility">
         <?php if ($can_cashbox_access): ?>
           <div class="cash-menu" data-cash-menu>
             <button class="cash-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
-              Caja: <?= e($active_cashbox_name) ?> <span aria-hidden="true">▾</span>
+              Caja <span aria-hidden="true">▾</span>
             </button>
             <div class="cash-menu-dropdown" role="menu">
               <?php if ($cashboxes): ?>
@@ -65,12 +53,16 @@ if ($can_cashbox_access) {
                   </a>
                 <?php endforeach; ?>
               <?php else: ?>
-                <span class="cash-menu-empty">No hay cajas activas.</span>
+                <span class="cash-menu-empty">No hay cajas creadas.</span>
               <?php endif; ?>
-              <a class="cash-menu-item" href="<?= url_path('cash_select.php') ?>" role="menuitem">Ir a Caja</a>
             </div>
           </div>
         <?php endif; ?>
+      </nav>
+    </div>
+    <div class="topbar-center" aria-hidden="true"></div>
+    <div class="topbar-right">
+      <nav class="nav nav-utility">
         <?php if ($show_config_menu): ?>
           <div class="config-menu" data-config-menu>
             <button class="config-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
