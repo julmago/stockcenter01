@@ -150,7 +150,7 @@ $cashboxes = $list_st->fetchAll();
               <?php $is_active = ((int)($cashbox['is_active'] ?? 0) === 1); ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
-                <td><?= $is_active ? 'Activa' : 'Inactiva' ?></td>
+                <td><?= e($cashbox['is_active']) ?></td>
                 <td><?= (int)($cashbox['entradas_count'] ?? 0) ?></td>
                 <td><?= (int)($cashbox['salidas_count'] ?? 0) ?></td>
                 <td>
