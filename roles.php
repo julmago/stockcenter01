@@ -287,6 +287,82 @@ foreach ($role_keys as $role_key) {
       opacity: 0.5;
       pointer-events: none;
     }
+    .role-accordion {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .role-accordion-item {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(15, 15, 15, 0.6);
+      overflow: hidden;
+    }
+    .role-accordion-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+    }
+    .role-accordion-toggle {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: transparent;
+      border: none;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .role-accordion-toggle:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.25);
+      outline-offset: -2px;
+    }
+    .role-accordion-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .role-accordion-role {
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .role-accordion-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .role-accordion-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .role-accordion-caret {
+      transition: transform 0.2s ease;
+      font-size: 0.85rem;
+      opacity: 0.8;
+    }
+    .role-accordion-item.is-open .role-accordion-caret {
+      transform: rotate(90deg);
+    }
+    .role-accordion-panel {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 16px 18px 18px;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.25s ease, opacity 0.25s ease;
+    }
+    .role-accordion-item.is-open .role-accordion-panel {
+      opacity: 1;
+    }
   </style>
 </head>
 <body class="app-body">
@@ -327,6 +403,7 @@ foreach ($role_keys as $role_key) {
       </form>
     </div>
 
+    <div class="role-accordion" data-role-accordion>
     <?php foreach ($roles as $role): ?>
       <?php
         $role_key = (string)$role['role_key'];
@@ -334,27 +411,46 @@ foreach ($role_keys as $role_key) {
         $is_locked = $role_key === 'superadmin';
         $can_delete = !$is_system && $role_key !== 'superadmin';
       ?>
-      <div class="card stack" style="margin-bottom:16px;">
-        <div class="card-header">
-          <h3 class="card-title"><?= e($role_key) ?></h3>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <?php if ($is_system): ?>
-              <span class="badge badge-muted">Sistema</span>
-            <?php endif; ?>
-            <?php if ($is_locked): ?>
-              <span class="badge badge-muted">Superadmin no se puede editar</span>
-            <?php endif; ?>
+      <div class="role-accordion-item" data-role="<?= e($role_key) ?>">
+        <div class="role-accordion-header">
+          <button
+            type="button"
+            class="role-accordion-toggle"
+            aria-expanded="false"
+            aria-controls="panel-<?= e($role_key) ?>"
+            id="hdr-<?= e($role_key) ?>"
+          >
+            <div class="role-accordion-title">
+              <span class="role-accordion-caret" aria-hidden="true">▶</span>
+              <span class="role-accordion-role"><?= e($role['role_name']) ?></span>
+              <span class="role-accordion-meta">ID: <?= e($role_key) ?></span>
+              <?php if ($is_system): ?>
+                <span class="badge badge-muted">Sistema</span>
+              <?php endif; ?>
+              <?php if ($is_locked): ?>
+                <span class="badge badge-muted">Superadmin no se puede editar</span>
+              <?php endif; ?>
+            </div>
+          </button>
+          <div class="role-accordion-actions">
             <?php if ($can_delete): ?>
-              <form method="post" action="roles.php" onsubmit="return confirm('¿Eliminar rol <?= e($role_key) ?>?');">
+              <form method="post" action="roles.php" class="no-toggle" onsubmit="return confirm('¿Eliminar rol <?= e($role_key) ?>?');">
                 <input type="hidden" name="action" value="delete_role">
                 <input type="hidden" name="role_key" value="<?= e($role_key) ?>">
-                <button class="btn btn-danger" type="submit">Eliminar</button>
+                <button class="btn btn-danger no-toggle" type="submit">Eliminar</button>
               </form>
             <?php endif; ?>
           </div>
         </div>
 
-        <form method="post" action="roles.php" class="stack">
+        <div
+          id="panel-<?= e($role_key) ?>"
+          class="role-accordion-panel"
+          role="region"
+          aria-labelledby="hdr-<?= e($role_key) ?>"
+          hidden
+        >
+          <form method="post" action="roles.php" class="stack">
           <input type="hidden" name="action" value="save_role">
           <input type="hidden" name="role_key" value="<?= e($role_key) ?>">
 
@@ -428,9 +524,11 @@ foreach ($role_keys as $role_key) {
               <button class="btn" type="submit">Guardar cambios</button>
             </div>
           <?php endif; ?>
-        </form>
+          </form>
+        </div>
       </div>
     <?php endforeach; ?>
+    </div>
   </div>
 </main>
 <script>
@@ -459,6 +557,88 @@ foreach ($role_keys as $role_key) {
       }
       sync(section);
     });
+  })();
+</script>
+<script>
+  (() => {
+    const accordion = document.querySelector('[data-role-accordion]');
+    if (!accordion) {
+      return;
+    }
+    const items = Array.from(accordion.querySelectorAll('.role-accordion-item'));
+    const headers = items.map((item) => ({
+      item,
+      header: item.querySelector('.role-accordion-toggle'),
+      panel: item.querySelector('.role-accordion-panel'),
+      roleKey: item.dataset.role,
+    }));
+
+    const closeItem = (entry) => {
+      if (!entry) {
+        return;
+      }
+      entry.item.classList.remove('is-open');
+      entry.header.setAttribute('aria-expanded', 'false');
+      entry.panel.style.maxHeight = '0px';
+      entry.panel.addEventListener(
+        'transitionend',
+        () => {
+          if (!entry.item.classList.contains('is-open')) {
+            entry.panel.hidden = true;
+          }
+        },
+        { once: true }
+      );
+    };
+
+    const openItem = (entry) => {
+      if (!entry) {
+        return;
+      }
+      headers.forEach((other) => {
+        if (other !== entry) {
+          closeItem(other);
+        }
+      });
+      entry.panel.hidden = false;
+      entry.item.classList.add('is-open');
+      entry.header.setAttribute('aria-expanded', 'true');
+      requestAnimationFrame(() => {
+        entry.panel.style.maxHeight = `${entry.panel.scrollHeight}px`;
+      });
+      if (entry.roleKey) {
+        localStorage.setItem('lastOpenRole', entry.roleKey);
+      }
+    };
+
+    headers.forEach((entry) => {
+      if (!entry.header || !entry.panel) {
+        return;
+      }
+      entry.header.addEventListener('click', (event) => {
+        if (event.target && event.target.closest('.no-toggle')) {
+          return;
+        }
+        const isOpen = entry.item.classList.contains('is-open');
+        if (isOpen) {
+          closeItem(entry);
+          localStorage.removeItem('lastOpenRole');
+        } else {
+          openItem(entry);
+        }
+      });
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const paramRole = params.get('open');
+    const storedRole = localStorage.getItem('lastOpenRole');
+    const initialRole = paramRole || storedRole;
+    if (initialRole) {
+      const match = headers.find((entry) => entry.roleKey === initialRole);
+      if (match) {
+        openItem(match);
+      }
+    }
   })();
 </script>
 </body>
