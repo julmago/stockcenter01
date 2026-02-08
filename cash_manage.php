@@ -83,12 +83,12 @@ if (is_post() && post('action') === 'toggle_cashbox') {
 
 $list_sql = "SELECT cb.id,
   cb.name,
-  cb.is_active AS is_active,
-  COALESCE(SUM(CASE WHEN cm.type = 'entry' THEN 1 ELSE 0 END), 0) AS entradas_count,
-  COALESCE(SUM(CASE WHEN cm.type = 'exit' THEN 1 ELSE 0 END), 0) AS salidas_count
+  MAX(cb.is_active) AS is_active,
+  COALESCE(SUM(CASE WHEN cm.type IN ('entry', 'entrada') THEN 1 ELSE 0 END), 0) AS entradas_count,
+  COALESCE(SUM(CASE WHEN cm.type IN ('exit', 'salida') THEN 1 ELSE 0 END), 0) AS salidas_count
 FROM cashboxes cb
 LEFT JOIN cash_movements cm ON cm.cashbox_id = cb.id
-GROUP BY cb.id, cb.name, cb.is_active
+GROUP BY cb.id, cb.name
 ORDER BY cb.id DESC";
 error_log('[cash_manage] cashboxes SQL: ' . $list_sql);
 $list_st = db()->query($list_sql);
@@ -159,7 +159,7 @@ if (!empty($cashboxes)) {
               $cashbox = is_array($cashbox) ? $cashbox : [];
               $cashbox_id = (int)($cashbox['id'] ?? 0);
               $cashbox_name = $cashbox['name'] ?? '';
-              $is_active_value = isset($cashbox['is_active']) ? (int)$cashbox['is_active'] : 0;
+              $is_active_value = (int)($cashbox['is_active'] ?? 0);
               $is_active = ($is_active_value === 1);
               $entradas_count = (int)($cashbox['entradas_count'] ?? 0);
               $salidas_count = (int)($cashbox['salidas_count'] ?? 0);
