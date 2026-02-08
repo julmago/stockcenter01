@@ -156,11 +156,10 @@ $cashboxes = $list_st->fetchAll();
                 'salidas_count' => 0,
               ], is_array($cashbox) ? $cashbox : []);
               $is_active = ((int)$cashbox['is_active'] === 1);
-              $status_label = $is_active ? 'Activa' : 'Pausada';
               ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
-                <td><?= e($status_label) ?></td>
+                <td><?= e($cashbox['is_active']) ?></td>
                 <td><?= (int)($cashbox['entradas_count'] ?? 0) ?></td>
                 <td><?= (int)($cashbox['salidas_count'] ?? 0) ?></td>
                 <td>
