@@ -6,7 +6,7 @@ $is_superadmin = ($u['role'] ?? '') === 'superadmin';
 $can_manage_tasks_settings = hasPerm('tasks_settings');
 $can_manage_prestashop = hasPerm('menu_config_prestashop');
 $can_view_design = hasPerm('menu_design');
-$can_cashbox_manage = hasPerm('cashbox_manage_boxes');
+$can_cashbox_manage = hasAnyCashboxPerm('can_manage_cashboxes');
 $show_config_menu = $can_manage_tasks_settings || $can_manage_prestashop || $can_view_design || $can_cashbox_manage || $is_superadmin;
 ?>
 <header class="topbar">

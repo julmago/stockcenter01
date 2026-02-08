@@ -281,42 +281,6 @@ function permission_default_definitions(): array {
       'vendedor' => true,
       'lectura' => false,
     ],
-    'cashbox_access' => [
-      'superadmin' => true,
-      'admin' => false,
-      'vendedor' => false,
-      'lectura' => false,
-    ],
-    'cashbox_manage_boxes' => [
-      'superadmin' => true,
-      'admin' => false,
-      'vendedor' => false,
-      'lectura' => false,
-    ],
-    'cashbox_view_balance' => [
-      'superadmin' => true,
-      'admin' => false,
-      'vendedor' => false,
-      'lectura' => false,
-    ],
-    'cashbox_create_entry' => [
-      'superadmin' => true,
-      'admin' => false,
-      'vendedor' => false,
-      'lectura' => false,
-    ],
-    'cashbox_create_exit' => [
-      'superadmin' => true,
-      'admin' => false,
-      'vendedor' => false,
-      'lectura' => false,
-    ],
-    'cashbox_config_denoms' => [
-      'superadmin' => true,
-      'admin' => false,
-      'vendedor' => false,
-      'lectura' => false,
-    ],
   ];
 }
 
@@ -343,6 +307,32 @@ function ensure_roles_schema(): void {
       PRIMARY KEY (role_key, perm_key),
       CONSTRAINT fk_role_permissions_role
         FOREIGN KEY (role_key) REFERENCES roles(role_key)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ");
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS role_cashbox_permissions (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      role_key VARCHAR(32) NOT NULL,
+      cashbox_id INT UNSIGNED NOT NULL,
+      can_view TINYINT(1) NOT NULL DEFAULT 0,
+      can_open_module TINYINT(1) NOT NULL DEFAULT 0,
+      can_manage_cashboxes TINYINT(1) NOT NULL DEFAULT 0,
+      can_view_balance TINYINT(1) NOT NULL DEFAULT 0,
+      can_create_entries TINYINT(1) NOT NULL DEFAULT 0,
+      can_create_exits TINYINT(1) NOT NULL DEFAULT 0,
+      can_configure_bills TINYINT(1) NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_role_cashbox (role_key, cashbox_id),
+      KEY idx_role_cashbox_role (role_key),
+      KEY idx_role_cashbox_cashbox (cashbox_id),
+      CONSTRAINT fk_role_cashbox_role
+        FOREIGN KEY (role_key) REFERENCES roles(role_key)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_role_cashbox_cashbox
+        FOREIGN KEY (cashbox_id) REFERENCES cashboxes(id)
         ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ");
@@ -401,6 +391,78 @@ function hasPerm(string $perm_key): bool {
   }
   $cache[$role_key][$perm_key] = $value;
   return $value;
+}
+
+function cashbox_permission_keys(): array {
+  return [
+    'can_view',
+    'can_open_module',
+    'can_manage_cashboxes',
+    'can_view_balance',
+    'can_create_entries',
+    'can_create_exits',
+    'can_configure_bills',
+  ];
+}
+
+function get_cashbox_permissions_for_role(string $role_key, int $cashbox_id): array {
+  static $cache = [];
+  if ($cashbox_id <= 0) {
+    return array_fill_keys(cashbox_permission_keys(), false);
+  }
+  if (isset($cache[$role_key][$cashbox_id])) {
+    return $cache[$role_key][$cashbox_id];
+  }
+  ensure_roles_schema();
+  require_once __DIR__ . '/db.php';
+  $pdo = db();
+  $st = $pdo->prepare(
+    "SELECT can_view, can_open_module, can_manage_cashboxes, can_view_balance,
+      can_create_entries, can_create_exits, can_configure_bills
+     FROM role_cashbox_permissions
+     WHERE role_key = ? AND cashbox_id = ? LIMIT 1"
+  );
+  $st->execute([$role_key, $cashbox_id]);
+  $row = $st->fetch() ?: [];
+  $permissions = [
+    'can_view' => !empty($row['can_view']),
+    'can_open_module' => !empty($row['can_open_module']),
+    'can_manage_cashboxes' => !empty($row['can_manage_cashboxes']),
+    'can_view_balance' => !empty($row['can_view_balance']),
+    'can_create_entries' => !empty($row['can_create_entries']),
+    'can_create_exits' => !empty($row['can_create_exits']),
+    'can_configure_bills' => !empty($row['can_configure_bills']),
+  ];
+  $cache[$role_key][$cashbox_id] = $permissions;
+  return $permissions;
+}
+
+function hasCashboxPerm(string $perm_key, int $cashbox_id): bool {
+  $role_key = getRoleKeyFromSession();
+  if ($role_key === 'superadmin') {
+    return true;
+  }
+  if (!in_array($perm_key, cashbox_permission_keys(), true)) {
+    return false;
+  }
+  $permissions = get_cashbox_permissions_for_role($role_key, $cashbox_id);
+  return !empty($permissions[$perm_key]);
+}
+
+function hasAnyCashboxPerm(string $perm_key): bool {
+  $role_key = getRoleKeyFromSession();
+  if ($role_key === 'superadmin') {
+    return true;
+  }
+  if (!in_array($perm_key, cashbox_permission_keys(), true)) {
+    return false;
+  }
+  ensure_roles_schema();
+  require_once __DIR__ . '/db.php';
+  $pdo = db();
+  $st = $pdo->prepare("SELECT 1 FROM role_cashbox_permissions WHERE role_key = ? AND {$perm_key} = 1 LIMIT 1");
+  $st->execute([$role_key]);
+  return (bool)$st->fetchColumn();
 }
 
 function can_import_csv(): bool {

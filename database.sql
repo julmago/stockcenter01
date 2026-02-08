@@ -47,6 +47,31 @@ CREATE TABLE IF NOT EXISTS cashboxes (
     ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS role_cashbox_permissions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  role_key VARCHAR(32) NOT NULL,
+  cashbox_id INT UNSIGNED NOT NULL,
+  can_view TINYINT(1) NOT NULL DEFAULT 0,
+  can_open_module TINYINT(1) NOT NULL DEFAULT 0,
+  can_manage_cashboxes TINYINT(1) NOT NULL DEFAULT 0,
+  can_view_balance TINYINT(1) NOT NULL DEFAULT 0,
+  can_create_entries TINYINT(1) NOT NULL DEFAULT 0,
+  can_create_exits TINYINT(1) NOT NULL DEFAULT 0,
+  can_configure_bills TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_role_cashbox (role_key, cashbox_id),
+  KEY idx_role_cashbox_role (role_key),
+  KEY idx_role_cashbox_cashbox (cashbox_id),
+  CONSTRAINT fk_role_cashbox_role
+    FOREIGN KEY (role_key) REFERENCES roles(role_key)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_role_cashbox_cashbox
+    FOREIGN KEY (cashbox_id) REFERENCES cashboxes(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS cash_movements (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   cashbox_id INT UNSIGNED NOT NULL,

@@ -3,9 +3,9 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
-require_permission(hasPerm('cashbox_create_entry'), 'Sin permiso para crear entradas.');
 
 $cashbox = require_cashbox_selected();
+require_permission(hasCashboxPerm('can_create_entries', (int)$cashbox['id']), 'Sin permiso para crear entradas.');
 $user = current_user();
 
 $message = '';

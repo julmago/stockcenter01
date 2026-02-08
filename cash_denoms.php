@@ -3,9 +3,9 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
-require_permission(hasPerm('cashbox_config_denoms'), 'Sin permiso para configurar billetes.');
 
 $cashbox = require_cashbox_selected(false);
+require_permission(hasCashboxPerm('can_configure_bills', (int)$cashbox['id']), 'Sin permiso para configurar billetes.');
 $message = '';
 $error = '';
 

@@ -3,11 +3,11 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
 require_login();
-require_permission(hasPerm('cashbox_access'), 'Sin permiso para acceder a Caja.');
+require_permission(hasAnyCashboxPerm('can_open_module'), 'Sin permiso para acceder a Caja.');
 
 $message = '';
 $error = '';
-$cashboxes = fetch_active_cashboxes();
+$cashboxes = fetch_accessible_cashboxes('can_open_module');
 $active_cashbox_id = cashbox_selected_id();
 
 if (isset($_GET['error']) && $_GET['error'] === 'invalid') {
@@ -17,7 +17,7 @@ if (isset($_GET['error']) && $_GET['error'] === 'invalid') {
 if (is_post() && post('action') === 'select_cashbox') {
   $selected_id = (int)post('cashbox_id');
   $selected_cashbox = fetch_cashbox_by_id($selected_id, true);
-  if (!$selected_cashbox) {
+  if (!$selected_cashbox || !hasCashboxPerm('can_open_module', $selected_id)) {
     $error = 'Seleccioná una caja activa.';
   } else {
     $_SESSION['cashbox_id'] = $selected_id;
@@ -28,7 +28,7 @@ if (is_post() && post('action') === 'select_cashbox') {
 
 $active_cashbox = $active_cashbox_id > 0 ? fetch_cashbox_by_id($active_cashbox_id, false) : null;
 $active_cashbox_name = $active_cashbox ? $active_cashbox['name'] : 'Sin seleccionar';
-$can_view_balance = hasPerm('cashbox_view_balance');
+$can_view_balance = $active_cashbox_id > 0 && hasCashboxPerm('can_view_balance', $active_cashbox_id);
 ?>
 <!doctype html>
 <html>
