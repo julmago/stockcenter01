@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cash_helpers.php';
+
 require_login();
 require_permission(hasPerm('cashbox_manage_boxes'), 'Sin permiso para administrar cajas.');
 
@@ -12,80 +13,77 @@ $user = current_user();
 $role = $user['role'] ?? '';
 $is_superadmin = $role === 'superadmin';
 
-if (is_post() && post('action') === 'create_cashbox') {
-  $name = trim((string)post('name'));
-  if ($name === '') {
-    $error = 'El nombre de la caja es obligatorio.';
-  } elseif (mb_strlen($name) > 120) {
-    $error = 'El nombre debe tener hasta 120 caracteres.';
-  } else {
-    try {
-      db()->beginTransaction();
-      db()->exec("UPDATE cashboxes SET is_active = 0");
-      $st = db()->prepare("INSERT INTO cashboxes (name, is_active, created_by_user_id) VALUES (?, 1, ?)");
-      $st->execute([$name, (int)$user['id']]);
-      $cashbox_id = (int)db()->lastInsertId();
+if (is_post()) {
+  if (!csrf_is_valid((string)post('csrf_token'))) {
+    abort(403, 'Token inválido.');
+  }
 
-      $denom_st = db()->prepare("INSERT INTO cash_denominations (cashbox_id, value, is_active, sort_order) VALUES (?, ?, 1, ?)");
-      $sort = 10;
-      foreach ($default_denoms as $value) {
-        $denom_st->execute([$cashbox_id, $value, $sort]);
-        $sort += 10;
+  $action = (string)post('action');
+
+  if ($action === 'create_cashbox') {
+    $name = trim((string)post('name'));
+    if ($name === '') {
+      $error = 'El nombre de la caja es obligatorio.';
+    } elseif (mb_strlen($name) > 120) {
+      $error = 'El nombre debe tener hasta 120 caracteres.';
+    } else {
+      try {
+        db()->beginTransaction();
+        db()->exec("UPDATE cashboxes SET is_active = 0");
+        $st = db()->prepare("INSERT INTO cashboxes (name, is_active, created_by_user_id) VALUES (?, 1, ?)");
+        $st->execute([$name, (int)$user['id']]);
+        $cashbox_id = (int)db()->lastInsertId();
+
+        $denom_st = db()->prepare("INSERT INTO cash_denominations (cashbox_id, value, is_active, sort_order) VALUES (?, ?, 1, ?)");
+        $sort = 10;
+        foreach ($default_denoms as $value) {
+          $denom_st->execute([$cashbox_id, $value, $sort]);
+          $sort += 10;
+        }
+        db()->commit();
+        $_SESSION['cashbox_id'] = $cashbox_id;
+        $message = 'Caja creada correctamente.';
+      } catch (Throwable $t) {
+        if (db()->inTransaction()) {
+          db()->rollBack();
+        }
+        $error = 'No se pudo crear la caja.';
       }
-      db()->commit();
-      $_SESSION['cashbox_id'] = $cashbox_id;
-      $message = 'Caja creada correctamente.';
+    }
+  }
+
+  if ($action === 'toggle') {
+    $cashbox_id = (int)post('id');
+    try {
+      $st = db()->prepare("UPDATE cashboxes SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?");
+      $st->execute([$cashbox_id]);
+      $message = 'Estado de la caja actualizado.';
     } catch (Throwable $t) {
-      if (db()->inTransaction()) {
-        db()->rollBack();
+      $error = 'No se pudo actualizar el estado de la caja.';
+    }
+  }
+
+  if ($action === 'delete') {
+    $cashbox_id = (int)post('id');
+    if (!$is_superadmin) {
+      http_response_code(403);
+      $error = 'No autorizado para eliminar cajas.';
+    } else {
+      try {
+        $st = db()->prepare("DELETE FROM cashboxes WHERE id = ?");
+        $st->execute([$cashbox_id]);
+        if (cashbox_selected_id() === $cashbox_id) {
+          unset($_SESSION['cashbox_id']);
+        }
+        $message = 'Caja eliminada.';
+      } catch (Throwable $t) {
+        $error = 'No se pudo eliminar la caja.';
       }
-      $error = 'No se pudo crear la caja.';
     }
   }
 }
 
-if (is_post() && post('action') === 'delete_cashbox') {
-  $cashbox_id = (int)post('cashbox_id');
-  if (!$is_superadmin) {
-    http_response_code(403);
-    $error = 'No autorizado para eliminar cajas.';
-  } else {
-    try {
-      db()->beginTransaction();
-      $st = db()->prepare("DELETE FROM cash_movements WHERE cashbox_id = ?");
-      $st->execute([$cashbox_id]);
-      $st = db()->prepare("DELETE FROM cashboxes WHERE id = ?");
-      $st->execute([$cashbox_id]);
-      db()->commit();
-      if (cashbox_selected_id() === $cashbox_id) {
-        unset($_SESSION['cashbox_id']);
-      }
-      $message = 'Caja eliminada.';
-    } catch (Throwable $t) {
-      if (db()->inTransaction()) {
-        db()->rollBack();
-      }
-      $error = 'No se pudo eliminar la caja.';
-    }
-  }
-}
-
-if (is_post() && post('action') === 'toggle_cashbox') {
-  $cashbox_id = (int)post('cashbox_id');
-  try {
-    $st = db()->prepare("UPDATE cashboxes SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?");
-    $st->execute([$cashbox_id]);
-    $message = 'Estado de la caja actualizado.';
-  } catch (Throwable $t) {
-    $error = 'No se pudo actualizar el estado de la caja.';
-  }
-}
-
-$list_sql = "SELECT cb.id,
-  cb.name,
-  cb.is_active
-FROM cashboxes cb
-ORDER BY cb.id DESC";
+$list_sql = "SELECT id, name, is_active, created_by_user_id, created_at FROM cashboxes ORDER BY id DESC";
 $list_st = db()->query($list_sql);
 $cashboxes = $list_st->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -114,6 +112,7 @@ $cashboxes = $list_st->fetchAll(PDO::FETCH_ASSOC);
         <h3 class="card-title">Nueva caja</h3>
       </div>
       <form method="post" class="stack">
+        <?= csrf_field() ?>
         <input type="hidden" name="action" value="create_cashbox">
         <div class="form-row">
           <div class="form-group" style="min-width: 260px;">
@@ -135,34 +134,46 @@ $cashboxes = $list_st->fetchAll(PDO::FETCH_ASSOC);
         <table class="cash-table">
           <thead>
             <tr>
+              <th>ID</th>
               <th>Nombre</th>
               <th>Estado</th>
+              <th>Creada por (ID)</th>
+              <th>Creada</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <?php foreach ($cashboxes as $cashbox): ?>
+            <?php foreach ($cashboxes as $row): ?>
               <?php
-              $cashbox = is_array($cashbox) ? $cashbox : [];
-              $cashbox_id = (int)($cashbox['id'] ?? 0);
-              $cashbox_name = $cashbox['name'] ?? '';
-              $is_active_value = (int)($cashbox['is_active'] ?? 0);
-              $is_active = ($is_active_value === 1);
+              $row = is_array($row) ? $row : [];
+              $cashbox_id = (int)($row['id'] ?? 0);
+              $cashbox_name = $row['name'] ?? '';
+              $is_active = isset($row['is_active']) ? (int)$row['is_active'] : null;
+              $created_by_user_id = $row['created_by_user_id'] ?? '';
+              $created_at = $row['created_at'] ?? '';
+              $can_toggle = $is_active !== null && $cashbox_id > 0;
+              $toggle_label = $is_active === 1 ? 'Pausar' : 'Activar';
+              $status_label = $is_active === null ? '—' : (string)$is_active;
               ?>
               <tr>
+                <td><?= e((string)$cashbox_id) ?></td>
                 <td><?= e($cashbox_name) ?></td>
-                <td><?= e($is_active_value) ?></td>
+                <td><?= e($status_label) ?></td>
+                <td><?= e((string)$created_by_user_id) ?></td>
+                <td><?= e((string)$created_at) ?></td>
                 <td>
                   <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <input type="hidden" name="cashbox_id" value="<?= $cashbox_id ?>">
-                    <input type="hidden" name="action" value="toggle_cashbox">
-                    <button class="btn btn-ghost" type="submit"><?= $is_active ? 'Pausar' : 'Activar' ?></button>
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= $cashbox_id ?>">
+                    <input type="hidden" name="action" value="toggle">
+                    <button class="btn btn-ghost" type="submit" <?= $can_toggle ? '' : 'disabled' ?>><?= $toggle_label ?></button>
                   </form>
                   <?php if ($is_superadmin): ?>
                     <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
-                      <input type="hidden" name="cashbox_id" value="<?= $cashbox_id ?>">
-                      <input type="hidden" name="action" value="delete_cashbox">
-                      <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta caja y sus movimientos?')">Eliminar</button>
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="id" value="<?= $cashbox_id ?>">
+                      <input type="hidden" name="action" value="delete">
+                      <button class="btn btn-ghost" type="submit" onclick="return confirm('¿Eliminar esta caja?')">Eliminar</button>
                     </form>
                   <?php endif; ?>
                 </td>
