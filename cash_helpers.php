@@ -26,6 +26,28 @@ function fetch_active_cashboxes(): array {
   return $st->fetchAll();
 }
 
+function getAllowedCashboxes(PDO $pdo, array $currentUser): array {
+  $role_key = (string)($currentUser['role'] ?? '');
+  if ($role_key === '') {
+    return [];
+  }
+  if ($role_key === 'superadmin') {
+    $st = $pdo->query("SELECT id, name FROM cashboxes ORDER BY name ASC");
+    return $st->fetchAll();
+  }
+  ensure_roles_schema();
+  $st = $pdo->prepare(
+    "SELECT cb.id, cb.name
+     FROM cashboxes cb
+     JOIN role_cashbox_permissions rcp
+       ON rcp.cashbox_id = cb.id
+     WHERE rcp.role_key = ? AND rcp.can_view = 1
+     ORDER BY cb.name ASC"
+  );
+  $st->execute([$role_key]);
+  return $st->fetchAll();
+}
+
 function fetch_accessible_cashboxes(string $perm_key): array {
   if (getRoleKeyFromSession() === 'superadmin') {
     return fetch_active_cashboxes();
@@ -77,5 +99,6 @@ function require_cashbox_selected(bool $only_active = true): array {
     unset($_SESSION['cashbox_id']);
     redirect(url_path('cash_select.php'));
   }
+  require_permission(hasCashboxPerm('can_view', $cashbox_id), 'Sin permiso para acceder a esta caja.');
   return $cashbox;
 }

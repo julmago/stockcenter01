@@ -14,6 +14,17 @@ if (isset($_GET['error']) && $_GET['error'] === 'invalid') {
   $error = 'No se pudo seleccionar la caja. Verificá que esté activa.';
 }
 
+if (isset($_GET['cashbox_id'])) {
+  $selected_id = (int)$_GET['cashbox_id'];
+  $selected_cashbox = fetch_cashbox_by_id($selected_id, true);
+  if (!$selected_cashbox || !hasCashboxPerm('can_open_module', $selected_id)) {
+    redirect(url_path('cash_select.php?error=invalid'));
+  }
+  $_SESSION['cashbox_id'] = $selected_id;
+  $active_cashbox_id = $selected_id;
+  $message = 'Caja seleccionada correctamente.';
+}
+
 if (is_post() && post('action') === 'select_cashbox') {
   $selected_id = (int)post('cashbox_id');
   $selected_cashbox = fetch_cashbox_by_id($selected_id, true);
