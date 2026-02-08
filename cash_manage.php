@@ -61,10 +61,14 @@ if (is_post() && post('action') === 'delete_cashbox') {
   }
 }
 
-$list_st = db()->query("SELECT c.*, (
-  SELECT COUNT(*) FROM cash_movements m WHERE m.cashbox_id = c.id
-) AS movement_count
+$list_st = db()->query("SELECT c.id,
+  c.name,
+  c.is_active,
+  c.created_at,
+  COUNT(m.id) AS movement_count
 FROM cashboxes c
+LEFT JOIN cash_movements m ON m.cashbox_id = c.id
+GROUP BY c.id, c.name, c.is_active, c.created_at
 ORDER BY c.created_at DESC");
 $cashboxes = $list_st->fetchAll();
 ?>
@@ -122,11 +126,12 @@ $cashboxes = $list_st->fetchAll();
           </thead>
           <tbody>
             <?php foreach ($cashboxes as $cashbox): ?>
-              <?php $is_active = (int)$cashbox['is_active'] === 1; ?>
+              <?php $is_active = (int)($cashbox['is_active'] ?? 0) === 1; ?>
+              <?php $movement_count = (int)($cashbox['movement_count'] ?? 0); ?>
               <tr>
                 <td><?= e($cashbox['name']) ?></td>
                 <td><?= $is_active ? 'Activa' : 'Inactiva' ?></td>
-                <td><?= (int)$cashbox['movement_count'] ?></td>
+                <td><?= $movement_count ?></td>
                 <td>
                   <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
                     <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
@@ -137,7 +142,7 @@ $cashboxes = $list_st->fetchAll();
                   <form method="post" style="display: inline-flex; gap: 0.5rem; flex-wrap: wrap;">
                     <input type="hidden" name="cashbox_id" value="<?= (int)$cashbox['id'] ?>">
                     <input type="hidden" name="action" value="delete_cashbox">
-                    <button class="btn btn-ghost" type="submit" <?= (int)$cashbox['movement_count'] > 0 ? 'disabled' : '' ?>>Eliminar</button>
+                    <button class="btn btn-ghost" type="submit" <?= $movement_count > 0 ? 'disabled' : '' ?>>Eliminar</button>
                   </form>
                 </td>
               </tr>
