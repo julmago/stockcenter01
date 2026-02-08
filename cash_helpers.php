@@ -26,6 +26,24 @@ function fetch_active_cashboxes(): array {
   return $st->fetchAll();
 }
 
+function cashbox_is_active($value): bool {
+  if (is_string($value)) {
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+      return false;
+    }
+    if (ctype_digit($trimmed)) {
+      return (int)$trimmed > 0;
+    }
+    if (strlen($value) === 1) {
+      return ord($value) > 0;
+    }
+    $normalized = mb_strtolower($trimmed);
+    return in_array($normalized, ['true', 't', 'yes', 'y', 'si', 'sí', 's', 'activo', 'activa'], true);
+  }
+  return (int)$value > 0;
+}
+
 function require_cashbox_selected(bool $only_active = true): array {
   $cashbox_id = cashbox_selected_id();
   if ($cashbox_id <= 0) {
