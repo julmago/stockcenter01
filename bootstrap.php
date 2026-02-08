@@ -603,6 +603,10 @@ function theme_catalog(): array {
       'name' => 'Color splash',
       'description' => 'Explosión vibrante de color con gradientes intensos y energía juvenil.',
     ],
+    'theme_redgold' => [
+      'name' => 'Rojo & Oro',
+      'description' => 'Estética elegante en rojo profundo con acentos dorados suaves.',
+    ],
   ];
 }
 
