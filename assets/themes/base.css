@@ -1120,3 +1120,136 @@ select:focus {
     padding: calc(var(--space-3) + var(--space-1)) var(--space-3);
   }
 }
+
+.messages-block {
+  margin-top: var(--space-4);
+}
+
+.messages-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.messages-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.messages-filter-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.messages-filter-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.messages-timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.message-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  background: var(--card);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.message-badges {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.message-badge {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+.message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.message-actions select {
+  min-width: 160px;
+}
+
+.message-form {
+  margin-top: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.message-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.message-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.notifications-list {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.notification-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  background: var(--card);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.notification-item.is-unread {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.notification-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.notification-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/partials/messages_block.php';
 require_login();
 
 $list_id = (int)get('id','0');
@@ -543,6 +544,8 @@ $show_subtitle = $list_name !== '' && $list_name !== $page_title;
         </table>
       </div>
     </div>
+
+    <?php ts_messages_block('listado', $list_id); ?>
   </div>
 </main>
 <?php if ($can_scan_action && $list['status'] === 'open' && ($should_focus_scan || $clear_scan_input)): ?>
