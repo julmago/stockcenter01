@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/partials/messages_block.php';
 require_login();
 
 $id = (int)get('id','0');
@@ -191,6 +192,8 @@ $codes = $st->fetchAll();
         </table>
       </div>
     </div>
+
+    <?php ts_messages_block('product', $id); ?>
   </div>
 </main>
 

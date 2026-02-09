@@ -1,0 +1,276 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../db.php';
+
+header('Content-Type: application/json; charset=utf-8');
+require_login();
+
+function json_response(array $payload, int $status = 200): void {
+  http_response_code($status);
+  echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+  exit;
+}
+
+function api_action(): string {
+  $action = post('action');
+  if ($action === '') {
+    $action = get('action');
+  }
+  if ($action !== '') {
+    return $action;
+  }
+  $path = (string)parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+  $base = BASE_PATH;
+  if ($base !== '' && str_starts_with($path, $base)) {
+    $path = substr($path, strlen($base));
+  }
+  $path = trim($path, '/');
+  $segments = $path === '' ? [] : explode('/', $path);
+  if (count($segments) >= 3 && $segments[0] === 'api' && $segments[1] === 'messages') {
+    return $segments[2];
+  }
+  return '';
+}
+
+function require_csrf(): void {
+  $token = post('csrf_token');
+  if ($token === '' || !csrf_is_valid($token)) {
+    json_response(['ok' => false, 'error' => 'Token CSRF inválido.'], 403);
+  }
+}
+
+function allowed_entity_types(): array {
+  return ['product', 'listado', 'pedido', 'proveedor', 'user'];
+}
+
+function allowed_statuses(): array {
+  return ['abierto', 'en_proceso', 'resuelto', 'archivado'];
+}
+
+function allowed_message_types(): array {
+  return ['observacion', 'problema', 'consulta', 'accion'];
+}
+
+function is_superadmin_role(): bool {
+  return current_role() === 'superadmin';
+}
+
+function parse_mentions(PDO $pdo, string $body, int $author_id): array {
+  if (!preg_match_all('/@([\p{L}\p{N}._-]+)/u', $body, $matches)) {
+    return [];
+  }
+  $tokens = array_unique(array_map(static fn($value) => mb_strtolower((string)$value), $matches[1]));
+  $user_ids = [];
+  $userLookup = $pdo->prepare(
+    "SELECT id FROM users WHERE is_active = 1 AND (LOWER(email) = ? OR LOWER(first_name) = ? OR LOWER(SUBSTRING_INDEX(email, '@', 1)) = ?) LIMIT 1"
+  );
+  $userById = $pdo->prepare("SELECT id FROM users WHERE is_active = 1 AND id = ? LIMIT 1");
+  foreach ($tokens as $token) {
+    if ($token === '') {
+      continue;
+    }
+    $user_id = null;
+    if (ctype_digit($token)) {
+      $userById->execute([(int)$token]);
+      $row = $userById->fetch();
+      $user_id = $row ? (int)$row['id'] : null;
+    } else {
+      $userLookup->execute([$token, $token, $token]);
+      $row = $userLookup->fetch();
+      $user_id = $row ? (int)$row['id'] : null;
+    }
+    if ($user_id && $user_id !== $author_id) {
+      $user_ids[] = $user_id;
+    }
+  }
+  return array_values(array_unique($user_ids));
+}
+
+$action = api_action();
+$pdo = db();
+$current = current_user();
+$current_user_id = (int)($current['id'] ?? 0);
+
+if ($action === '' && !is_post()) {
+  $action = 'list';
+}
+
+if ($action === 'create') {
+  if (!is_post()) {
+    json_response(['ok' => false, 'error' => 'Método inválido.'], 405);
+  }
+  require_csrf();
+  $entity_type = post('entity_type');
+  $entity_id = (int)post('entity_id', '0');
+  $body = trim((string)post('body'));
+  $message_type = post('message_type');
+  $status = post('status');
+
+  if (!in_array($entity_type, allowed_entity_types(), true)) {
+    json_response(['ok' => false, 'error' => 'Entidad inválida.'], 400);
+  }
+  if ($entity_id <= 0) {
+    json_response(['ok' => false, 'error' => 'ID inválido.'], 400);
+  }
+  if ($body === '' || mb_strlen($body) > 5000) {
+    json_response(['ok' => false, 'error' => 'El mensaje es obligatorio y debe tener menos de 5000 caracteres.'], 400);
+  }
+  if (!in_array($message_type, allowed_message_types(), true)) {
+    $message_type = 'observacion';
+  }
+  if (!in_array($status, allowed_statuses(), true)) {
+    $status = 'abierto';
+  }
+
+  $st = $pdo->prepare(
+    "INSERT INTO ts_messages (entity_type, entity_id, message_type, status, body, created_by)
+     VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  $st->execute([$entity_type, $entity_id, $message_type, $status, $body, $current_user_id]);
+  $message_id = (int)$pdo->lastInsertId();
+
+  $mentions = parse_mentions($pdo, $body, $current_user_id);
+  if ($mentions) {
+    $mentionInsert = $pdo->prepare(
+      "INSERT IGNORE INTO ts_message_mentions (message_id, mentioned_user_id) VALUES (?, ?)"
+    );
+    $notifInsert = $pdo->prepare(
+      "INSERT INTO ts_notifications (user_id, type, message_id) VALUES (?, 'mention', ?)"
+    );
+    foreach ($mentions as $mentioned_user_id) {
+      $mentionInsert->execute([$message_id, $mentioned_user_id]);
+      $notifInsert->execute([$mentioned_user_id, $message_id]);
+    }
+  }
+
+  json_response(['ok' => true, 'message_id' => $message_id]);
+}
+
+if ($action === 'list') {
+  $entity_type = get('entity_type');
+  $entity_id = (int)get('entity_id', '0');
+  $status = get('status');
+  $mine = get('mine');
+  $mentioned = get('mentioned');
+
+  if (!in_array($entity_type, allowed_entity_types(), true)) {
+    json_response(['ok' => false, 'error' => 'Entidad inválida.'], 400);
+  }
+  if ($entity_id <= 0) {
+    json_response(['ok' => false, 'error' => 'ID inválido.'], 400);
+  }
+
+  $params = [$entity_type, $entity_id];
+  $joins = '';
+  $conditions = ['m.entity_type = ?', 'm.entity_id = ?'];
+
+  if ($status !== '') {
+    if ($status === 'open') {
+      $conditions[] = "m.status IN ('abierto','en_proceso')";
+    } elseif (in_array($status, allowed_statuses(), true)) {
+      $conditions[] = 'm.status = ?';
+      $params[] = $status;
+    }
+  } else {
+    $conditions[] = "m.status <> 'archivado'";
+  }
+
+  if ($mine === '1') {
+    $conditions[] = 'm.created_by = ?';
+    $params[] = $current_user_id;
+  }
+
+  if ($mentioned === '1') {
+    $joins .= ' JOIN ts_message_mentions mm ON mm.message_id = m.id AND mm.mentioned_user_id = ?';
+    $params[] = $current_user_id;
+  }
+
+  $sql = "
+    SELECT m.id, m.entity_type, m.entity_id, m.message_type, m.status, m.body,
+           m.created_at, m.created_by, u.first_name, u.last_name, u.email
+    FROM ts_messages m
+    JOIN users u ON u.id = m.created_by
+    {$joins}
+    WHERE " . implode(' AND ', $conditions) . "
+    ORDER BY m.created_at DESC
+  ";
+
+  $st = $pdo->prepare($sql);
+  $st->execute($params);
+  $rows = $st->fetchAll();
+  $items = [];
+  foreach ($rows as $row) {
+    $author_name = trim((string)$row['first_name'] . ' ' . (string)$row['last_name']);
+    if ($author_name === '') {
+      $author_name = (string)$row['email'];
+    }
+    $items[] = [
+      'id' => (int)$row['id'],
+      'entity_type' => (string)$row['entity_type'],
+      'entity_id' => (int)$row['entity_id'],
+      'message_type' => (string)$row['message_type'],
+      'status' => (string)$row['status'],
+      'body' => (string)$row['body'],
+      'created_at' => (string)$row['created_at'],
+      'created_by' => (int)$row['created_by'],
+      'author_name' => $author_name,
+      'can_edit' => ((int)$row['created_by'] === $current_user_id) || is_superadmin_role(),
+    ];
+  }
+  json_response(['ok' => true, 'items' => $items]);
+}
+
+if ($action === 'status') {
+  if (!is_post()) {
+    json_response(['ok' => false, 'error' => 'Método inválido.'], 405);
+  }
+  require_csrf();
+  $message_id = (int)post('message_id', '0');
+  $status = post('status');
+  if ($message_id <= 0 || !in_array($status, allowed_statuses(), true)) {
+    json_response(['ok' => false, 'error' => 'Parámetros inválidos.'], 400);
+  }
+  $st = $pdo->prepare('SELECT id, created_by FROM ts_messages WHERE id = ?');
+  $st->execute([$message_id]);
+  $message = $st->fetch();
+  if (!$message) {
+    json_response(['ok' => false, 'error' => 'Mensaje no encontrado.'], 404);
+  }
+  $can_edit = ((int)$message['created_by'] === $current_user_id) || is_superadmin_role();
+  if (!$can_edit) {
+    json_response(['ok' => false, 'error' => 'Sin permisos.'], 403);
+  }
+  $archived_at = $status === 'archivado' ? 'NOW()' : 'NULL';
+  $sql = "UPDATE ts_messages SET status = ?, updated_at = NOW(), archived_at = {$archived_at} WHERE id = ?";
+  $st = $pdo->prepare($sql);
+  $st->execute([$status, $message_id]);
+  json_response(['ok' => true]);
+}
+
+if ($action === 'archive') {
+  if (!is_post()) {
+    json_response(['ok' => false, 'error' => 'Método inválido.'], 405);
+  }
+  require_csrf();
+  $message_id = (int)post('message_id', '0');
+  if ($message_id <= 0) {
+    json_response(['ok' => false, 'error' => 'Parámetros inválidos.'], 400);
+  }
+  $st = $pdo->prepare('SELECT id, created_by FROM ts_messages WHERE id = ?');
+  $st->execute([$message_id]);
+  $message = $st->fetch();
+  if (!$message) {
+    json_response(['ok' => false, 'error' => 'Mensaje no encontrado.'], 404);
+  }
+  $can_edit = ((int)$message['created_by'] === $current_user_id) || is_superadmin_role();
+  if (!$can_edit) {
+    json_response(['ok' => false, 'error' => 'Sin permisos.'], 403);
+  }
+  $st = $pdo->prepare("UPDATE ts_messages SET status = 'archivado', archived_at = NOW(), updated_at = NOW() WHERE id = ?");
+  $st->execute([$message_id]);
+  json_response(['ok' => true]);
+}
+
+json_response(['ok' => false, 'error' => 'Acción inválida.'], 400);
