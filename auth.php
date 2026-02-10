@@ -31,6 +31,10 @@ function refresh_gateway_session_cookie(): void {
     'httponly' => $params['httponly'] ?? true,
     'samesite' => $params['samesite'] ?? 'Lax',
   ];
+  if (headers_sent($file, $line)) {
+    error_log(sprintf('[%s] Session cookie refresh skipped because headers were already sent at %s:%d', date('c'), $file, $line));
+    return;
+  }
   setcookie(session_name(), session_id(), $options);
 }
 

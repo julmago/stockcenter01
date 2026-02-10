@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+if (ob_get_level() === 0) {
+  ob_start();
+}
+
 $config = require __DIR__ . '/config.php';
 $auth = require __DIR__ . '/config/auth.php';
 
@@ -144,6 +148,10 @@ function asset_path(string $path): string {
 }
 
 function redirect(string $to): void {
+  if (headers_sent($file, $line)) {
+    error_log(sprintf('[%s] Redirect blocked because headers were already sent at %s:%d', date('c'), $file, $line));
+    abort(500, 'No se pudo completar la redirección.');
+  }
   header("Location: {$to}");
   exit;
 }
