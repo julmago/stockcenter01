@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   theme VARCHAR(32) NOT NULL DEFAULT 'theme_default',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_tasks_seen_at DATETIME NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

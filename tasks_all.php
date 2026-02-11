@@ -10,6 +10,9 @@ $priorities = task_priorities();
 $related_types = task_related_types(null, true);
 $users = task_users($pdo);
 $current_user_id = (int)(current_user()['id'] ?? 0);
+if ($current_user_id > 0) {
+  $pdo->prepare('UPDATE users SET last_tasks_seen_at = NOW() WHERE id = ?')->execute([$current_user_id]);
+}
 $priority_badges = [
   'low' => 'badge-muted',
   'medium' => 'badge-warning',

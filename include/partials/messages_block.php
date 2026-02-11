@@ -11,6 +11,9 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
   $csrf = csrf_token();
   $api_base = url_path('api/messages.php');
   $notifications_api = url_path('api/notifications.php');
+  $pdo = db();
+  $users_st = $pdo->query("SELECT id, first_name, last_name, email FROM users WHERE is_active = 1 ORDER BY first_name, last_name, email");
+  $users = $users_st ? $users_st->fetchAll() : [];
   ?>
   <div class="card messages-block" id="<?= e($container_id) ?>" data-messages-block
        data-entity-type="<?= e($entity_type) ?>" data-entity-id="<?= (int)$entity_id ?>"
@@ -43,6 +46,18 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
             <option value="problema">Problema</option>
             <option value="consulta">Consulta</option>
             <option value="accion">Acción</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Asignar a</label>
+          <select name="assigned_to_user_id">
+            <option value="">Sin asignar</option>
+            <?php foreach ($users as $user): ?>
+              <?php $user_name = trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? '')); ?>
+              <option value="<?= (int)$user['id'] ?>">
+                <?= e($user_name !== '' ? $user_name : (string)$user['email']) ?>
+              </option>
+            <?php endforeach; ?>
           </select>
         </div>
         <div class="form-group" style="align-self:end;">
@@ -147,6 +162,7 @@ function ts_messages_block_assets(): void {
                 </div>
                 <div class="message-badges">${badges}</div>
                 <div>${escapeHtml(item.body)}</div>
+                ${item.assigned_to_user_id ? `<div class="muted small"><strong>Asignado a:</strong> ${escapeHtml(item.assigned_to_name || ('Usuario #' + item.assigned_to_user_id))}</div>` : ''}
                 ${actions}
               </div>
             `;
@@ -233,6 +249,7 @@ function ts_messages_block_assets(): void {
           event.preventDefault();
           const bodyField = form.querySelector('textarea[name="body"]');
           const typeField = form.querySelector('select[name="message_type"]');
+          const assignedField = form.querySelector('select[name="assigned_to_user_id"]');
           const payload = new URLSearchParams({
             entity_type: entityType,
             entity_id: entityId,
@@ -240,6 +257,9 @@ function ts_messages_block_assets(): void {
             message_type: typeField.value,
             csrf_token: csrfToken,
           });
+          if (assignedField && assignedField.value) {
+            payload.set('assigned_to_user_id', assignedField.value);
+          }
           const response = await fetch(`${apiBase}?action=create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -252,6 +272,9 @@ function ts_messages_block_assets(): void {
             return;
           }
           bodyField.value = '';
+          if (assignedField) {
+            assignedField.value = '';
+          }
           fetchList();
         });
 

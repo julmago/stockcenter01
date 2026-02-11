@@ -44,6 +44,9 @@ function inbox_entity_url(?string $entity_type, ?int $entity_id): string {
 
 $csrf = csrf_token();
 $api = url_path('api/notifications.php');
+$messages_api = url_path('api/messages.php');
+$users_st = $pdo->query("SELECT id, first_name, last_name, email FROM users WHERE is_active = 1 ORDER BY first_name, last_name, email");
+$users = $users_st ? $users_st->fetchAll() : [];
 ?>
 <!doctype html>
 <html>
@@ -60,6 +63,45 @@ $api = url_path('api/notifications.php');
     <div class="page-header">
       <h2 class="page-title">Inbox</h2>
       <span class="muted">Notificaciones de menciones</span>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Mensaje instantáneo</h3>
+      </div>
+      <form class="stack" data-instant-message-form>
+        <div class="filters-grid">
+          <label class="form-field">
+            <span class="form-label">Asignar a *</span>
+            <select class="form-control" name="assigned_to_user_id" required>
+              <option value="">Seleccionar usuario</option>
+              <?php foreach ($users as $msg_user): ?>
+                <?php $msg_user_name = trim((string)($msg_user['first_name'] ?? '') . ' ' . (string)($msg_user['last_name'] ?? '')); ?>
+                <option value="<?= (int)$msg_user['id'] ?>">
+                  <?= e($msg_user_name !== '' ? $msg_user_name : (string)$msg_user['email']) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="form-field">
+            <span class="form-label">Tipo</span>
+            <select class="form-control" name="message_type">
+              <option value="observacion">Observación</option>
+              <option value="accion">Acción</option>
+              <option value="consulta">Consulta</option>
+              <option value="problema">Problema</option>
+            </select>
+          </label>
+        </div>
+        <label class="form-field">
+          <span class="form-label">Texto *</span>
+          <textarea class="form-control" name="body" rows="3" maxlength="5000" required></textarea>
+        </label>
+        <div class="inline-actions">
+          <button class="btn" type="submit">Enviar</button>
+          <span class="muted" data-instant-message-result></span>
+        </div>
+      </form>
     </div>
 
     <div class="card">
@@ -113,6 +155,7 @@ $api = url_path('api/notifications.php');
 <script>
   (() => {
     const api = <?= json_encode($api, JSON_UNESCAPED_UNICODE) ?>;
+    const messagesApi = <?= json_encode($messages_api, JSON_UNESCAPED_UNICODE) ?>;
     const csrfToken = <?= json_encode($csrf, JSON_UNESCAPED_UNICODE) ?>;
 
     const markRead = async (payload) => {
@@ -134,6 +177,50 @@ $api = url_path('api/notifications.php');
         markRead(params);
       });
     });
+
+
+    const instantForm = document.querySelector('[data-instant-message-form]');
+    if (instantForm) {
+      const result = instantForm.querySelector('[data-instant-message-result]');
+      instantForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const assigneeField = instantForm.querySelector('select[name="assigned_to_user_id"]');
+        const typeField = instantForm.querySelector('select[name="message_type"]');
+        const bodyField = instantForm.querySelector('textarea[name="body"]');
+        if (!assigneeField.value) {
+          alert('Debés seleccionar un destinatario.');
+          assigneeField.focus();
+          return;
+        }
+        const payload = new URLSearchParams({
+          entity_type: 'user',
+          entity_id: assigneeField.value,
+          assigned_to_user_id: assigneeField.value,
+          require_assignee: '1',
+          message_type: typeField.value,
+          body: bodyField.value,
+          csrf_token: csrfToken,
+        });
+        const response = await fetch(`${messagesApi}?action=create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: payload.toString(),
+          credentials: 'same-origin',
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          alert(data.error || 'No se pudo enviar el mensaje.');
+          return;
+        }
+        bodyField.value = '';
+        typeField.value = 'observacion';
+        assigneeField.value = '';
+        if (result) {
+          result.textContent = 'Mensaje enviado correctamente.';
+        }
+        window.location.reload();
+      });
+    }
 
     const markAllButton = document.querySelector('[data-mark-all]');
     if (markAllButton) {
