@@ -53,6 +53,16 @@ function allowed_message_types(): array {
   return ['observacion', 'problema', 'consulta', 'accion'];
 }
 
+function resolve_assigned_user_id(PDO $pdo, int $requested_user_id): int {
+  if ($requested_user_id <= 0) {
+    return 0;
+  }
+  $st = $pdo->prepare('SELECT id FROM users WHERE id = ? AND is_active = 1 LIMIT 1');
+  $st->execute([$requested_user_id]);
+  $row = $st->fetch();
+  return $row ? (int)$row['id'] : 0;
+}
+
 function is_superadmin_role(): bool {
   return current_role() === 'superadmin';
 }
@@ -107,6 +117,7 @@ if ($action === 'create') {
   $body = trim((string)post('body'));
   $message_type = post('message_type');
   $status = post('status');
+  $assigned_to_user_id = (int)post('assigned_to_user_id', '0');
 
   if (!in_array($entity_type, allowed_entity_types(), true)) {
     json_response(['ok' => false, 'error' => 'Entidad inválida.'], 400);
@@ -124,11 +135,26 @@ if ($action === 'create') {
     $status = 'abierto';
   }
 
+  $require_assignee = post('require_assignee') === '1' || $entity_type === 'user';
+  $assigned_user_id = 0;
+  if ($assigned_to_user_id > 0) {
+    $assigned_user_id = resolve_assigned_user_id($pdo, $assigned_to_user_id);
+    if ($assigned_user_id <= 0) {
+      json_response(['ok' => false, 'error' => 'El usuario asignado es inválido o está inactivo.'], 400);
+    }
+  }
+  if ($require_assignee && $assigned_user_id <= 0) {
+    json_response(['ok' => false, 'error' => 'Debés seleccionar un destinatario para este mensaje.'], 400);
+  }
+  if ($entity_type === 'user' && $assigned_user_id > 0 && $entity_id !== $assigned_user_id) {
+    $entity_id = $assigned_user_id;
+  }
+
   $st = $pdo->prepare(
-    "INSERT INTO ts_messages (entity_type, entity_id, message_type, status, body, created_by)
-     VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO ts_messages (entity_type, entity_id, message_type, status, body, created_by, assigned_to_user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
-  $st->execute([$entity_type, $entity_id, $message_type, $status, $body, $current_user_id]);
+  $st->execute([$entity_type, $entity_id, $message_type, $status, $body, $current_user_id, $assigned_user_id > 0 ? $assigned_user_id : null]);
   $message_id = (int)$pdo->lastInsertId();
 
   $mentions = parse_mentions($pdo, $body, $current_user_id);
@@ -143,6 +169,13 @@ if ($action === 'create') {
       $mentionInsert->execute([$message_id, $mentioned_user_id]);
       $notifInsert->execute([$mentioned_user_id, $message_id]);
     }
+  }
+
+  if ($assigned_user_id > 0 && $assigned_user_id !== $current_user_id) {
+    $assignedNotif = $pdo->prepare(
+      "INSERT INTO ts_notifications (user_id, type, message_id) VALUES (?, 'assigned', ?)"
+    );
+    $assignedNotif->execute([$assigned_user_id, $message_id]);
   }
 
   json_response(['ok' => true, 'message_id' => $message_id]);
@@ -189,9 +222,12 @@ if ($action === 'list') {
 
   $sql = "
     SELECT m.id, m.entity_type, m.entity_id, m.message_type, m.status, m.body,
-           m.created_at, m.created_by, u.first_name, u.last_name, u.email
+           m.created_at, m.created_by, m.assigned_to_user_id,
+           u.first_name, u.last_name, u.email,
+           au.first_name AS assigned_first_name, au.last_name AS assigned_last_name, au.email AS assigned_email
     FROM ts_messages m
     JOIN users u ON u.id = m.created_by
+    LEFT JOIN users au ON au.id = m.assigned_to_user_id
     {$joins}
     WHERE " . implode(' AND ', $conditions) . "
     ORDER BY m.created_at DESC
@@ -206,6 +242,13 @@ if ($action === 'list') {
     if ($author_name === '') {
       $author_name = (string)$row['email'];
     }
+    $assigned_name = '';
+    if ((int)($row['assigned_to_user_id'] ?? 0) > 0) {
+      $assigned_name = trim((string)($row['assigned_first_name'] ?? '') . ' ' . (string)($row['assigned_last_name'] ?? ''));
+      if ($assigned_name === '') {
+        $assigned_name = (string)($row['assigned_email'] ?? '');
+      }
+    }
     $items[] = [
       'id' => (int)$row['id'],
       'entity_type' => (string)$row['entity_type'],
@@ -216,6 +259,8 @@ if ($action === 'list') {
       'created_at' => (string)$row['created_at'],
       'created_by' => (int)$row['created_by'],
       'author_name' => $author_name,
+      'assigned_to_user_id' => (int)($row['assigned_to_user_id'] ?? 0),
+      'assigned_to_name' => $assigned_name,
       'can_edit' => ((int)$row['created_by'] === $current_user_id) || is_superadmin_role(),
     ];
   }

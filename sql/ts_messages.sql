@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS ts_messages (
   status ENUM('abierto','en_proceso','resuelto','archivado') NOT NULL DEFAULT 'abierto',
   body TEXT NOT NULL,
   created_by INT UNSIGNED NOT NULL,
+  assigned_to_user_id INT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   archived_at DATETIME NULL,
@@ -14,8 +15,12 @@ CREATE TABLE IF NOT EXISTS ts_messages (
   KEY idx_ts_messages_entity (entity_type, entity_id, created_at),
   KEY idx_ts_messages_status (status, created_at),
   KEY idx_ts_messages_created_by (created_by, created_at),
+  KEY idx_ts_messages_assigned (assigned_to_user_id, created_at),
   CONSTRAINT fk_ts_messages_created_by
     FOREIGN KEY (created_by) REFERENCES users(id)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_ts_messages_assigned_to_user
+    FOREIGN KEY (assigned_to_user_id) REFERENCES users(id)
     ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

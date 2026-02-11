@@ -15,6 +15,31 @@ if ($display_name === '') {
   $display_name = $u['email'] ?? 'Usuario';
 }
 
+
+$pdo = db();
+$current_user_id = (int)($u['id'] ?? 0);
+$unread_notifications_count = 0;
+$st_unread_notifications = $pdo->prepare('SELECT COUNT(*) FROM ts_notifications WHERE user_id = ? AND is_read = 0');
+$st_unread_notifications->execute([$current_user_id]);
+$unread_notifications_count = (int)$st_unread_notifications->fetchColumn();
+
+$st_last_tasks_seen = $pdo->prepare('SELECT last_tasks_seen_at FROM users WHERE id = ? LIMIT 1');
+$st_last_tasks_seen->execute([$current_user_id]);
+$last_tasks_seen_at = (string)($st_last_tasks_seen->fetchColumn() ?: '');
+if ($last_tasks_seen_at === '') {
+  $last_tasks_seen_at = '1970-01-01 00:00:00';
+}
+$st_new_tasks = $pdo->prepare("
+  SELECT COUNT(DISTINCT t.id)
+  FROM tasks t
+  JOIN task_assignees ta ON ta.task_id = t.id
+  WHERE ta.user_id = ?
+    AND t.created_at > ?
+    AND t.status <> 'completed'
+");
+$st_new_tasks->execute([$current_user_id, $last_tasks_seen_at]);
+$new_tasks_count = (int)$st_new_tasks->fetchColumn();
+
 $cashboxes = [];
 $active_cashbox_id = 0;
 if ($is_superadmin || hasAnyCashboxPerm('can_view')) {
@@ -33,7 +58,8 @@ $can_cashbox_access = !empty($cashboxes);
       <nav class="nav nav-primary">
         <a class="nav-link" href="<?= url_path('dashboard.php') ?>">Listas</a>
         <a class="nav-link" href="<?= url_path('product_list.php') ?>">Productos</a>
-        <a class="nav-link" href="<?= url_path('tasks_all.php') ?>">Tareas</a>
+        <a class="nav-link" href="<?= url_path('tasks_all.php') ?>">Tarea<?php if ($new_tasks_count > 0): ?> <span class="badge badge-danger"><?= (int)$new_tasks_count ?></span><?php endif; ?></a>
+        <a class="nav-link" href="<?= url_path('inbox.php') ?>">Mensajería<?php if ($unread_notifications_count > 0): ?> <span class="badge badge-danger"><?= (int)$unread_notifications_count ?></span><?php endif; ?></a>
         <?php if ($can_cashbox_access): ?>
           <div class="cash-menu" data-cash-menu>
             <button class="cash-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
