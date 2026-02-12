@@ -1253,3 +1253,63 @@ select:focus {
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+.instant-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.instant-form-left,
+.instant-form-right {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.instant-form-left select[multiple] {
+  min-height: 220px;
+}
+
+.instant-message-field textarea {
+  min-height: 280px;
+  resize: vertical;
+}
+
+.notification-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.notification-summary::-webkit-details-marker {
+  display: none;
+}
+
+.notification-body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.thread-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.thread-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2);
+  background: var(--bg-2);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.is-hidden {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .instant-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
