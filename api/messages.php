@@ -98,6 +98,40 @@ function parse_mentions(PDO $pdo, string $body, int $author_id): array {
   return array_values(array_unique($user_ids));
 }
 
+function resolve_recipient_ids(PDO $pdo, int $current_user_id): array {
+  $ids = [];
+  $single = (int)post('assigned_to_user_id', '0');
+  if ($single > 0) {
+    $ids[] = $single;
+  }
+  $bulk = post('assigned_to_user_ids');
+  if (is_array($bulk)) {
+    foreach ($bulk as $bulkId) {
+      $ids[] = (int)$bulkId;
+    }
+  }
+  if (post('send_to_all') === '1') {
+    $st = $pdo->query('SELECT id FROM users WHERE is_active = 1');
+    $rows = $st ? $st->fetchAll() : [];
+    foreach ($rows as $row) {
+      $ids[] = (int)$row['id'];
+    }
+  }
+  $ids = array_values(array_unique(array_filter($ids, static fn($value) => $value > 0)));
+  if (!$ids) {
+    return [];
+  }
+  $placeholders = implode(',', array_fill(0, count($ids), '?'));
+  $st = $pdo->prepare("SELECT id FROM users WHERE is_active = 1 AND id IN ({$placeholders})");
+  $st->execute($ids);
+  $validRows = $st->fetchAll();
+  $valid = [];
+  foreach ($validRows as $row) {
+    $valid[] = (int)$row['id'];
+  }
+  return array_values(array_unique($valid));
+}
+
 $action = api_action();
 $pdo = db();
 $current = current_user();
@@ -114,10 +148,13 @@ if ($action === 'create') {
   require_csrf();
   $entity_type = post('entity_type');
   $entity_id = (int)post('entity_id', '0');
+  $title = trim((string)post('title'));
   $body = trim((string)post('body'));
   $message_type = post('message_type');
   $status = post('status');
   $assigned_to_user_id = (int)post('assigned_to_user_id', '0');
+  $parent_id = (int)post('parent_id', '0');
+  $thread_id = (int)post('thread_id', '0');
 
   if (!in_array($entity_type, allowed_entity_types(), true)) {
     json_response(['ok' => false, 'error' => 'Entidad inválida.'], 400);
@@ -128,6 +165,15 @@ if ($action === 'create') {
   if ($body === '' || mb_strlen($body) > 5000) {
     json_response(['ok' => false, 'error' => 'El mensaje es obligatorio y debe tener menos de 5000 caracteres.'], 400);
   }
+
+  $is_instant_message = post('require_assignee') === '1' || $entity_type === 'user';
+  if ($title === '' && !$is_instant_message) {
+    $title = mb_substr($body, 0, 160);
+  }
+  if ($title === '' || mb_strlen($title) > 160) {
+    json_response(['ok' => false, 'error' => 'El título es obligatorio y debe tener hasta 160 caracteres.'], 400);
+  }
+
   if (!in_array($message_type, allowed_message_types(), true)) {
     $message_type = 'observacion';
   }
@@ -135,50 +181,100 @@ if ($action === 'create') {
     $status = 'abierto';
   }
 
-  $require_assignee = post('require_assignee') === '1' || $entity_type === 'user';
-  $assigned_user_id = 0;
-  if ($assigned_to_user_id > 0) {
-    $assigned_user_id = resolve_assigned_user_id($pdo, $assigned_to_user_id);
-    if ($assigned_user_id <= 0) {
+  $recipients = resolve_recipient_ids($pdo, $current_user_id);
+  if ($assigned_to_user_id > 0 && !in_array($assigned_to_user_id, $recipients, true)) {
+    $resolved_single = resolve_assigned_user_id($pdo, $assigned_to_user_id);
+    if ($resolved_single <= 0) {
       json_response(['ok' => false, 'error' => 'El usuario asignado es inválido o está inactivo.'], 400);
     }
+    $recipients[] = $resolved_single;
   }
-  if ($require_assignee && $assigned_user_id <= 0) {
-    json_response(['ok' => false, 'error' => 'Debés seleccionar un destinatario para este mensaje.'], 400);
+  $recipients = array_values(array_unique($recipients));
+
+  $require_assignee = post('require_assignee') === '1' || $entity_type === 'user';
+  if ($require_assignee && !$recipients) {
+    json_response(['ok' => false, 'error' => 'Debés seleccionar al menos un destinatario para este mensaje.'], 400);
   }
-  if ($entity_type === 'user' && $assigned_user_id > 0 && $entity_id !== $assigned_user_id) {
+
+  $assigned_user_id = $recipients ? (int)$recipients[0] : 0;
+  if ($entity_type === 'user' && $assigned_user_id > 0) {
     $entity_id = $assigned_user_id;
   }
 
-  $st = $pdo->prepare(
-    "INSERT INTO ts_messages (entity_type, entity_id, message_type, status, body, created_by, assigned_to_user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
-  $st->execute([$entity_type, $entity_id, $message_type, $status, $body, $current_user_id, $assigned_user_id > 0 ? $assigned_user_id : null]);
-  $message_id = (int)$pdo->lastInsertId();
-
-  $mentions = parse_mentions($pdo, $body, $current_user_id);
-  if ($mentions) {
-    $mentionInsert = $pdo->prepare(
-      "INSERT IGNORE INTO ts_message_mentions (message_id, mentioned_user_id) VALUES (?, ?)"
-    );
-    $notifInsert = $pdo->prepare(
-      "INSERT INTO ts_notifications (user_id, type, message_id) VALUES (?, 'mention', ?)"
-    );
-    foreach ($mentions as $mentioned_user_id) {
-      $mentionInsert->execute([$message_id, $mentioned_user_id]);
-      $notifInsert->execute([$mentioned_user_id, $message_id]);
+  if ($parent_id > 0) {
+    $stParent = $pdo->prepare('SELECT id, thread_id FROM ts_messages WHERE id = ? LIMIT 1');
+    $stParent->execute([$parent_id]);
+    $parent = $stParent->fetch();
+    if (!$parent) {
+      json_response(['ok' => false, 'error' => 'Mensaje padre inválido.'], 400);
+    }
+    if ($thread_id <= 0) {
+      $thread_id = (int)($parent['thread_id'] ?? 0);
+      if ($thread_id <= 0) {
+        $thread_id = (int)$parent['id'];
+      }
     }
   }
 
-  if ($assigned_user_id > 0 && $assigned_user_id !== $current_user_id) {
-    $assignedNotif = $pdo->prepare(
-      "INSERT INTO ts_notifications (user_id, type, message_id) VALUES (?, 'assigned', ?)"
+  try {
+    $pdo->beginTransaction();
+
+    $st = $pdo->prepare(
+      "INSERT INTO ts_messages (entity_type, entity_id, title, thread_id, parent_id, message_type, status, body, created_by, assigned_to_user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $assignedNotif->execute([$assigned_user_id, $message_id]);
+    $st->execute([
+      $entity_type,
+      $entity_id,
+      $title,
+      $thread_id > 0 ? $thread_id : null,
+      $parent_id > 0 ? $parent_id : null,
+      $message_type,
+      $status,
+      $body,
+      $current_user_id,
+      $assigned_user_id > 0 ? $assigned_user_id : null,
+    ]);
+    $message_id = (int)$pdo->lastInsertId();
+
+    if ($thread_id <= 0) {
+      $thread_id = $message_id;
+      $stThread = $pdo->prepare('UPDATE ts_messages SET thread_id = ? WHERE id = ?');
+      $stThread->execute([$thread_id, $message_id]);
+    }
+
+    if ($recipients) {
+      $recipientInsert = $pdo->prepare('INSERT IGNORE INTO ts_message_recipients (message_id, user_id) VALUES (?, ?)');
+      $assignedNotif = $pdo->prepare("INSERT INTO ts_notifications (user_id, type, message_id) VALUES (?, 'assigned', ?)");
+      foreach ($recipients as $recipient_id) {
+        $recipientInsert->execute([$message_id, $recipient_id]);
+        $assignedNotif->execute([$recipient_id, $message_id]);
+      }
+    }
+
+    $mentions = parse_mentions($pdo, $body, $current_user_id);
+    if ($mentions) {
+      $mentionInsert = $pdo->prepare(
+        'INSERT IGNORE INTO ts_message_mentions (message_id, mentioned_user_id) VALUES (?, ?)'
+      );
+      $notifInsert = $pdo->prepare(
+        "INSERT INTO ts_notifications (user_id, type, message_id) VALUES (?, 'mention', ?)"
+      );
+      foreach ($mentions as $mentioned_user_id) {
+        $mentionInsert->execute([$message_id, $mentioned_user_id]);
+        $notifInsert->execute([$mentioned_user_id, $message_id]);
+      }
+    }
+
+    $pdo->commit();
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+      $pdo->rollBack();
+    }
+    json_response(['ok' => false, 'error' => 'No se pudo guardar el mensaje.'], 500);
   }
 
-  json_response(['ok' => true, 'message_id' => $message_id]);
+  json_response(['ok' => true, 'message_id' => $message_id, 'thread_id' => $thread_id]);
 }
 
 if ($action === 'list') {
@@ -221,7 +317,7 @@ if ($action === 'list') {
   }
 
   $sql = "
-    SELECT m.id, m.entity_type, m.entity_id, m.message_type, m.status, m.body,
+    SELECT m.id, m.entity_type, m.entity_id, m.title, m.thread_id, m.parent_id, m.message_type, m.status, m.body,
            m.created_at, m.created_by, m.assigned_to_user_id,
            u.first_name, u.last_name, u.email,
            au.first_name AS assigned_first_name, au.last_name AS assigned_last_name, au.email AS assigned_email
@@ -253,6 +349,9 @@ if ($action === 'list') {
       'id' => (int)$row['id'],
       'entity_type' => (string)$row['entity_type'],
       'entity_id' => (int)$row['entity_id'],
+      'title' => (string)$row['title'],
+      'thread_id' => (int)($row['thread_id'] ?? 0),
+      'parent_id' => (int)($row['parent_id'] ?? 0),
       'message_type' => (string)$row['message_type'],
       'status' => (string)$row['status'],
       'body' => (string)$row['body'],
