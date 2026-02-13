@@ -121,6 +121,7 @@ if ($thread_ids) {
 $csrf = csrf_token();
 $api = url_path('api/notifications.php');
 $messages_api = url_path('api/messages.php');
+$can_delete_messages = in_array(current_role(), ['superadmin', 'admin'], true);
 
 $build_origin_url = static function (string $entity_type, int $entity_id, int $message_id): ?string {
   if ($entity_id <= 0) {
@@ -277,6 +278,17 @@ $build_origin_url = static function (string $entity_type, int $entity_id, int $m
                       <a class="btn btn-ghost" href="<?= e($origin_url) ?>">Ir al origen</a>
                     <?php endif; ?>
                     <button class="btn btn-ghost" type="button" data-reply-toggle>Responder</button>
+                    <?php if ($can_delete_messages): ?>
+                      <button
+                        class="btn btn-danger notification-actions-danger"
+                        type="button"
+                        data-delete-message
+                        data-message-id="<?= $message_id ?>"
+                        data-thread-id="<?= $thread_id ?>"
+                      >
+                        Eliminar
+                      </button>
+                    <?php endif; ?>
                   </div>
                   <form class="message-form is-hidden" data-reply-form data-message-id="<?= $message_id ?>">
                     <input type="hidden" name="entity_type" value="user">
@@ -347,6 +359,20 @@ $build_origin_url = static function (string $entity_type, int $entity_id, int $m
                     </div>
                   <?php else: ?>
                     <div><?= nl2br(e((string)($item['body'] ?? ''))) ?></div>
+                  <?php endif; ?>
+                  <?php if ($can_delete_messages): ?>
+                    <div class="notification-actions">
+                      <span class="notification-actions-spacer"></span>
+                      <button
+                        class="btn btn-danger notification-actions-danger"
+                        type="button"
+                        data-delete-message
+                        data-message-id="<?= $message_id ?>"
+                        data-thread-id="<?= $thread_id ?>"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   <?php endif; ?>
                 </div>
               </details>
@@ -536,6 +562,37 @@ $build_origin_url = static function (string $entity_type, int $entity_id, int $m
           if (result) {
             result.textContent = data.error || 'No se pudo enviar la respuesta.';
           }
+          return;
+        }
+        window.location.reload();
+      });
+    });
+
+    document.querySelectorAll('[data-delete-message]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const messageId = button.dataset.messageId;
+        const threadId = button.dataset.threadId;
+        if (!messageId) {
+          return;
+        }
+        const shouldDelete = window.confirm('Esta acción eliminará el mensaje de forma permanente. ¿Deseás continuar?');
+        if (!shouldDelete) {
+          return;
+        }
+        const payload = new URLSearchParams({
+          csrf_token: csrfToken,
+          message_id: messageId,
+          thread_id: threadId || '',
+        });
+        const response = await fetch(`${messagesApi}?action=delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: payload.toString(),
+          credentials: 'same-origin',
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          window.alert(data.error || 'No se pudo eliminar el mensaje.');
           return;
         }
         window.location.reload();

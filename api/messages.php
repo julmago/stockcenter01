@@ -67,6 +67,11 @@ function is_superadmin_role(): bool {
   return current_role() === 'superadmin';
 }
 
+
+function can_delete_messages_role(): bool {
+  return in_array(current_role(), ['superadmin', 'admin'], true);
+}
+
 function parse_mentions(PDO $pdo, string $body, int $author_id): array {
   if (!preg_match_all('/@([\p{L}\p{N}._-]+)/u', $body, $matches)) {
     return [];
@@ -396,6 +401,80 @@ if ($action === 'status') {
   $st = $pdo->prepare($sql);
   $st->execute([$status, $message_id]);
   json_response(['ok' => true]);
+}
+
+
+if ($action === 'delete') {
+  if (!is_post()) {
+    json_response(['ok' => false, 'error' => 'Método inválido.'], 405);
+  }
+  require_csrf();
+  if (!can_delete_messages_role()) {
+    json_response(['ok' => false, 'error' => 'No autorizado.'], 403);
+  }
+
+  $message_id = (int)post('message_id', '0');
+  if ($message_id <= 0) {
+    json_response(['ok' => false, 'error' => 'Parámetros inválidos.'], 400);
+  }
+
+  $st = $pdo->prepare('SELECT id, thread_id, parent_id FROM ts_messages WHERE id = ? LIMIT 1');
+  $st->execute([$message_id]);
+  $message = $st->fetch();
+  if (!$message) {
+    json_response(['ok' => false, 'error' => 'Mensaje no encontrado.'], 404);
+  }
+
+  $thread_id = (int)($message['thread_id'] ?? 0);
+  if ($thread_id <= 0) {
+    $thread_id = (int)$message['id'];
+  }
+  $is_root_message = (int)($message['parent_id'] ?? 0) <= 0;
+
+  try {
+    $pdo->beginTransaction();
+
+    $target_message_ids = [];
+    if ($is_root_message) {
+      $stThread = $pdo->prepare('SELECT id FROM ts_messages WHERE thread_id = ?');
+      $stThread->execute([$thread_id]);
+      $rows = $stThread->fetchAll();
+      foreach ($rows as $row) {
+        $target_message_ids[] = (int)$row['id'];
+      }
+    } else {
+      $target_message_ids[] = (int)$message['id'];
+    }
+
+    $target_message_ids = array_values(array_unique(array_filter($target_message_ids, static fn($id) => $id > 0)));
+    if (!$target_message_ids) {
+      $pdo->rollBack();
+      json_response(['ok' => false, 'error' => 'No se encontraron mensajes para eliminar.'], 404);
+    }
+
+    $placeholders = implode(',', array_fill(0, count($target_message_ids), '?'));
+
+    $deleteMentions = $pdo->prepare("DELETE FROM ts_message_mentions WHERE message_id IN ({$placeholders})");
+    $deleteMentions->execute($target_message_ids);
+
+    $deleteRecipients = $pdo->prepare("DELETE FROM ts_message_recipients WHERE message_id IN ({$placeholders})");
+    $deleteRecipients->execute($target_message_ids);
+
+    $deleteNotifications = $pdo->prepare("DELETE FROM ts_notifications WHERE message_id IN ({$placeholders})");
+    $deleteNotifications->execute($target_message_ids);
+
+    $deleteMessages = $pdo->prepare("DELETE FROM ts_messages WHERE id IN ({$placeholders})");
+    $deleteMessages->execute($target_message_ids);
+
+    $pdo->commit();
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+      $pdo->rollBack();
+    }
+    json_response(['ok' => false, 'error' => 'Error interno DB.'], 500);
+  }
+
+  json_response(['ok' => true, 'deleted_message_ids' => $target_message_ids]);
 }
 
 if ($action === 'archive') {
