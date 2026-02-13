@@ -150,6 +150,9 @@ if ($action === 'create') {
   $entity_id = (int)post('entity_id', '0');
   $title = trim((string)post('title'));
   $body = trim((string)post('body'));
+  if ($body === '') {
+    $body = trim((string)post('message'));
+  }
   $message_type = post('message_type');
   $status = post('status');
   $assigned_to_user_id = (int)post('assigned_to_user_id', '0');
@@ -271,7 +274,7 @@ if ($action === 'create') {
     if ($pdo->inTransaction()) {
       $pdo->rollBack();
     }
-    json_response(['ok' => false, 'error' => 'No se pudo guardar el mensaje.'], 500);
+    json_response(['ok' => false, 'error' => 'Error interno DB.'], 500);
   }
 
   json_response(['ok' => true, 'message_id' => $message_id, 'thread_id' => $thread_id]);

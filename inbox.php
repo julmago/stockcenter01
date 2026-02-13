@@ -427,34 +427,47 @@ $messages_api = url_path('api/messages.php');
           return;
         }
 
-        const payload = new URLSearchParams({
-          entity_type: 'user',
-          entity_id: selected[0] || '1',
-          require_assignee: '1',
-          message_type: typeField.value,
-          title: titleField.value,
-          body: bodyField.value,
-          send_to_all: '0',
-          csrf_token: csrfToken,
-        });
-        selected.forEach((value) => {
-          payload.append('assigned_to_user_ids[]', value);
-        });
+        const formData = new FormData(instantForm);
+        formData.set('entity_type', 'user');
+        formData.set('entity_id', selected[0] || '1');
+        formData.set('require_assignee', '1');
+        formData.set('message_type', typeField.value);
+        formData.set('title', titleField.value.trim());
+        formData.set('body', bodyField.value.trim());
+        formData.set('message', bodyField.value.trim());
+        formData.set('send_to_all', '0');
+        formData.set('csrf_token', csrfToken);
+        formData.delete('assigned_to_user_ids[]');
+        selected.forEach((value) => formData.append('assigned_to_user_ids[]', value));
 
         try {
           const response = await fetch(`${messagesApi}?action=create`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: payload.toString(),
+            body: formData,
             credentials: 'same-origin',
           });
-          const data = await response.json();
+          const raw = await response.text();
+          let data = null;
+          try {
+            data = raw ? JSON.parse(raw) : null;
+          } catch (parseError) {
+            data = null;
+          }
+
+          if (!data) {
+            showFormError('Respuesta inválida del servidor.');
+            return;
+          }
+
           if (!response.ok || !data.ok) {
             showFormError(data.error || 'No se pudo enviar el mensaje.');
             return;
           }
         } catch (error) {
-          showFormError('Error de conexión.');
+          const message = error instanceof Error && error.message
+            ? `Error de conexión: ${error.message}`
+            : 'Error de conexión: no se pudo contactar al servidor.';
+          showFormError(message);
           return;
         }
 
@@ -467,7 +480,6 @@ $messages_api = url_path('api/messages.php');
         if (result) {
           result.textContent = 'Mensaje enviado correctamente.';
         }
-        window.location.reload();
       });
     }
 
