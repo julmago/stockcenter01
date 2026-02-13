@@ -4,7 +4,7 @@ require_once __DIR__ . '/db.php';
 require_login();
 
 $view = get('view', 'inbox');
-if (!in_array($view, ['inbox', 'sent'], true)) {
+if (!in_array($view, ['inbox', 'sent', 'new'], true)) {
   $view = 'inbox';
 }
 
@@ -23,6 +23,9 @@ $users = $users_st ? $users_st->fetchAll() : [];
 $inbox_items = [];
 $sent_items = [];
 $thread_ids = [];
+
+$show_new_message = $view === 'new';
+$show_notifications = !$show_new_message;
 
 if ($view === 'inbox') {
   $where = 'n.user_id = ?';
@@ -54,7 +57,7 @@ if ($view === 'inbox') {
       $thread_ids[] = $tid;
     }
   }
-} else {
+} elseif ($view === 'sent') {
   $st = $pdo->prepare(
     "SELECT m.id, m.entity_type, m.entity_id, m.title, m.thread_id, m.parent_id, m.body, m.status, m.message_type,
             m.created_at, m.created_by,
@@ -141,10 +144,11 @@ $messages_api = url_path('api/messages.php');
         <a class="btn<?= $view === 'inbox' && $filter === 'unread' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=inbox&filter=unread') ?>">No leídas</a>
         <a class="btn<?= $view === 'inbox' && $filter === 'all' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=inbox&filter=all') ?>">Todas</a>
         <a class="btn<?= $view === 'sent' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=sent') ?>">Enviados</a>
-        <a class="btn btn-ghost" href="#instant-message-form" data-new-message-link>Nuevo mensaje</a>
+        <a class="btn<?= $show_new_message ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=new') ?>">Nuevo mensaje</a>
       </div>
     </div>
 
+    <?php if ($show_new_message): ?>
     <div class="card" id="instant-message-form">
       <div class="card-header">
         <h3 class="card-title">Mensaje instantáneo</h3>
@@ -182,7 +186,7 @@ $messages_api = url_path('api/messages.php');
             </label>
             <label class="form-field instant-message-field">
               <span class="form-label">Mensaje *</span>
-              <textarea class="form-control" name="body" rows="10" maxlength="5000" required></textarea>
+              <textarea class="form-control" name="body" rows="8" maxlength="5000" required></textarea>
             </label>
           </div>
         </div>
@@ -192,15 +196,12 @@ $messages_api = url_path('api/messages.php');
         </div>
       </form>
     </div>
+    <?php endif; ?>
 
+    <?php if ($show_notifications): ?>
     <div class="card">
       <div class="card-header messages-header">
         <h3 class="card-title"><?= $view === 'sent' ? 'Enviados' : 'Notificaciones' ?></h3>
-        <?php if ($view === 'inbox'): ?>
-          <div class="messages-filters">
-            <button class="messages-filter-btn" type="button" data-mark-all>Marcar todo como leído</button>
-          </div>
-        <?php endif; ?>
       </div>
 
       <div class="notifications-list" data-notifications-list>
@@ -338,6 +339,7 @@ $messages_api = url_path('api/messages.php');
         <?php endif; ?>
       </div>
     </div>
+    <?php endif; ?>
   </div>
 </main>
 
@@ -469,17 +471,6 @@ $messages_api = url_path('api/messages.php');
       });
     }
 
-    const markAllButton = document.querySelector('[data-mark-all]');
-    if (markAllButton) {
-      markAllButton.addEventListener('click', () => {
-        const params = new URLSearchParams({
-          mark_all: '1',
-          csrf_token: csrfToken,
-        });
-        markRead(params);
-      });
-    }
-
     document.querySelectorAll('[data-reply-toggle]').forEach((button) => {
       button.addEventListener('click', () => {
         const details = button.closest('details');
@@ -523,21 +514,6 @@ $messages_api = url_path('api/messages.php');
       });
     });
 
-    const newMessageLink = document.querySelector('[data-new-message-link]');
-    if (newMessageLink) {
-      newMessageLink.addEventListener('click', (event) => {
-        event.preventDefault();
-        const formCard = document.getElementById('instant-message-form');
-        if (!formCard) {
-          return;
-        }
-        formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        const titleInput = formCard.querySelector('input[name="title"]');
-        if (titleInput) {
-          titleInput.focus({ preventScroll: true });
-        }
-      });
-    }
   })();
 </script>
 </body>

@@ -1268,7 +1268,7 @@ select:focus {
 }
 
 .instant-form-left select[multiple] {
-  min-height: 220px;
+  min-height: 180px;
 }
 
 .form-error {
@@ -1280,7 +1280,7 @@ select:focus {
 }
 
 .instant-message-field textarea {
-  min-height: 280px;
+  min-height: 220px;
   resize: vertical;
 }
 
