@@ -1271,6 +1271,14 @@ select:focus {
   min-height: 220px;
 }
 
+.form-error {
+  border: 1px solid #ef4444;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+}
+
 .instant-message-field textarea {
   min-height: 280px;
   resize: vertical;

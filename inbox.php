@@ -140,27 +140,10 @@ $messages_api = url_path('api/messages.php');
       <div class="card-header">
         <h3 class="card-title">Mensaje instantáneo</h3>
       </div>
-      <form class="stack instant-form" data-instant-message-form>
+      <form class="stack instant-form" id="instantMessageForm" data-instant-message-form>
+        <div class="form-error" data-instant-message-error hidden></div>
         <div class="instant-form-grid">
           <div class="instant-form-left">
-            <label class="form-field">
-              <span class="form-label">Asignar a *</span>
-              <select class="form-control" name="assigned_to_user_ids[]" multiple required size="10">
-                <?php foreach ($users as $msg_user): ?>
-                  <?php $msg_user_name = trim((string)($msg_user['first_name'] ?? '') . ' ' . (string)($msg_user['last_name'] ?? '')); ?>
-                  <option value="<?= (int)$msg_user['id'] ?>">
-                    <?= e($msg_user_name !== '' ? $msg_user_name : (string)$msg_user['email']) ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-              <small class="muted">Mantené Ctrl/Cmd para seleccionar varios usuarios.</small>
-            </label>
-            <label class="form-field instant-send-all">
-              <span class="inline-actions">
-                <input type="checkbox" name="send_to_all" value="1">
-                <span>Enviar a todos</span>
-              </span>
-            </label>
             <label class="form-field">
               <span class="form-label">Tipo</span>
               <select class="form-control" name="message_type">
@@ -169,6 +152,19 @@ $messages_api = url_path('api/messages.php');
                 <option value="consulta">Consulta</option>
                 <option value="accion">Acción</option>
               </select>
+            </label>
+            <label class="form-field">
+              <span class="form-label">Asignar a *</span>
+              <select class="form-control" name="assigned_to_user_ids[]" multiple required size="10">
+                <option value="__all__">Enviar a todos</option>
+                <?php foreach ($users as $msg_user): ?>
+                  <?php $msg_user_name = trim((string)($msg_user['first_name'] ?? '') . ' ' . (string)($msg_user['last_name'] ?? '')); ?>
+                  <option value="<?= (int)$msg_user['id'] ?>">
+                    <?= e($msg_user_name !== '' ? $msg_user_name : (string)$msg_user['email']) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+              <small class="muted">Mantené Ctrl/Cmd para seleccionar varios usuarios. Seleccioná “Enviar a todos” para enviar a todos los usuarios activos.</small>
             </label>
           </div>
           <div class="instant-form-right">
@@ -370,23 +366,84 @@ $messages_api = url_path('api/messages.php');
     const instantForm = document.querySelector('[data-instant-message-form]');
     if (instantForm) {
       const result = instantForm.querySelector('[data-instant-message-result]');
+      const errorBox = instantForm.querySelector('[data-instant-message-error]');
+      const assigneeField = instantForm.querySelector('select[name="assigned_to_user_ids[]"]');
+      const typeField = instantForm.querySelector('select[name="message_type"]');
+      const titleField = instantForm.querySelector('input[name="title"]');
+      const bodyField = instantForm.querySelector('textarea[name="body"]');
+
+      const showFormError = (message) => {
+        if (!errorBox) {
+          alert(message);
+          return;
+        }
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+      };
+
+      const clearFormError = () => {
+        if (!errorBox) {
+          return;
+        }
+        errorBox.textContent = '';
+        errorBox.hidden = true;
+      };
+
+      const syncAssigneesSelection = () => {
+        if (!assigneeField) {
+          return;
+        }
+        const options = Array.from(assigneeField.options || []);
+        const sendAllOption = options.find((option) => option.value === '__all__');
+        if (!sendAllOption || !sendAllOption.selected) {
+          options.forEach((option) => {
+            if (option.value !== '__all__') {
+              option.disabled = false;
+            }
+          });
+          return;
+        }
+        options.forEach((option) => {
+          if (option.value !== '__all__') {
+            option.selected = false;
+            option.disabled = true;
+          }
+        });
+      };
+
+      if (!assigneeField || !typeField || !titleField || !bodyField) {
+        showFormError('No se pudo inicializar el formulario de mensaje instantáneo.');
+        return;
+      }
+
+      assigneeField.addEventListener('change', syncAssigneesSelection);
+      syncAssigneesSelection();
+
       instantForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        const assigneeField = instantForm.querySelector('select[name="assigned_to_user_ids[]"]');
-        const sendAllField = instantForm.querySelector('input[name="send_to_all"]');
-        const typeField = instantForm.querySelector('select[name="message_type"]');
-        const titleField = instantForm.querySelector('input[name="title"]');
-        const bodyField = instantForm.querySelector('textarea[name="body"]');
-        const selected = Array.from(assigneeField.selectedOptions || []).map((option) => option.value).filter(Boolean);
 
-        if (!sendAllField.checked && selected.length === 0) {
-          alert('Debés seleccionar al menos un destinatario o usar “Enviar a todos”.');
+        clearFormError();
+        if (result) {
+          result.textContent = '';
+        }
+
+        const selectedValues = Array.from(assigneeField.selectedOptions || []).map((option) => option.value).filter(Boolean);
+        const sendToAll = selectedValues.includes('__all__');
+        const selected = selectedValues.filter((value) => value !== '__all__');
+
+        if (!sendToAll && selected.length === 0) {
+          showFormError('Debés seleccionar al menos un destinatario o elegir “Enviar a todos”.');
           assigneeField.focus();
           return;
         }
         if (!titleField.value.trim()) {
-          alert('El título es obligatorio.');
+          showFormError('El título es obligatorio.');
           titleField.focus();
+          return;
+        }
+        if (!bodyField.value.trim()) {
+          showFormError('El mensaje es obligatorio.');
+          bodyField.focus();
           return;
         }
 
@@ -397,30 +454,36 @@ $messages_api = url_path('api/messages.php');
           message_type: typeField.value,
           title: titleField.value,
           body: bodyField.value,
-          send_to_all: sendAllField.checked ? '1' : '0',
+          send_to_all: sendToAll ? '1' : '0',
           csrf_token: csrfToken,
         });
         selected.forEach((value) => {
           payload.append('assigned_to_user_ids[]', value);
         });
 
-        const response = await fetch(`${messagesApi}?action=create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: payload.toString(),
-          credentials: 'same-origin',
-        });
-        const data = await response.json();
-        if (!data.ok) {
-          alert(data.error || 'No se pudo enviar el mensaje.');
+        try {
+          const response = await fetch(`${messagesApi}?action=create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: payload.toString(),
+            credentials: 'same-origin',
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) {
+            showFormError(data.error || 'No se pudo enviar el mensaje.');
+            return;
+          }
+        } catch (error) {
+          showFormError('Error de conexión.');
           return;
         }
+
         bodyField.value = '';
         titleField.value = '';
         typeField.value = 'observacion';
-        sendAllField.checked = false;
         Array.from(assigneeField.options).forEach((option) => {
           option.selected = false;
+          option.disabled = false;
         });
         if (result) {
           result.textContent = 'Mensaje enviado correctamente.';
