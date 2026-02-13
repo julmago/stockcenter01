@@ -104,11 +104,13 @@ function resolve_recipient_ids(PDO $pdo, int $current_user_id): array {
   if ($single > 0) {
     $ids[] = $single;
   }
-  $bulk = post('assigned_to_user_ids');
+  $bulk = $_POST['assigned_to_user_ids'] ?? ($_POST['assigned_to_user_ids[]'] ?? null);
   if (is_array($bulk)) {
     foreach ($bulk as $bulkId) {
       $ids[] = (int)$bulkId;
     }
+  } elseif ($bulk !== null && $bulk !== '') {
+    $ids[] = (int)$bulk;
   }
   if (post('send_to_all') === '1') {
     $st = $pdo->query('SELECT id FROM users WHERE is_active = 1');
