@@ -222,7 +222,6 @@ $messages_api = url_path('api/messages.php');
                   $author = (string)($item['email'] ?? 'Sistema');
                 }
                 $conversation = $thread_messages[$thread_id] ?? [];
-                $quote = "[Cita de {$author} | " . (string)($item['title'] ?? 'Sin título') . "]\n" . mb_substr((string)($item['body'] ?? ''), 0, 180) . "\n\n";
               ?>
               <details class="notification-item<?= $is_unread ? ' is-unread' : '' ?>">
                 <summary class="notification-summary">
@@ -274,7 +273,7 @@ $messages_api = url_path('api/messages.php');
                     </label>
                     <label class="form-field">
                       <span class="form-label">Respuesta *</span>
-                      <textarea class="form-control" name="body" rows="5" maxlength="5000" required data-reply-template="<?= e($quote) ?>"><?= e($quote) ?></textarea>
+                      <textarea class="form-control" name="body" rows="5" maxlength="5000" required></textarea>
                     </label>
                     <div class="inline-actions">
                       <button class="btn" type="submit">Enviar respuesta</button>
@@ -495,8 +494,8 @@ $messages_api = url_path('api/messages.php');
         }
         form.classList.toggle('is-hidden');
         const textarea = form.querySelector('textarea[name="body"]');
-        if (textarea && textarea.value.trim() === '') {
-          textarea.value = textarea.dataset.replyTemplate || '';
+        if (textarea) {
+          textarea.value = '';
         }
       });
     });
