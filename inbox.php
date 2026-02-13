@@ -132,11 +132,20 @@ $messages_api = url_path('api/messages.php');
 <main class="page">
   <div class="container">
     <div class="page-header">
-      <h2 class="page-title">Inbox</h2>
-      <span class="muted">Mensajería instantánea</span>
+      <div>
+        <h2 class="page-title">Inbox</h2>
+        <span class="muted">Mensajería instantánea</span>
+      </div>
+      <div class="inline-actions">
+        <a class="btn<?= $view === 'inbox' && $filter === 'unread' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=inbox&filter=unread') ?>">Inbox</a>
+        <a class="btn<?= $view === 'inbox' && $filter === 'unread' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=inbox&filter=unread') ?>">No leídas</a>
+        <a class="btn<?= $view === 'inbox' && $filter === 'all' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=inbox&filter=all') ?>">Todas</a>
+        <a class="btn<?= $view === 'sent' ? '' : ' btn-ghost' ?>" href="<?= url_path('inbox.php?view=sent') ?>">Enviados</a>
+        <a class="btn btn-ghost" href="#instant-message-form" data-new-message-link>Nuevo mensaje</a>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="instant-message-form">
       <div class="card-header">
         <h3 class="card-title">Mensaje instantáneo</h3>
       </div>
@@ -156,7 +165,6 @@ $messages_api = url_path('api/messages.php');
             <label class="form-field">
               <span class="form-label">Asignar a *</span>
               <select class="form-control" name="assigned_to_user_ids[]" multiple required size="10">
-                <option value="__all__">Enviar a todos</option>
                 <?php foreach ($users as $msg_user): ?>
                   <?php $msg_user_name = trim((string)($msg_user['first_name'] ?? '') . ' ' . (string)($msg_user['last_name'] ?? '')); ?>
                   <option value="<?= (int)$msg_user['id'] ?>">
@@ -164,7 +172,7 @@ $messages_api = url_path('api/messages.php');
                   </option>
                 <?php endforeach; ?>
               </select>
-              <small class="muted">Mantené Ctrl/Cmd para seleccionar varios usuarios. Seleccioná “Enviar a todos” para enviar a todos los usuarios activos.</small>
+              <small class="muted">Mantené Ctrl/Cmd para seleccionar varios usuarios.</small>
             </label>
           </div>
           <div class="instant-form-right">
@@ -188,15 +196,11 @@ $messages_api = url_path('api/messages.php');
     <div class="card">
       <div class="card-header messages-header">
         <h3 class="card-title"><?= $view === 'sent' ? 'Enviados' : 'Notificaciones' ?></h3>
-        <div class="messages-filters">
-          <a class="messages-filter-btn<?= $view === 'inbox' ? ' is-active' : '' ?>" href="<?= url_path('inbox.php?view=inbox&filter=' . e($filter)) ?>">Inbox</a>
-          <a class="messages-filter-btn<?= $view === 'sent' ? ' is-active' : '' ?>" href="<?= url_path('inbox.php?view=sent') ?>">Enviados</a>
-          <?php if ($view === 'inbox'): ?>
-            <a class="messages-filter-btn<?= $filter === 'unread' ? ' is-active' : '' ?>" href="<?= url_path('inbox.php?view=inbox&filter=unread') ?>">No leídas</a>
-            <a class="messages-filter-btn<?= $filter === 'all' ? ' is-active' : '' ?>" href="<?= url_path('inbox.php?view=inbox&filter=all') ?>">Todas</a>
+        <?php if ($view === 'inbox'): ?>
+          <div class="messages-filters">
             <button class="messages-filter-btn" type="button" data-mark-all>Marcar todo como leído</button>
-          <?php endif; ?>
-        </div>
+          </div>
+        <?php endif; ?>
       </div>
 
       <div class="notifications-list" data-notifications-list>
@@ -389,35 +393,10 @@ $messages_api = url_path('api/messages.php');
         errorBox.hidden = true;
       };
 
-      const syncAssigneesSelection = () => {
-        if (!assigneeField) {
-          return;
-        }
-        const options = Array.from(assigneeField.options || []);
-        const sendAllOption = options.find((option) => option.value === '__all__');
-        if (!sendAllOption || !sendAllOption.selected) {
-          options.forEach((option) => {
-            if (option.value !== '__all__') {
-              option.disabled = false;
-            }
-          });
-          return;
-        }
-        options.forEach((option) => {
-          if (option.value !== '__all__') {
-            option.selected = false;
-            option.disabled = true;
-          }
-        });
-      };
-
       if (!assigneeField || !typeField || !titleField || !bodyField) {
         showFormError('No se pudo inicializar el formulario de mensaje instantáneo.');
         return;
       }
-
-      assigneeField.addEventListener('change', syncAssigneesSelection);
-      syncAssigneesSelection();
 
       instantForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -428,11 +407,10 @@ $messages_api = url_path('api/messages.php');
         }
 
         const selectedValues = Array.from(assigneeField.selectedOptions || []).map((option) => option.value).filter(Boolean);
-        const sendToAll = selectedValues.includes('__all__');
-        const selected = selectedValues.filter((value) => value !== '__all__');
+        const selected = selectedValues;
 
-        if (!sendToAll && selected.length === 0) {
-          showFormError('Debés seleccionar al menos un destinatario o elegir “Enviar a todos”.');
+        if (selected.length === 0) {
+          showFormError('Debés seleccionar al menos un destinatario.');
           assigneeField.focus();
           return;
         }
@@ -454,7 +432,7 @@ $messages_api = url_path('api/messages.php');
           message_type: typeField.value,
           title: titleField.value,
           body: bodyField.value,
-          send_to_all: sendToAll ? '1' : '0',
+          send_to_all: '0',
           csrf_token: csrfToken,
         });
         selected.forEach((value) => {
@@ -483,7 +461,6 @@ $messages_api = url_path('api/messages.php');
         typeField.value = 'observacion';
         Array.from(assigneeField.options).forEach((option) => {
           option.selected = false;
-          option.disabled = false;
         });
         if (result) {
           result.textContent = 'Mensaje enviado correctamente.';
@@ -545,6 +522,22 @@ $messages_api = url_path('api/messages.php');
         window.location.reload();
       });
     });
+
+    const newMessageLink = document.querySelector('[data-new-message-link]');
+    if (newMessageLink) {
+      newMessageLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        const formCard = document.getElementById('instant-message-form');
+        if (!formCard) {
+          return;
+        }
+        formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const titleInput = formCard.querySelector('input[name="title"]');
+        if (titleInput) {
+          titleInput.focus({ preventScroll: true });
+        }
+      });
+    }
   })();
 </script>
 </body>
