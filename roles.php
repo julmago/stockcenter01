@@ -31,6 +31,7 @@ $sections = [
   ],
   'Tareas' => [
     'tasks_delete' => 'Eliminar tareas',
+    'can_delete_messages' => 'Puede eliminar mensajes',
   ],
   'Caja' => [
     'cash.view_entries_detail' => 'Ver detalle de entradas',
@@ -166,6 +167,9 @@ if (is_post() && post('action') === 'save_role') {
         foreach ($perm_keys as $perm_key) {
           $input_key = 'perm_' . str_replace('.', '_', $perm_key);
           $value = post($input_key) === '1' ? 1 : 0;
+          if ($role_key === 'superadmin' && $perm_key === 'can_delete_messages') {
+            $value = 1;
+          }
           $st = db()->prepare("INSERT INTO role_permissions(role_key, perm_key, perm_value) VALUES(?, ?, ?)
             ON DUPLICATE KEY UPDATE perm_value = VALUES(perm_value)");
           $st->execute([$role_key, $perm_key, $value]);
@@ -474,6 +478,9 @@ foreach ($role_keys as $role_key) {
                     $checked = $perm_key === 'tasks_delete' && $is_locked
                       ? true
                       : !empty($perm_map[$role_key][$perm_key]);
+                    if ($perm_key === 'can_delete_messages' && $is_locked) {
+                      $checked = true;
+                    }
                   ?>
                   <label class="form-check" style="min-width:220px;">
                     <input type="checkbox" name="perm_<?= e(str_replace('.', '_', $perm_key)) ?>" value="1" <?= $checked ? 'checked' : '' ?> <?= $is_locked ? 'disabled' : '' ?>>
