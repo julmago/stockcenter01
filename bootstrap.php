@@ -244,6 +244,12 @@ function permission_default_definitions(): array {
       'vendedor' => false,
       'lectura' => false,
     ],
+    'can_delete_messages' => [
+      'superadmin' => true,
+      'admin' => true,
+      'vendedor' => false,
+      'lectura' => false,
+    ],
     'list_can_sync' => [
       'superadmin' => true,
       'admin' => true,
@@ -557,6 +563,10 @@ function can_delete_task(): bool {
 
 function can_edit_product(): bool {
   return hasPerm('product_can_edit');
+}
+
+function can_delete_messages(): bool {
+  return hasPerm('can_delete_messages');
 }
 
 function can_add_code(): bool {

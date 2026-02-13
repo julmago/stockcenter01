@@ -69,7 +69,10 @@ function is_superadmin_role(): bool {
 
 
 function can_delete_messages_role(): bool {
-  return in_array(current_role(), ['superadmin', 'admin'], true);
+  if (is_superadmin_role()) {
+    return true;
+  }
+  return can_delete_messages();
 }
 
 function parse_mentions(PDO $pdo, string $body, int $author_id): array {
@@ -410,7 +413,7 @@ if ($action === 'delete') {
   }
   require_csrf();
   if (!can_delete_messages_role()) {
-    json_response(['ok' => false, 'error' => 'No autorizado.'], 403);
+    json_response(['ok' => false, 'error' => 'No autorizado'], 403);
   }
 
   $message_id = (int)post('message_id', '0');

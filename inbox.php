@@ -121,7 +121,7 @@ if ($thread_ids) {
 $csrf = csrf_token();
 $api = url_path('api/notifications.php');
 $messages_api = url_path('api/messages.php');
-$can_delete_messages = in_array(current_role(), ['superadmin', 'admin'], true);
+$can_delete_messages = can_delete_messages();
 
 $build_origin_url = static function (string $entity_type, int $entity_id, int $message_id): ?string {
   if ($entity_id <= 0) {
