@@ -12,7 +12,7 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
   $api_base = url_path('api/messages.php');
   $notifications_api = url_path('api/notifications.php');
   $pdo = db();
-  $users_st = $pdo->query("SELECT id, first_name, last_name, email FROM users WHERE is_active = 1 ORDER BY first_name, last_name, email");
+  $users_st = $pdo->query('SELECT id, first_name, last_name, email FROM users WHERE is_active = 1 ORDER BY first_name, last_name, email');
   $users = $users_st ? $users_st->fetchAll() : [];
   ?>
   <div class="card messages-block" id="<?= e($container_id) ?>" data-messages-block
@@ -35,36 +35,47 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
     <div class="messages-timeline" data-messages-list>
       <div class="muted">Cargando mensajes...</div>
     </div>
-    <form class="message-form" data-message-form>
-      <label class="form-label" for="message-body-<?= e($container_id) ?>">Nuevo mensaje</label>
-      <textarea class="form-control" id="message-body-<?= e($container_id) ?>" name="body" maxlength="5000" required></textarea>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Tipo</label>
-          <select name="message_type">
-            <option value="observacion">Observación</option>
-            <option value="problema">Problema</option>
-            <option value="consulta">Consulta</option>
-            <option value="accion">Acción</option>
-          </select>
+    <form class="stack instant-form" data-message-form>
+      <div class="form-error" data-message-form-error hidden></div>
+      <div class="instant-form-grid">
+        <div class="instant-form-left">
+          <label class="form-field">
+            <span class="form-label">Tipo</span>
+            <select class="form-control" name="message_type">
+              <option value="observacion" selected>Observación</option>
+              <option value="problema">Problema</option>
+              <option value="consulta">Consulta</option>
+              <option value="accion">Acción</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span class="form-label">Asignar a *</span>
+            <select class="form-control" name="assigned_to_user_ids[]" multiple required size="10">
+              <?php foreach ($users as $user): ?>
+                <?php $user_name = trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? '')); ?>
+                <option value="<?= (int)$user['id'] ?>">
+                  <?= e($user_name !== '' ? $user_name : (string)$user['email']) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+            <small class="muted">Mantené Ctrl/Cmd para seleccionar varios usuarios.</small>
+          </label>
         </div>
-        <div class="form-group">
-          <label class="form-label">Asignar a</label>
-          <select name="assigned_to_user_id">
-            <option value="">Sin asignar</option>
-            <?php foreach ($users as $user): ?>
-              <?php $user_name = trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? '')); ?>
-              <option value="<?= (int)$user['id'] ?>">
-                <?= e($user_name !== '' ? $user_name : (string)$user['email']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn" type="submit">Enviar</button>
+        <div class="instant-form-right">
+          <label class="form-field">
+            <span class="form-label">Título *</span>
+            <input class="form-control" type="text" name="title" maxlength="160" required>
+          </label>
+          <label class="form-field instant-message-field">
+            <span class="form-label">Mensaje *</span>
+            <textarea class="form-control" name="body" rows="8" maxlength="5000" required></textarea>
+          </label>
         </div>
       </div>
-      <div class="message-hint">Podés mencionar con @usuario</div>
+      <div class="inline-actions">
+        <button class="btn" type="submit">Enviar</button>
+        <span class="muted" data-message-form-result></span>
+      </div>
     </form>
   </div>
   <?php
@@ -117,14 +128,47 @@ function ts_messages_block_assets(): void {
         const list = block.querySelector('[data-messages-list]');
         const openCount = block.querySelector('[data-open-count]');
         const form = block.querySelector('[data-message-form]');
+        const formError = block.querySelector('[data-message-form-error]');
+        const formResult = block.querySelector('[data-message-form-result]');
         const filterButtons = block.querySelectorAll('[data-filter]');
         let activeFilter = 'all';
+
+        const showFormError = (message) => {
+          if (!formError) {
+            alert(message);
+            return;
+          }
+          formError.textContent = message;
+          formError.hidden = false;
+        };
+
+        const clearFormError = () => {
+          if (!formError) {
+            return;
+          }
+          formError.textContent = '';
+          formError.hidden = true;
+        };
 
         const setActiveFilter = (filter) => {
           activeFilter = filter;
           filterButtons.forEach((btn) => {
             btn.classList.toggle('is-active', btn.dataset.filter === filter);
           });
+        };
+
+        const focusHashMessage = () => {
+          const hash = window.location.hash || '';
+          if (!hash.startsWith('#msg-')) {
+            return;
+          }
+          const target = list.querySelector(hash);
+          if (!target) {
+            return;
+          }
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('is-highlighted');
+          window.setTimeout(() => target.classList.remove('is-highlighted'), 2600);
         };
 
         const renderList = (items) => {
@@ -155,9 +199,10 @@ function ts_messages_block_assets(): void {
               </div>
             ` : '';
             return `
-              <div class="message-item">
+              <div class="message-item" id="msg-${item.id}" data-message-id="${item.id}">
                 <div class="message-meta">
-                  <span><strong>${escapeHtml(author || 'Usuario')}</strong></span>
+                  <span><strong>${escapeHtml(item.title || 'Sin título')}</strong></span>
+                  <span>${escapeHtml(author || 'Usuario')}</span>
                   <span>${escapeHtml(formatDate(item.created_at))}</span>
                 </div>
                 <div class="message-badges">${badges}</div>
@@ -181,6 +226,8 @@ function ts_messages_block_assets(): void {
               await archiveMessage(target.dataset.messageId);
             });
           });
+
+          focusHashMessage();
         };
 
         const fetchList = async () => {
@@ -247,33 +294,86 @@ function ts_messages_block_assets(): void {
 
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
-          const bodyField = form.querySelector('textarea[name="body"]');
-          const typeField = form.querySelector('select[name="message_type"]');
-          const assignedField = form.querySelector('select[name="assigned_to_user_id"]');
-          const payload = new URLSearchParams({
-            entity_type: entityType,
-            entity_id: entityId,
-            body: bodyField.value,
-            message_type: typeField.value,
-            csrf_token: csrfToken,
-          });
-          if (assignedField && assignedField.value) {
-            payload.set('assigned_to_user_id', assignedField.value);
+          clearFormError();
+          if (formResult) {
+            formResult.textContent = '';
           }
-          const response = await fetch(`${apiBase}?action=create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: payload.toString(),
-            credentials: 'same-origin',
-          });
-          const data = await response.json();
-          if (!data.ok) {
-            alert(data.error || 'No se pudo guardar el mensaje.');
+
+          const assigneeField = form.querySelector('select[name="assigned_to_user_ids[]"]');
+          const typeField = form.querySelector('select[name="message_type"]');
+          const titleField = form.querySelector('input[name="title"]');
+          const bodyField = form.querySelector('textarea[name="body"]');
+
+          const selected = Array.from(assigneeField?.selectedOptions || []).map((option) => option.value).filter(Boolean);
+          if (selected.length === 0) {
+            showFormError('Debés seleccionar al menos un destinatario.');
+            assigneeField?.focus();
             return;
           }
+          if (!titleField?.value.trim()) {
+            showFormError('El título es obligatorio.');
+            titleField?.focus();
+            return;
+          }
+          if (!bodyField?.value.trim()) {
+            showFormError('El mensaje es obligatorio.');
+            bodyField?.focus();
+            return;
+          }
+
+          const payload = new FormData(form);
+          payload.set('entity_type', entityType);
+          payload.set('entity_id', entityId);
+          payload.set('require_assignee', '1');
+          payload.set('message_type', typeField?.value || 'observacion');
+          payload.set('title', titleField.value.trim());
+          payload.set('body', bodyField.value.trim());
+          payload.set('message', bodyField.value.trim());
+          payload.set('send_to_all', '0');
+          payload.set('csrf_token', csrfToken);
+          payload.delete('assigned_to_user_ids[]');
+          selected.forEach((value) => payload.append('assigned_to_user_ids[]', value));
+
+          try {
+            const response = await fetch(`${apiBase}?action=create`, {
+              method: 'POST',
+              body: payload,
+              credentials: 'same-origin',
+            });
+            const raw = await response.text();
+            let data = null;
+            try {
+              data = raw ? JSON.parse(raw) : null;
+            } catch (parseError) {
+              data = null;
+            }
+
+            if (!data) {
+              showFormError('Respuesta inválida del servidor.');
+              return;
+            }
+            if (!response.ok || !data.ok) {
+              showFormError(data.error || 'No se pudo enviar el mensaje.');
+              return;
+            }
+          } catch (error) {
+            const message = error instanceof Error && error.message
+              ? `Error de conexión: ${error.message}`
+              : 'Error de conexión: no se pudo contactar al servidor.';
+            showFormError(message);
+            return;
+          }
+
           bodyField.value = '';
-          if (assignedField) {
-            assignedField.value = '';
+          titleField.value = '';
+          if (typeField) {
+            typeField.value = 'observacion';
+          }
+          Array.from(assigneeField?.options || []).forEach((option) => {
+            option.selected = false;
+          });
+          if (formResult) {
+            formResult.textContent = 'Mensaje enviado correctamente.';
           }
           fetchList();
         });

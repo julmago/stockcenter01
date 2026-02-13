@@ -121,6 +121,19 @@ if ($thread_ids) {
 $csrf = csrf_token();
 $api = url_path('api/notifications.php');
 $messages_api = url_path('api/messages.php');
+
+$build_origin_url = static function (string $entity_type, int $entity_id, int $message_id): ?string {
+  if ($entity_id <= 0) {
+    return null;
+  }
+  if ($entity_type === 'product') {
+    return url_path('product_view.php?id=' . $entity_id . '#msg-' . $message_id);
+  }
+  if ($entity_type === 'listado') {
+    return url_path('list_view.php?id=' . $entity_id . '#msg-' . $message_id);
+  }
+  return null;
+};
 ?>
 <!doctype html>
 <html>
@@ -222,6 +235,7 @@ $messages_api = url_path('api/messages.php');
                   $author = (string)($item['email'] ?? 'Sistema');
                 }
                 $conversation = $thread_messages[$thread_id] ?? [];
+                $origin_url = $build_origin_url((string)($item['entity_type'] ?? ''), (int)($item['entity_id'] ?? 0), $message_id);
               ?>
               <details class="notification-item<?= $is_unread ? ' is-unread' : '' ?>">
                 <summary class="notification-summary">
@@ -258,6 +272,9 @@ $messages_api = url_path('api/messages.php');
                   <div class="notification-actions">
                     <?php if ($is_unread): ?>
                       <button class="btn" type="button" data-mark-read data-notification-id="<?= (int)$item['notification_id'] ?>">Marcar como leído</button>
+                    <?php endif; ?>
+                    <?php if ($origin_url !== null): ?>
+                      <a class="btn btn-ghost" href="<?= e($origin_url) ?>">Ir al origen</a>
                     <?php endif; ?>
                     <button class="btn btn-ghost" type="button" data-reply-toggle>Responder</button>
                   </div>
