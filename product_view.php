@@ -281,9 +281,8 @@ $supplier_links = $st->fetchAll();
       font-size: 13px;
     }
 
-    .product-linked-suppliers-form,
-    .product-codes-form {
-      margin-top: var(--space-3);
+    .product-card-body {
+      padding-top: var(--space-3);
     }
   </style>
 </head>
@@ -365,93 +364,94 @@ $supplier_links = $st->fetchAll();
         <h3 class="card-title">Proveedores vinculados</h3>
         <span class="muted small"><?= count($supplier_links) ?> vinculados</span>
       </div>
-
-      <?php if ($can_edit): ?>
-        <form method="post" class="stack product-linked-suppliers-form">
-          <input type="hidden" name="action" value="add_supplier_link">
-          <div class="form-row product-supplier-form">
-            <div class="form-group">
-              <label class="form-label">SKU / Código del proveedor</label>
-              <input class="form-control" type="text" name="supplier_sku">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Proveedor</label>
-              <select class="form-control" name="supplier_id" id="supplier-id-select" required>
-                <option value="">Seleccionar</option>
-                <option value="__new__">+ Agregar proveedor…</option>
-                <?php foreach ($suppliers as $supplier): ?>
-                  <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <div class="product-supplier-cost-column">
-              <div class="product-supplier-cost-layout" id="cost-layout-group">
-                <div class="form-group">
-                  <label class="form-label">Tipo de costo recibido</label>
-                  <select class="form-control" name="cost_type" id="cost-type-select">
-                    <option value="UNIDAD">Unidad</option>
-                    <option value="PACK">Pack</option>
-                  </select>
-                </div>
-                <div class="form-group is-hidden" id="cost-units-group" data-toggle-hidden="1">
-                  <label class="form-label">Unidades por pack</label>
-                  <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
+      <div class="product-card-body">
+        <?php if ($can_edit): ?>
+          <form method="post" class="stack product-linked-suppliers-form">
+            <input type="hidden" name="action" value="add_supplier_link">
+            <div class="form-row product-supplier-form">
+              <div class="form-group">
+                <label class="form-label">SKU / Código del proveedor</label>
+                <input class="form-control" type="text" name="supplier_sku">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Proveedor</label>
+                <select class="form-control" name="supplier_id" id="supplier-id-select" required>
+                  <option value="">Seleccionar</option>
+                  <option value="__new__">+ Agregar proveedor…</option>
+                  <?php foreach ($suppliers as $supplier): ?>
+                    <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="product-supplier-cost-column">
+                <div class="product-supplier-cost-layout" id="cost-layout-group">
+                  <div class="form-group">
+                    <label class="form-label">Tipo de costo recibido</label>
+                    <select class="form-control" name="cost_type" id="cost-type-select">
+                      <option value="UNIDAD">Unidad</option>
+                      <option value="PACK">Pack</option>
+                    </select>
+                  </div>
+                  <div class="form-group is-hidden" id="cost-units-group" data-toggle-hidden="1">
+                    <label class="form-label">Unidades por pack</label>
+                    <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div class="form-actions product-supplier-actions">
-            <button class="btn" type="submit">Agregar proveedor</button>
-          </div>
-        </form>
-      <?php endif; ?>
+            <div class="form-actions product-supplier-actions">
+              <button class="btn" type="submit">Agregar proveedor</button>
+            </div>
+          </form>
+        <?php endif; ?>
 
-      <div class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>proveedor</th>
-              <th>sku proveedor</th>
-              <th>costo recibido</th>
-              <th>unidades pack</th>
-              <th>activo</th>
-              <?php if ($can_edit): ?>
-                <th>acciones</th>
-              <?php endif; ?>
-            </tr>
-          </thead>
-          <tbody>
-            <?php if (!$supplier_links): ?>
-              <tr><td colspan="<?= $can_edit ? 6 : 5 ?>">Sin proveedores vinculados.</td></tr>
-            <?php else: ?>
-              <?php foreach ($supplier_links as $link): ?>
-                <tr>
-                  <td><?= e($link['supplier_name']) ?></td>
-                  <td><?= e($link['supplier_sku']) ?></td>
-                  <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
-                  <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
-                  <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
-                  <?php if ($can_edit): ?>
-                    <td class="table-actions">
-                      <?php if ((int)$link['is_active'] !== 1): ?>
-                        <form method="post" style="display:inline; margin-right:6px;">
-                          <input type="hidden" name="action" value="set_active_supplier">
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>proveedor</th>
+                <th>sku proveedor</th>
+                <th>costo recibido</th>
+                <th>unidades pack</th>
+                <th>activo</th>
+                <?php if ($can_edit): ?>
+                  <th>acciones</th>
+                <?php endif; ?>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!$supplier_links): ?>
+                <tr><td colspan="<?= $can_edit ? 6 : 5 ?>">Sin proveedores vinculados.</td></tr>
+              <?php else: ?>
+                <?php foreach ($supplier_links as $link): ?>
+                  <tr>
+                    <td><?= e($link['supplier_name']) ?></td>
+                    <td><?= e($link['supplier_sku']) ?></td>
+                    <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
+                    <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
+                    <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
+                    <?php if ($can_edit): ?>
+                      <td class="table-actions">
+                        <?php if ((int)$link['is_active'] !== 1): ?>
+                          <form method="post" style="display:inline; margin-right:6px;">
+                            <input type="hidden" name="action" value="set_active_supplier">
+                            <input type="hidden" name="link_id" value="<?= (int)$link['id'] ?>">
+                            <button class="btn btn-ghost" type="submit">Marcar activo</button>
+                          </form>
+                        <?php endif; ?>
+                        <form method="post" style="display:inline;">
+                          <input type="hidden" name="action" value="delete_supplier_link">
                           <input type="hidden" name="link_id" value="<?= (int)$link['id'] ?>">
-                          <button class="btn btn-ghost" type="submit">Marcar activo</button>
+                          <button class="btn btn-danger" type="submit">Eliminar</button>
                         </form>
-                      <?php endif; ?>
-                      <form method="post" style="display:inline;">
-                        <input type="hidden" name="action" value="delete_supplier_link">
-                        <input type="hidden" name="link_id" value="<?= (int)$link['id'] ?>">
-                        <button class="btn btn-danger" type="submit">Eliminar</button>
-                      </form>
-                    </td>
-                  <?php endif; ?>
-                </tr>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </tbody>
-        </table>
+                      </td>
+                    <?php endif; ?>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -460,61 +460,63 @@ $supplier_links = $st->fetchAll();
         <h3 class="card-title">Códigos</h3>
         <span class="muted small"><?= count($codes) ?> registrados</span>
       </div>
-      <?php if ($can_add_code): ?>
-        <form method="post" class="form-row product-codes-form">
-          <input type="hidden" name="action" value="add_code">
-          <div class="form-group">
-            <label class="form-label">Código</label>
-            <input class="form-control" type="text" name="code" placeholder="Escaneá código" autofocus>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Tipo</label>
-            <select name="code_type">
-              <option value="BARRA">BARRA</option>
-              <option value="MPN">MPN</option>
-            </select>
-          </div>
-          <div class="form-group" style="align-self:end;">
-            <button class="btn" type="submit">Agregar</button>
-          </div>
-        </form>
-      <?php endif; ?>
+      <div class="product-card-body">
+        <?php if ($can_add_code): ?>
+          <form method="post" class="form-row product-codes-form">
+            <input type="hidden" name="action" value="add_code">
+            <div class="form-group">
+              <label class="form-label">Código</label>
+              <input class="form-control" type="text" name="code" placeholder="Escaneá código" autofocus>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tipo</label>
+              <select name="code_type">
+                <option value="BARRA">BARRA</option>
+                <option value="MPN">MPN</option>
+              </select>
+            </div>
+            <div class="form-group" style="align-self:end;">
+              <button class="btn" type="submit">Agregar</button>
+            </div>
+          </form>
+        <?php endif; ?>
 
-      <div class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>código</th>
-              <th>tipo</th>
-              <th>fecha</th>
-              <?php if ($can_add_code): ?>
-                <th>acciones</th>
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>código</th>
+                <th>tipo</th>
+                <th>fecha</th>
+                <?php if ($can_add_code): ?>
+                  <th>acciones</th>
+                <?php endif; ?>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!$codes): ?>
+                <tr><td colspan="<?= $can_add_code ? 4 : 3 ?>">Sin códigos todavía.</td></tr>
+              <?php else: ?>
+                <?php foreach ($codes as $c): ?>
+                  <tr>
+                    <td><?= e($c['code']) ?></td>
+                    <td><?= e($c['code_type']) ?></td>
+                    <td><?= e($c['created_at']) ?></td>
+                    <?php if ($can_add_code): ?>
+                      <td class="table-actions">
+                        <form method="post" style="display:inline;">
+                          <input type="hidden" name="action" value="delete_code">
+                          <input type="hidden" name="code_id" value="<?= (int)$c['id'] ?>">
+                          <button class="btn btn-danger" type="submit">Eliminar</button>
+                        </form>
+                      </td>
+                    <?php endif; ?>
+                  </tr>
+                <?php endforeach; ?>
               <?php endif; ?>
-            </tr>
-          </thead>
-          <tbody>
-            <?php if (!$codes): ?>
-              <tr><td colspan="<?= $can_add_code ? 4 : 3 ?>">Sin códigos todavía.</td></tr>
-            <?php else: ?>
-              <?php foreach ($codes as $c): ?>
-                <tr>
-                  <td><?= e($c['code']) ?></td>
-                  <td><?= e($c['code_type']) ?></td>
-                  <td><?= e($c['created_at']) ?></td>
-                  <?php if ($can_add_code): ?>
-                    <td class="table-actions">
-                      <form method="post" style="display:inline;">
-                        <input type="hidden" name="action" value="delete_code">
-                        <input type="hidden" name="code_id" value="<?= (int)$c['id'] ?>">
-                        <button class="btn btn-danger" type="submit">Eliminar</button>
-                      </form>
-                    </td>
-                  <?php endif; ?>
-                </tr>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
