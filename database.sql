@@ -124,10 +124,44 @@ CREATE TABLE IF NOT EXISTS products (
   sku VARCHAR(80) NOT NULL,
   name VARCHAR(190) NOT NULL,
   brand VARCHAR(120) NOT NULL DEFAULT '',
+  sale_mode ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
+  sale_units_per_pack INT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_products_sku (sku)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(190) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_suppliers_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS product_suppliers (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  product_id INT UNSIGNED NOT NULL,
+  supplier_id INT UNSIGNED NOT NULL,
+  supplier_sku VARCHAR(120) NOT NULL DEFAULT '',
+  cost_type ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
+  units_per_pack INT UNSIGNED NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_ps_product (product_id),
+  KEY idx_ps_supplier (supplier_id),
+  KEY idx_ps_active (product_id, is_active),
+  CONSTRAINT fk_ps_product
+    FOREIGN KEY (product_id) REFERENCES products(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_ps_supplier
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS product_codes (

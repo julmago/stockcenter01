@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
+ensure_product_suppliers_schema();
 
 $id = (int)get('id','0');
 if ($id <= 0) abort(400, 'Falta id.');
@@ -21,13 +22,27 @@ if (is_post() && post('action') === 'update') {
   $sku = post('sku');
   $name = post('name');
   $brand = post('brand');
+  $sale_mode = post('sale_mode', 'UNIDAD');
+  $sale_units_per_pack = post('sale_units_per_pack');
 
-  if ($sku === '' || $name === '') {
+  if (!in_array($sale_mode, ['UNIDAD', 'PACK'], true)) {
+    $sale_mode = 'UNIDAD';
+  }
+
+  $sale_units_per_pack_value = null;
+  if ($sale_mode === 'PACK') {
+    $sale_units_per_pack_value = (int)$sale_units_per_pack;
+    if ($sale_units_per_pack_value <= 0) {
+      $error = 'Si el modo de venta es Pack, indicá unidades por pack mayores a 0.';
+    }
+  }
+
+  if ($error === '' && ($sku === '' || $name === '')) {
     $error = 'SKU y Nombre son obligatorios.';
-  } else {
+  } elseif ($error === '') {
     try {
-      $st = db()->prepare("UPDATE products SET sku=?, name=?, brand=?, updated_at=NOW() WHERE id=?");
-      $st->execute([$sku,$name,$brand,$id]);
+      $st = db()->prepare("UPDATE products SET sku=?, name=?, brand=?, sale_mode=?, sale_units_per_pack=?, updated_at=NOW() WHERE id=?");
+      $st->execute([$sku, $name, $brand, $sale_mode, $sale_units_per_pack_value, $id]);
       $message = 'Producto actualizado.';
     } catch (Throwable $t) {
       $error = 'No se pudo actualizar. Puede que el SKU ya exista.';
@@ -64,6 +79,79 @@ if (is_post() && post('action') === 'delete_code') {
   }
 }
 
+if (is_post() && post('action') === 'add_supplier_link') {
+  require_permission($can_edit);
+  $supplier_id = (int)post('supplier_id', '0');
+  $supplier_sku = post('supplier_sku');
+  $cost_type = post('cost_type', 'UNIDAD');
+  $units_per_pack = post('units_per_pack');
+  $is_active = post('is_active', '0') === '1' ? 1 : 0;
+
+  if (!in_array($cost_type, ['UNIDAD', 'PACK'], true)) {
+    $cost_type = 'UNIDAD';
+  }
+
+  $units_per_pack_value = null;
+  if ($cost_type === 'PACK') {
+    $units_per_pack_value = (int)$units_per_pack;
+    if ($units_per_pack_value <= 0) {
+      $error = 'Si el costo del proveedor es Pack, indicá unidades por pack mayores a 0.';
+    }
+  }
+
+  if ($error === '' && $supplier_id <= 0) {
+    $error = 'Seleccioná un proveedor.';
+  }
+
+  if ($error === '') {
+    try {
+      db()->beginTransaction();
+      if ($is_active === 1) {
+        $st = db()->prepare("UPDATE product_suppliers SET is_active = 0, updated_at = NOW() WHERE product_id = ?");
+        $st->execute([$id]);
+      }
+
+      $st = db()->prepare("INSERT INTO product_suppliers(product_id, supplier_id, supplier_sku, cost_type, units_per_pack, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, NOW())");
+      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $is_active]);
+      db()->commit();
+      $message = 'Proveedor vinculado.';
+    } catch (Throwable $t) {
+      if (db()->inTransaction()) db()->rollBack();
+      $error = 'No se pudo vincular el proveedor.';
+    }
+  }
+}
+
+if (is_post() && post('action') === 'delete_supplier_link') {
+  require_permission($can_edit);
+  $link_id = (int)post('link_id', '0');
+  if ($link_id > 0) {
+    $st = db()->prepare("DELETE FROM product_suppliers WHERE id = ? AND product_id = ?");
+    $st->execute([$link_id, $id]);
+    $message = 'Proveedor desvinculado.';
+  }
+}
+
+if (is_post() && post('action') === 'set_active_supplier') {
+  require_permission($can_edit);
+  $link_id = (int)post('link_id', '0');
+  if ($link_id > 0) {
+    try {
+      db()->beginTransaction();
+      $st = db()->prepare("UPDATE product_suppliers SET is_active = 0, updated_at = NOW() WHERE product_id = ?");
+      $st->execute([$id]);
+
+      $st = db()->prepare("UPDATE product_suppliers SET is_active = 1, updated_at = NOW() WHERE id = ? AND product_id = ?");
+      $st->execute([$link_id, $id]);
+      db()->commit();
+      $message = 'Proveedor activo actualizado.';
+    } catch (Throwable $t) {
+      if (db()->inTransaction()) db()->rollBack();
+      $error = 'No se pudo marcar el proveedor activo.';
+    }
+  }
+}
+
 // recargar
 $st = db()->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
 $st->execute([$id]);
@@ -72,6 +160,17 @@ $product = $st->fetch();
 $st = db()->prepare("SELECT id, code, code_type, created_at FROM product_codes WHERE product_id = ? ORDER BY id DESC");
 $st->execute([$id]);
 $codes = $st->fetchAll();
+
+$st = db()->query("SELECT id, name FROM suppliers WHERE is_active = 1 ORDER BY name ASC");
+$suppliers = $st->fetchAll();
+
+$st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.is_active, s.name AS supplier_name
+  FROM product_suppliers ps
+  INNER JOIN suppliers s ON s.id = ps.supplier_id
+  WHERE ps.product_id = ?
+  ORDER BY ps.is_active DESC, ps.id DESC");
+$st->execute([$id]);
+$supplier_links = $st->fetchAll();
 
 ?>
 <!doctype html>
@@ -112,6 +211,19 @@ $codes = $st->fetchAll();
               <input class="form-control" type="text" name="brand" value="<?= e($product['brand']) ?>">
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Modo de venta</label>
+              <select class="form-control" name="sale_mode" id="sale-mode-select" required>
+                <option value="UNIDAD" <?= ($product['sale_mode'] ?? 'UNIDAD') === 'UNIDAD' ? 'selected' : '' ?>>Unidad</option>
+                <option value="PACK" <?= ($product['sale_mode'] ?? '') === 'PACK' ? 'selected' : '' ?>>Pack</option>
+              </select>
+            </div>
+            <div class="form-group" id="sale-units-group" style="display:none;">
+              <label class="form-label">Unidades por pack</label>
+              <input class="form-control" type="number" min="1" step="1" name="sale_units_per_pack" id="sale-units-input" value="<?= e((string)($product['sale_units_per_pack'] ?? '')) ?>">
+            </div>
+          </div>
           <div class="form-actions">
             <button class="btn" type="submit">Guardar cambios</button>
             <a class="btn btn-ghost" href="product_list.php">Volver</a>
@@ -122,11 +234,110 @@ $codes = $st->fetchAll();
           <div><strong>SKU:</strong> <?= e($product['sku']) ?></div>
           <div><strong>Nombre:</strong> <?= e($product['name']) ?></div>
           <div><strong>Marca:</strong> <?= e($product['brand']) ?></div>
+          <div><strong>Modo de venta:</strong> <?= e(($product['sale_mode'] ?? 'UNIDAD') === 'PACK' ? 'Pack' : 'Unidad') ?></div>
+          <?php if (($product['sale_mode'] ?? 'UNIDAD') === 'PACK'): ?>
+            <div><strong>Unidades por pack:</strong> <?= (int)($product['sale_units_per_pack'] ?? 0) ?></div>
+          <?php endif; ?>
           <div class="form-actions">
             <a class="btn btn-ghost" href="product_list.php">Volver</a>
           </div>
         </div>
       <?php endif; ?>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Proveedores vinculados</h3>
+        <span class="muted small"><?= count($supplier_links) ?> vinculados</span>
+      </div>
+
+      <?php if ($can_edit): ?>
+        <form method="post" class="form-row">
+          <input type="hidden" name="action" value="add_supplier_link">
+          <div class="form-group">
+            <label class="form-label">Proveedor</label>
+            <select class="form-control" name="supplier_id" required>
+              <option value="">Seleccionar</option>
+              <?php foreach ($suppliers as $supplier): ?>
+                <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">SKU / Código del proveedor</label>
+            <input class="form-control" type="text" name="supplier_sku">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo de costo recibido</label>
+            <select class="form-control" name="cost_type" id="cost-type-select">
+              <option value="UNIDAD">Unidad</option>
+              <option value="PACK">Pack</option>
+            </select>
+          </div>
+          <div class="form-group" id="cost-units-group" style="display:none;">
+            <label class="form-label">Unidades por pack</label>
+            <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Activo</label>
+            <select class="form-control" name="is_active">
+              <option value="0">No</option>
+              <option value="1">Sí</option>
+            </select>
+          </div>
+          <div class="form-group" style="align-self:end;">
+            <button class="btn" type="submit">Agregar proveedor</button>
+          </div>
+        </form>
+      <?php endif; ?>
+
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>proveedor</th>
+              <th>sku proveedor</th>
+              <th>costo recibido</th>
+              <th>unidades pack</th>
+              <th>activo</th>
+              <?php if ($can_edit): ?>
+                <th>acciones</th>
+              <?php endif; ?>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if (!$supplier_links): ?>
+              <tr><td colspan="<?= $can_edit ? 6 : 5 ?>">Sin proveedores vinculados.</td></tr>
+            <?php else: ?>
+              <?php foreach ($supplier_links as $link): ?>
+                <tr>
+                  <td><?= e($link['supplier_name']) ?></td>
+                  <td><?= e($link['supplier_sku']) ?></td>
+                  <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
+                  <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
+                  <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
+                  <?php if ($can_edit): ?>
+                    <td class="table-actions">
+                      <?php if ((int)$link['is_active'] !== 1): ?>
+                        <form method="post" style="display:inline; margin-right:6px;">
+                          <input type="hidden" name="action" value="set_active_supplier">
+                          <input type="hidden" name="link_id" value="<?= (int)$link['id'] ?>">
+                          <button class="btn btn-ghost" type="submit">Marcar activo</button>
+                        </form>
+                      <?php endif; ?>
+                      <form method="post" style="display:inline;">
+                        <input type="hidden" name="action" value="delete_supplier_link">
+                        <input type="hidden" name="link_id" value="<?= (int)$link['id'] ?>">
+                        <button class="btn btn-danger" type="submit">Eliminar</button>
+                      </form>
+                    </td>
+                  <?php endif; ?>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="card">
@@ -196,6 +407,36 @@ $codes = $st->fetchAll();
     <?php ts_messages_block('product', $id); ?>
   </div>
 </main>
+
+<script>
+  const saleModeSelect = document.getElementById('sale-mode-select');
+  const saleUnitsGroup = document.getElementById('sale-units-group');
+  const saleUnitsInput = document.getElementById('sale-units-input');
+
+  const costTypeSelect = document.getElementById('cost-type-select');
+  const costUnitsGroup = document.getElementById('cost-units-group');
+  const costUnitsInput = document.getElementById('cost-units-input');
+
+  const toggleByMode = (select, group, input) => {
+    if (!select || !group || !input) return;
+    const isPack = select.value === 'PACK';
+    group.style.display = isPack ? '' : 'none';
+    input.required = isPack;
+    if (!isPack) {
+      input.value = '';
+    }
+  };
+
+  if (saleModeSelect) {
+    saleModeSelect.addEventListener('change', () => toggleByMode(saleModeSelect, saleUnitsGroup, saleUnitsInput));
+    toggleByMode(saleModeSelect, saleUnitsGroup, saleUnitsInput);
+  }
+
+  if (costTypeSelect) {
+    costTypeSelect.addEventListener('change', () => toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput));
+    toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput);
+  }
+</script>
 
 </body>
 </html>
