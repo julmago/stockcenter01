@@ -172,25 +172,41 @@ if (is_post() && post('action') === 'create_supplier_inline') {
   header('Content-Type: application/json; charset=utf-8');
 
   $supplier_name = trim(post('supplier_name'));
+  $default_margin_percent = normalize_margin_percent_value(post('default_margin_percent'));
+
   if ($supplier_name === '') {
     http_response_code(422);
     echo json_encode(['ok' => false, 'message' => 'Ingresá el nombre del proveedor.']);
     exit;
   }
 
+  if ($default_margin_percent === null) {
+    http_response_code(422);
+    echo json_encode(['ok' => false, 'message' => 'Base (%) inválida. Usá un valor entre 0 y 999.99.']);
+    exit;
+  }
+
   try {
-    $st = db()->prepare('SELECT id, name FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1');
+    $st = db()->prepare('SELECT id, name, default_margin_percent FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1');
     $st->execute([$supplier_name]);
     $existing = $st->fetch();
 
     if ($existing) {
-      http_response_code(409);
-      echo json_encode(['ok' => false, 'message' => 'Ya existe un proveedor con ese nombre.']);
+      echo json_encode([
+        'ok' => true,
+        'supplier' => [
+          'id' => (int)$existing['id'],
+          'name' => (string)$existing['name'],
+          'default_margin_percent' => number_format((float)$existing['default_margin_percent'], 2, '.', ''),
+        ],
+        'existing' => true,
+        'message' => 'Ese proveedor ya existe. Se seleccionó el existente.',
+      ]);
       exit;
     }
 
-    $st = db()->prepare('INSERT INTO suppliers(name, is_active, updated_at) VALUES(?, 1, NOW())');
-    $st->execute([$supplier_name]);
+    $st = db()->prepare('INSERT INTO suppliers(name, default_margin_percent, is_active, updated_at) VALUES(?, ?, 1, NOW())');
+    $st->execute([$supplier_name, $default_margin_percent]);
 
     $supplier_id = (int)db()->lastInsertId();
 
@@ -199,7 +215,9 @@ if (is_post() && post('action') === 'create_supplier_inline') {
       'supplier' => [
         'id' => $supplier_id,
         'name' => $supplier_name,
+        'default_margin_percent' => $default_margin_percent,
       ],
+      'existing' => false,
     ]);
     exit;
   } catch (Throwable $t) {
@@ -224,7 +242,7 @@ $st = db()->prepare("SELECT id, code, code_type, created_at FROM product_codes W
 $st->execute([$id]);
 $codes = $st->fetchAll();
 
-$st = db()->query("SELECT id, name FROM suppliers WHERE is_active = 1 ORDER BY name ASC");
+$st = db()->query("SELECT id, name, default_margin_percent FROM suppliers WHERE is_active = 1 ORDER BY name ASC");
 $suppliers = $st->fetchAll();
 
 $st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.is_active, s.name AS supplier_name
@@ -535,6 +553,10 @@ $supplier_links = $st->fetchAll();
         <label class="form-label" for="supplier-inline-name">Nombre del proveedor</label>
         <input class="form-control" type="text" id="supplier-inline-name" name="supplier_name" maxlength="190" required>
       </div>
+      <div class="form-group">
+        <label class="form-label" for="supplier-inline-margin">Base (%)</label>
+        <input class="form-control" type="number" id="supplier-inline-margin" name="default_margin_percent" min="0" max="999.99" step="0.01" placeholder="0, 20, 30..." value="0" required>
+      </div>
       <p class="inline-modal-feedback" id="supplier-inline-feedback" hidden></p>
       <div class="inline-modal-actions">
         <button class="btn btn-ghost" type="button" id="supplier-inline-cancel">Cancelar</button>
@@ -585,6 +607,7 @@ $supplier_links = $st->fetchAll();
   const supplierModal = document.getElementById('supplier-inline-modal');
   const supplierInlineForm = document.getElementById('supplier-inline-form');
   const supplierInlineNameInput = document.getElementById('supplier-inline-name');
+  const supplierInlineMarginInput = document.getElementById('supplier-inline-margin');
   const supplierInlineCancelBtn = document.getElementById('supplier-inline-cancel');
   const supplierInlineSubmitBtn = document.getElementById('supplier-inline-submit');
   const supplierInlineFeedback = document.getElementById('supplier-inline-feedback');
@@ -645,10 +668,18 @@ $supplier_links = $st->fetchAll();
       event.preventDefault();
 
       const supplierName = supplierInlineNameInput.value.trim();
+      const supplierMargin = supplierInlineMarginInput ? supplierInlineMarginInput.value.trim() : '0';
       if (supplierName === '') {
         supplierInlineFeedback.hidden = false;
         supplierInlineFeedback.textContent = 'Ingresá un nombre.';
         supplierInlineNameInput.focus();
+        return;
+      }
+
+      if (supplierMargin === '') {
+        supplierInlineFeedback.hidden = false;
+        supplierInlineFeedback.textContent = 'Ingresá una base (%).';
+        supplierInlineMarginInput?.focus();
         return;
       }
 
@@ -659,6 +690,7 @@ $supplier_links = $st->fetchAll();
         const body = new URLSearchParams();
         body.append('action', 'create_supplier_inline');
         body.append('supplier_name', supplierName);
+        body.append('default_margin_percent', supplierMargin);
 
         const response = await fetch(window.location.href, {
           method: 'POST',
@@ -674,11 +706,15 @@ $supplier_links = $st->fetchAll();
           throw new Error(data.message || 'No se pudo crear el proveedor.');
         }
 
-        const newOption = document.createElement('option');
-        newOption.value = String(data.supplier.id);
-        newOption.textContent = data.supplier.name;
-        supplierSelect.appendChild(newOption);
-        supplierSelect.value = String(data.supplier.id);
+        const supplierId = String(data.supplier.id);
+        let option = supplierSelect.querySelector('option[value="' + supplierId.replace(/"/g, '\"') + '"]');
+        if (!option) {
+          option = document.createElement('option');
+          option.value = supplierId;
+          option.textContent = data.supplier.name;
+          supplierSelect.appendChild(option);
+        }
+        supplierSelect.value = supplierId;
         previousSupplierValue = supplierSelect.value;
         closeSupplierModal();
       } catch (error) {
