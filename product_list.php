@@ -38,12 +38,24 @@ $page = min($page, $total_pages);
 $offset = ($page - 1) * $limit;
 
 $select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
+  . " s.name AS supplier_name,"
   . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
   . " FROM products p"
   . " LEFT JOIN brands b ON b.id = p.brand_id"
+  . " LEFT JOIN ("
+  . "   SELECT x.product_id, x.supplier_id"
+  . "   FROM product_suppliers x"
+  . "   JOIN ("
+  . "     SELECT product_id, MIN(id) AS min_id"
+  . "     FROM product_suppliers"
+  . "     WHERE is_active = 1"
+  . "     GROUP BY product_id"
+  . "   ) y ON y.product_id = x.product_id AND y.min_id = x.id"
+  . " ) ps1 ON ps1.product_id = p.id"
+  . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id"
   . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
   . " $where"
-  . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand)"
+  . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand), s.name"
   . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
   . " LIMIT :limit OFFSET :offset";
 $select_params = $params;
@@ -109,17 +121,18 @@ $next_page = min($total_pages, $page + 1);
       <div class="table-wrapper">
         <table class="table">
           <thead>
-            <tr><th>sku</th><th>nombre</th><th>marca</th></tr>
+            <tr><th>sku</th><th>nombre</th><th>marca</th><th>proveedor</th></tr>
           </thead>
           <tbody>
             <?php if (!$products): ?>
-              <tr><td colspan="3">Sin productos.</td></tr>
+              <tr><td colspan="4">Sin productos.</td></tr>
             <?php else: ?>
               <?php foreach ($products as $p): ?>
                 <tr style="cursor:pointer;" onclick="window.location='product_view.php?id=<?= (int)$p['id'] ?>'">
                   <td><?= e($p['sku']) ?></td>
                   <td><?= e($p['name']) ?></td>
                   <td><?= e($p['brand']) ?></td>
+                  <td><?= $p['supplier_name'] ? e($p['supplier_name']) : '—' ?></td>
                 </tr>
               <?php endforeach; ?>
             <?php endif; ?>
