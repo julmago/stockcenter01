@@ -3,6 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
 require_permission(can_import_csv());
+ensure_brands_schema();
 
 $error = '';
 $message = '';
@@ -88,13 +89,15 @@ if (is_post()) {
                 continue;
               }
 
+              $brand_id = resolve_brand_id($brand);
+
               if ($product_id > 0) {
-                $st = db()->prepare("UPDATE products SET name = ?, brand = ?, updated_at = NOW() WHERE id = ?");
-                $st->execute([$title, $brand, $product_id]);
+                $st = db()->prepare("UPDATE products SET name = ?, brand = ?, brand_id = ?, updated_at = NOW() WHERE id = ?");
+                $st->execute([$title, $brand, $brand_id, $product_id]);
                 $summary['updated']++;
               } else {
-                $st = db()->prepare("INSERT INTO products(sku, name, brand, updated_at) VALUES(?, ?, ?, NOW())");
-                $st->execute([$sku, $title, $brand]);
+                $st = db()->prepare("INSERT INTO products(sku, name, brand, brand_id, updated_at) VALUES(?, ?, ?, ?, NOW())");
+                $st->execute([$sku, $title, $brand, $brand_id]);
                 $product_id = (int)db()->lastInsertId();
                 $summary['created']++;
               }
