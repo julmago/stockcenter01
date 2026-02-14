@@ -87,6 +87,7 @@ function ensure_product_suppliers_schema(): void {
     supplier_sku VARCHAR(120) NOT NULL DEFAULT '',
     cost_type ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
     units_per_pack INT UNSIGNED NULL,
+    supplier_cost DECIMAL(10,2) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
@@ -97,6 +98,34 @@ function ensure_product_suppliers_schema(): void {
     CONSTRAINT fk_ps_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     CONSTRAINT fk_ps_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $product_supplier_columns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM product_suppliers");
+  foreach ($st->fetchAll() as $row) {
+    $product_supplier_columns[(string)$row['Field']] = true;
+  }
+
+  if (!isset($product_supplier_columns['supplier_cost'])) {
+    $pdo->exec("ALTER TABLE product_suppliers ADD COLUMN supplier_cost DECIMAL(10,2) NULL AFTER units_per_pack");
+  }
+
+  $productSupplierUniqueExists = false;
+  $st = $pdo->query("SHOW INDEX FROM product_suppliers WHERE Key_name = 'uq_product_supplier_link'");
+  if ($st->fetch()) {
+    $productSupplierUniqueExists = true;
+  }
+
+  if (!$productSupplierUniqueExists) {
+    $pdo->exec("DELETE ps_old
+      FROM product_suppliers ps_old
+      INNER JOIN product_suppliers ps_newer
+        ON ps_old.product_id = ps_newer.product_id
+       AND ps_old.supplier_id = ps_newer.supplier_id
+       AND ps_old.id < ps_newer.id");
+
+    $pdo->exec("ALTER TABLE product_suppliers
+      ADD CONSTRAINT uq_product_supplier_link UNIQUE (product_id, supplier_id)");
+  }
 
   $ready = true;
 }

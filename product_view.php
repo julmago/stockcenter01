@@ -102,6 +102,7 @@ if (is_post() && post('action') === 'add_supplier_link') {
   $supplier_sku = post('supplier_sku');
   $cost_type = post('cost_type', 'UNIDAD');
   $units_per_pack = post('units_per_pack');
+  $supplier_cost_raw = trim((string)post('supplier_cost'));
 
   if (!in_array($cost_type, ['UNIDAD', 'PACK'], true)) {
     $cost_type = 'UNIDAD';
@@ -115,6 +116,17 @@ if (is_post() && post('action') === 'add_supplier_link') {
     }
   }
 
+
+  $supplier_cost_value = null;
+  if ($supplier_cost_raw !== '') {
+    $supplier_cost_normalized = str_replace(',', '.', $supplier_cost_raw);
+    if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $supplier_cost_normalized)) {
+      $error = 'Costo del proveedor inválido. Usá hasta 2 decimales.';
+    } else {
+      $supplier_cost_value = number_format((float)$supplier_cost_normalized, 2, '.', '');
+    }
+  }
+
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
   }
@@ -125,8 +137,9 @@ if (is_post() && post('action') === 'add_supplier_link') {
       $st = db()->prepare("UPDATE product_suppliers SET is_active = 0, updated_at = NOW() WHERE product_id = ?");
       $st->execute([$id]);
 
-      $st = db()->prepare("INSERT INTO product_suppliers(product_id, supplier_id, supplier_sku, cost_type, units_per_pack, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, NOW())");
-      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, 1]);
+      $st = db()->prepare("INSERT INTO product_suppliers(product_id, supplier_id, supplier_sku, cost_type, units_per_pack, supplier_cost, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, 1, NOW())
+        ON DUPLICATE KEY UPDATE supplier_sku = VALUES(supplier_sku), cost_type = VALUES(cost_type), units_per_pack = VALUES(units_per_pack), supplier_cost = VALUES(supplier_cost), is_active = 1, updated_at = NOW()");
+      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $supplier_cost_value]);
       db()->commit();
       $message = 'Proveedor vinculado.';
     } catch (Throwable $t) {
@@ -245,7 +258,7 @@ $codes = $st->fetchAll();
 $st = db()->query("SELECT id, name, default_margin_percent FROM suppliers WHERE is_active = 1 ORDER BY name ASC");
 $suppliers = $st->fetchAll();
 
-$st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.is_active, s.name AS supplier_name
+$st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.supplier_cost, ps.is_active, s.name AS supplier_name
   FROM product_suppliers ps
   INNER JOIN suppliers s ON s.id = ps.supplier_id
   WHERE ps.product_id = ?
@@ -414,6 +427,10 @@ $supplier_links = $st->fetchAll();
                     <label class="form-label">Unidades por pack</label>
                     <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
                   </div>
+                  <div class="form-group">
+                    <label class="form-label">Costo del proveedor</label>
+                    <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" placeholder="0.00">
+                  </div>
                 </div>
               </div>
             </div>
@@ -431,6 +448,7 @@ $supplier_links = $st->fetchAll();
                 <th>sku proveedor</th>
                 <th>costo recibido</th>
                 <th>unidades pack</th>
+                <th>costo proveedor</th>
                 <th>activo</th>
                 <?php if ($can_edit): ?>
                   <th>acciones</th>
@@ -439,7 +457,7 @@ $supplier_links = $st->fetchAll();
             </thead>
             <tbody>
               <?php if (!$supplier_links): ?>
-                <tr><td colspan="<?= $can_edit ? 6 : 5 ?>">Sin proveedores vinculados.</td></tr>
+                <tr><td colspan="<?= $can_edit ? 7 : 6 ?>">Sin proveedores vinculados.</td></tr>
               <?php else: ?>
                 <?php foreach ($supplier_links as $link): ?>
                   <tr>
@@ -447,6 +465,7 @@ $supplier_links = $st->fetchAll();
                     <td><?= e($link['supplier_sku']) ?></td>
                     <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
                     <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
+                    <td><?= $link['supplier_cost'] === null ? '—' : number_format((float)$link['supplier_cost'], 2, '.', '') ?></td>
                     <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
                     <?php if ($can_edit): ?>
                       <td class="table-actions">
