@@ -7,7 +7,10 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
     return;
   }
   $title = $options['title'] ?? 'Mensajes';
+  $accordion = (bool)($options['accordion'] ?? false);
   $container_id = 'messages-block-' . $entity_type . '-' . $entity_id;
+  $accordion_button_id = $container_id . '-toggle';
+  $accordion_panel_id = $container_id . '-panel';
   $csrf = csrf_token();
   $api_base = url_path('api/messages.php');
   $notifications_api = url_path('api/notifications.php');
@@ -18,12 +21,30 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
   <div class="card messages-block" id="<?= e($container_id) ?>" data-messages-block
        data-entity-type="<?= e($entity_type) ?>" data-entity-id="<?= (int)$entity_id ?>"
        data-api-base="<?= e($api_base) ?>" data-notifications-api="<?= e($notifications_api) ?>"
-       data-csrf="<?= e($csrf) ?>">
+       data-csrf="<?= e($csrf) ?>" data-accordion="<?= $accordion ? '1' : '0' ?>">
+    <?php if ($accordion): ?>
+      <div class="card-header messages-accordion-header">
+        <button class="messages-accordion-toggle" type="button"
+                id="<?= e($accordion_button_id) ?>"
+                aria-expanded="false"
+                aria-controls="<?= e($accordion_panel_id) ?>"
+                data-messages-accordion-toggle>
+          <span>
+            <h3 class="card-title"><?= e($title) ?></h3>
+            <span class="muted small" data-open-count>Mensajes (0 sin archivar)</span>
+          </span>
+          <span class="messages-accordion-chevron" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="messages-accordion-panel" id="<?= e($accordion_panel_id) ?>" role="region"
+           aria-labelledby="<?= e($accordion_button_id) ?>" data-messages-accordion-panel hidden>
+    <?php else: ?>
     <div class="card-header messages-header">
       <div>
         <h3 class="card-title"><?= e($title) ?></h3>
-        <span class="muted small" data-open-count>Mensajes (0 abiertos)</span>
+        <span class="muted small" data-open-count>Mensajes (0 sin archivar)</span>
       </div>
+      <?php endif; ?>
       <div class="messages-filters" role="tablist">
         <button class="messages-filter-btn is-active" type="button" data-filter="all">Todos</button>
         <button class="messages-filter-btn" type="button" data-filter="open">Abiertos</button>
@@ -31,7 +52,9 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
         <button class="messages-filter-btn" type="button" data-filter="mentioned">Mencionado</button>
         <button class="messages-filter-btn" type="button" data-filter="archived">Archivados</button>
       </div>
+    <?php if (!$accordion): ?>
     </div>
+    <?php endif; ?>
     <div class="messages-timeline" data-messages-list>
       <div class="muted">Cargando mensajes...</div>
     </div>
@@ -77,6 +100,9 @@ function ts_messages_block(string $entity_type, int $entity_id, array $options =
         <span class="muted" data-message-form-result></span>
       </div>
     </form>
+    <?php if ($accordion): ?>
+      </div>
+    <?php endif; ?>
   </div>
   <?php
 
@@ -131,7 +157,44 @@ function ts_messages_block_assets(): void {
         const formError = block.querySelector('[data-message-form-error]');
         const formResult = block.querySelector('[data-message-form-result]');
         const filterButtons = block.querySelectorAll('[data-filter]');
+        const isAccordion = block.dataset.accordion === '1';
+        const accordionToggle = block.querySelector('[data-messages-accordion-toggle]');
+        const accordionPanel = block.querySelector('[data-messages-accordion-panel]');
+        const storageKey = `messages-accordion:${entityType}:${entityId}`;
         let activeFilter = 'all';
+
+        const setAccordionOpen = (isOpen) => {
+          if (!isAccordion || !accordionToggle || !accordionPanel) {
+            return;
+          }
+          accordionToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          accordionPanel.hidden = !isOpen;
+        };
+
+        const getStoredAccordionState = () => {
+          if (!isAccordion) {
+            return null;
+          }
+          try {
+            const value = window.localStorage.getItem(storageKey);
+            if (value === 'open') return true;
+            if (value === 'closed') return false;
+          } catch (error) {
+            return null;
+          }
+          return null;
+        };
+
+        const saveAccordionState = (isOpen) => {
+          if (!isAccordion) {
+            return;
+          }
+          try {
+            window.localStorage.setItem(storageKey, isOpen ? 'open' : 'closed');
+          } catch (error) {
+            // ignore localStorage errors
+          }
+        };
 
         const showFormError = (message) => {
           if (!formError) {
@@ -172,13 +235,20 @@ function ts_messages_block_assets(): void {
         };
 
         const renderList = (items) => {
+          const nonArchivedTotal = items.filter((item) => item.status !== 'archivado').length;
+          openCount.textContent = `Mensajes (${nonArchivedTotal} sin archivar)`;
+
+          if (isAccordion) {
+            const stored = getStoredAccordionState();
+            const shouldOpen = nonArchivedTotal > 0 ? true : (stored ?? false);
+            setAccordionOpen(shouldOpen);
+          }
+
           if (!items.length) {
             list.innerHTML = '<div class="muted">Sin mensajes todavía.</div>';
-            openCount.textContent = 'Mensajes (0 abiertos)';
             return;
           }
-          const openTotal = items.filter((item) => ['abierto', 'en_proceso'].includes(item.status)).length;
-          openCount.textContent = `Mensajes (${openTotal} abiertos)`;
+
           list.innerHTML = items.map((item) => {
             const author = `${item.author_name ?? ''}`.trim();
             const badges = `
@@ -291,6 +361,16 @@ function ts_messages_block_assets(): void {
             fetchList();
           });
         });
+
+        if (isAccordion && accordionToggle) {
+          accordionToggle.addEventListener('click', () => {
+            const isOpen = accordionToggle.getAttribute('aria-expanded') === 'true';
+            const next = !isOpen;
+            setAccordionOpen(next);
+            saveAccordionState(next);
+          });
+          setAccordionOpen(getStoredAccordionState() ?? false);
+        }
 
         form.addEventListener('submit', async (event) => {
           event.preventDefault();

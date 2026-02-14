@@ -521,7 +521,7 @@ $supplier_links = $st->fetchAll();
     </div>
 
     <?php require_once __DIR__ . '/include/partials/messages_block.php'; ?>
-    <?php ts_messages_block('product', $id); ?>
+    <?php ts_messages_block('product', $id, ['accordion' => true]); ?>
   </div>
 </main>
 
