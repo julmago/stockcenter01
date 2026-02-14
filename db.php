@@ -119,6 +119,46 @@ function normalize_margin_percent_value($raw): ?string {
   return number_format($normalized, 2, '.', '');
 }
 
+function normalize_site_margin_percent_value($raw): ?string {
+  $value = trim((string)$raw);
+  if ($value === '') {
+    $value = '0';
+  }
+
+  if (!preg_match('/^-?\d{1,3}(?:[\.,]\d{1,2})?$/', $value)) {
+    return null;
+  }
+
+  $normalized = (float)str_replace(',', '.', $value);
+  if ($normalized < -100 || $normalized > 999.99) {
+    return null;
+  }
+
+  return number_format($normalized, 2, '.', '');
+}
+
+function ensure_sites_schema(): void {
+  static $ready = false;
+  if ($ready) {
+    return;
+  }
+
+  $pdo = db();
+
+  $pdo->exec("CREATE TABLE IF NOT EXISTS sites (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(80) NOT NULL,
+    margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_sites_name (name)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $ready = true;
+}
+
 function ensure_brands_schema(): void {
   static $ready = false;
   if ($ready) {
