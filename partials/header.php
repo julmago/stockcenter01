@@ -58,7 +58,6 @@ $can_cashbox_access = !empty($cashboxes);
       <nav class="nav nav-primary">
         <a class="nav-link" href="<?= url_path('dashboard.php') ?>">Listas</a>
         <a class="nav-link" href="<?= url_path('product_list.php') ?>">Productos</a>
-        <a class="nav-link" href="<?= url_path('suppliers.php') ?>">Proveedores</a>
         <a class="nav-link" href="<?= url_path('tasks_all.php') ?>">Tarea<?php if ($new_tasks_count > 0): ?> <span class="badge badge-danger"><?= (int)$new_tasks_count ?></span><?php endif; ?></a>
         <a class="nav-link" href="<?= url_path('inbox.php') ?>">Mensajería<?php if ($unread_notifications_count > 0): ?> <span class="badge badge-danger"><?= (int)$unread_notifications_count ?></span><?php endif; ?></a>
         <?php if ($can_cashbox_access): ?>
