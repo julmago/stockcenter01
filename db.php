@@ -62,12 +62,23 @@ function ensure_product_suppliers_schema(): void {
   $pdo->exec("CREATE TABLE IF NOT EXISTS suppliers (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(190) NOT NULL,
+    default_margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_suppliers_name (name)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $supplier_columns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM suppliers");
+  foreach ($st->fetchAll() as $row) {
+    $supplier_columns[(string)$row['Field']] = true;
+  }
+
+  if (!isset($supplier_columns['default_margin_percent'])) {
+    $pdo->exec("ALTER TABLE suppliers ADD COLUMN default_margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0 AFTER name");
+  }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS product_suppliers (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -88,6 +99,24 @@ function ensure_product_suppliers_schema(): void {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
   $ready = true;
+}
+
+function normalize_margin_percent_value($raw): ?string {
+  $value = trim((string)$raw);
+  if ($value === '') {
+    $value = '0';
+  }
+
+  if (!preg_match('/^\d{1,3}(?:[\.,]\d{1,2})?$/', $value)) {
+    return null;
+  }
+
+  $normalized = (float)str_replace(',', '.', $value);
+  if ($normalized < 0 || $normalized > 999.99) {
+    return null;
+  }
+
+  return number_format($normalized, 2, '.', '');
 }
 
 function ensure_brands_schema(): void {
