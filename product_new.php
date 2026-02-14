@@ -3,15 +3,17 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
 ensure_product_suppliers_schema();
+ensure_brands_schema();
 require_permission(can_create_product());
 
 $error = '';
 $message = '';
+$brands = fetch_brands();
 
 if (is_post()) {
   $sku = post('sku');
   $name = post('name');
-  $brand = post('brand');
+  $brand_id = (int)post('brand_id', '0');
   $sale_mode = post('sale_mode', 'UNIDAD');
   $sale_units_per_pack = post('sale_units_per_pack');
   $code = post('code');
@@ -33,8 +35,20 @@ if (is_post()) {
   } elseif ($error === '') {
     try {
       db()->beginTransaction();
-      $st = db()->prepare("INSERT INTO products(sku, name, brand, sale_mode, sale_units_per_pack, updated_at) VALUES(?, ?, ?, ?, ?, NOW())");
-      $st->execute([$sku, $name, $brand, $sale_mode, $sale_units_per_pack_value]);
+      $brand_name = '';
+      $brand_id_value = null;
+      if ($brand_id > 0) {
+        $st = db()->prepare("SELECT id, name FROM brands WHERE id = ? LIMIT 1");
+        $st->execute([$brand_id]);
+        $brand_row = $st->fetch();
+        if ($brand_row) {
+          $brand_id_value = (int)$brand_row['id'];
+          $brand_name = (string)$brand_row['name'];
+        }
+      }
+
+      $st = db()->prepare("INSERT INTO products(sku, name, brand, brand_id, sale_mode, sale_units_per_pack, updated_at) VALUES(?, ?, ?, ?, ?, ?, NOW())");
+      $st->execute([$sku, $name, $brand_name, $brand_id_value, $sale_mode, $sale_units_per_pack_value]);
       $pid = (int)db()->lastInsertId();
 
       if ($code !== '') {
@@ -82,7 +96,12 @@ if (is_post()) {
           </div>
           <div class="form-group">
             <label class="form-label">Marca</label>
-            <input class="form-control" type="text" name="brand">
+            <select class="form-control" name="brand_id">
+              <option value="">Sin marca</option>
+              <?php foreach ($brands as $brand): ?>
+                <option value="<?= (int)$brand['id'] ?>" <?= (int)post('brand_id', '0') === (int)$brand['id'] ? 'selected' : '' ?>><?= e($brand['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
           </div>
         </div>
 
