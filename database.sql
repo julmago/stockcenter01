@@ -119,17 +119,30 @@ JOIN (
 ) d ON 1=1
 ON DUPLICATE KEY UPDATE value = VALUES(value);
 
+CREATE TABLE IF NOT EXISTS brands (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_brands_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS products (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   sku VARCHAR(80) NOT NULL,
   name VARCHAR(190) NOT NULL,
   brand VARCHAR(120) NOT NULL DEFAULT '',
+  brand_id INT UNSIGNED NULL,
   sale_mode ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
   sale_units_per_pack INT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_products_sku (sku)
+  UNIQUE KEY uq_products_sku (sku),
+  KEY idx_products_brand_id (brand_id),
+  CONSTRAINT fk_products_brand
+    FOREIGN KEY (brand_id) REFERENCES brands(id)
+    ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS suppliers (

@@ -2,13 +2,19 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
+ensure_brands_schema();
 
 $q = get('q','');
 $params = [];
 $products = [];
 if ($q !== '') {
   $like = '%' . $q . '%';
-  $st = db()->prepare("SELECT id, sku, name, brand FROM products WHERE sku LIKE ? OR name LIKE ? OR brand LIKE ? ORDER BY name ASC LIMIT 200");
+  $st = db()->prepare("SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand
+    FROM products p
+    LEFT JOIN brands b ON b.id = p.brand_id
+    WHERE p.sku LIKE ? OR p.name LIKE ? OR COALESCE(b.name, p.brand) LIKE ?
+    ORDER BY p.name ASC
+    LIMIT 200");
   $st->execute([$like,$like,$like]);
   $products = $st->fetchAll();
 }

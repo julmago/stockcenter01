@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
+ensure_brands_schema();
 
 $list_id = (int)get('id','0');
 if ($list_id <= 0) abort(400, 'Falta id de listado.');
@@ -207,8 +208,9 @@ if (is_post() && post('action') === 'create_product_from_code') {
         if ($existing) {
           throw new RuntimeException('CODE_USED');
         }
-        $st = db()->prepare("INSERT INTO products(sku, name, brand, updated_at) VALUES(?, ?, ?, NOW())");
-        $st->execute([$sku, $name, $brand]);
+        $brand_id = resolve_brand_id($brand);
+        $st = db()->prepare("INSERT INTO products(sku, name, brand, brand_id, updated_at) VALUES(?, ?, ?, ?, NOW())");
+        $st->execute([$sku, $name, $brand, $brand_id]);
         $pid = (int)db()->lastInsertId();
 
         $st = db()->prepare("INSERT INTO product_codes(product_id, code, code_type) VALUES(?, ?, 'BARRA')");
@@ -240,7 +242,12 @@ if (is_post() && post('action') === 'search_products') {
   $search_term = trim((string)post('product_search'));
   if ($search_term !== '') {
     $like = '%' . $search_term . '%';
-    $st = db()->prepare("SELECT id, sku, name, brand FROM products WHERE sku LIKE ? OR name LIKE ? OR brand LIKE ? ORDER BY name ASC LIMIT 200");
+    $st = db()->prepare("SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand
+      FROM products p
+      LEFT JOIN brands b ON b.id = p.brand_id
+      WHERE p.sku LIKE ? OR p.name LIKE ? OR COALESCE(b.name, p.brand) LIKE ?
+      ORDER BY p.name ASC
+      LIMIT 200");
     $st->execute([$like, $like, $like]);
     $search_results = $st->fetchAll();
   }

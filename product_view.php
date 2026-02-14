@@ -3,11 +3,16 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
 ensure_product_suppliers_schema();
+ensure_brands_schema();
 
 $id = (int)get('id','0');
 if ($id <= 0) abort(400, 'Falta id.');
 
-$st = db()->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
+$st = db()->prepare("SELECT p.*, b.name AS brand_name
+  FROM products p
+  LEFT JOIN brands b ON b.id = p.brand_id
+  WHERE p.id = ?
+  LIMIT 1");
 $st->execute([$id]);
 $product = $st->fetch();
 if (!$product) abort(404, 'Producto no encontrado.');
@@ -21,7 +26,7 @@ if (is_post() && post('action') === 'update') {
   require_permission($can_edit);
   $sku = post('sku');
   $name = post('name');
-  $brand = post('brand');
+  $brand_id = (int)post('brand_id', '0');
   $sale_mode = post('sale_mode', 'UNIDAD');
   $sale_units_per_pack = post('sale_units_per_pack');
 
@@ -41,8 +46,20 @@ if (is_post() && post('action') === 'update') {
     $error = 'SKU y Nombre son obligatorios.';
   } elseif ($error === '') {
     try {
-      $st = db()->prepare("UPDATE products SET sku=?, name=?, brand=?, sale_mode=?, sale_units_per_pack=?, updated_at=NOW() WHERE id=?");
-      $st->execute([$sku, $name, $brand, $sale_mode, $sale_units_per_pack_value, $id]);
+      $brand_name = '';
+      $brand_id_value = null;
+      if ($brand_id > 0) {
+        $st = db()->prepare("SELECT id, name FROM brands WHERE id = ? LIMIT 1");
+        $st->execute([$brand_id]);
+        $brand_row = $st->fetch();
+        if ($brand_row) {
+          $brand_id_value = (int)$brand_row['id'];
+          $brand_name = (string)$brand_row['name'];
+        }
+      }
+
+      $st = db()->prepare("UPDATE products SET sku=?, name=?, brand=?, brand_id=?, sale_mode=?, sale_units_per_pack=?, updated_at=NOW() WHERE id=?");
+      $st->execute([$sku, $name, $brand_name, $brand_id_value, $sale_mode, $sale_units_per_pack_value, $id]);
       $message = 'Producto actualizado.';
     } catch (Throwable $t) {
       $error = 'No se pudo actualizar. Puede que el SKU ya exista.';
@@ -152,8 +169,14 @@ if (is_post() && post('action') === 'set_active_supplier') {
   }
 }
 
+$brands = fetch_brands();
+
 // recargar
-$st = db()->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
+$st = db()->prepare("SELECT p.*, b.name AS brand_name
+  FROM products p
+  LEFT JOIN brands b ON b.id = p.brand_id
+  WHERE p.id = ?
+  LIMIT 1");
 $st->execute([$id]);
 $product = $st->fetch();
 
@@ -194,6 +217,9 @@ $supplier_links = $st->fetchAll();
     <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
     <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Datos del producto</h3>
+      </div>
       <?php if ($can_edit): ?>
         <form method="post" class="stack">
           <input type="hidden" name="action" value="update">
@@ -208,7 +234,12 @@ $supplier_links = $st->fetchAll();
             </div>
             <div class="form-group">
               <label class="form-label">Marca</label>
-              <input class="form-control" type="text" name="brand" value="<?= e($product['brand']) ?>">
+              <select class="form-control" name="brand_id">
+                <option value="">Sin marca</option>
+                <?php foreach ($brands as $brand): ?>
+                  <option value="<?= (int)$brand['id'] ?>" <?= (int)($product['brand_id'] ?? 0) === (int)$brand['id'] ? 'selected' : '' ?>><?= e($brand['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
             </div>
           </div>
           <div class="form-row">
@@ -220,7 +251,7 @@ $supplier_links = $st->fetchAll();
               </select>
             </div>
             <div class="form-group" id="sale-units-group" style="display:none;">
-              <label class="form-label">Unidades por pack</label>
+              <label class="form-label">Unidades pack</label>
               <input class="form-control" type="number" min="1" step="1" name="sale_units_per_pack" id="sale-units-input" value="<?= e((string)($product['sale_units_per_pack'] ?? '')) ?>">
             </div>
           </div>
@@ -233,7 +264,7 @@ $supplier_links = $st->fetchAll();
         <div class="stack">
           <div><strong>SKU:</strong> <?= e($product['sku']) ?></div>
           <div><strong>Nombre:</strong> <?= e($product['name']) ?></div>
-          <div><strong>Marca:</strong> <?= e($product['brand']) ?></div>
+          <div><strong>Marca:</strong> <?= e($product['brand_name'] ?? $product['brand']) ?></div>
           <div><strong>Modo de venta:</strong> <?= e(($product['sale_mode'] ?? 'UNIDAD') === 'PACK' ? 'Pack' : 'Unidad') ?></div>
           <?php if (($product['sale_mode'] ?? 'UNIDAD') === 'PACK'): ?>
             <div><strong>Unidades por pack:</strong> <?= (int)($product['sale_units_per_pack'] ?? 0) ?></div>
@@ -252,8 +283,9 @@ $supplier_links = $st->fetchAll();
       </div>
 
       <?php if ($can_edit): ?>
-        <form method="post" class="form-row">
+        <form method="post" class="stack">
           <input type="hidden" name="action" value="add_supplier_link">
+          <div class="form-row product-supplier-form">
           <div class="form-group">
             <label class="form-label">Proveedor</label>
             <select class="form-control" name="supplier_id" required>
@@ -275,7 +307,7 @@ $supplier_links = $st->fetchAll();
             </select>
           </div>
           <div class="form-group" id="cost-units-group" style="display:none;">
-            <label class="form-label">Unidades por pack</label>
+            <label class="form-label">Unidades pack</label>
             <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
           </div>
           <div class="form-group">
@@ -285,8 +317,9 @@ $supplier_links = $st->fetchAll();
               <option value="1">Sí</option>
             </select>
           </div>
-          <div class="form-group" style="align-self:end;">
+          <div class="form-group product-supplier-submit">
             <button class="btn" type="submit">Agregar proveedor</button>
+          </div>
           </div>
         </form>
       <?php endif; ?>
@@ -346,7 +379,7 @@ $supplier_links = $st->fetchAll();
         <span class="muted small"><?= count($codes) ?> registrados</span>
       </div>
       <?php if ($can_add_code): ?>
-        <form method="post" class="form-row">
+        <form method="post" class="form-row product-codes-form">
           <input type="hidden" name="action" value="add_code">
           <div class="form-group">
             <label class="form-label">Código</label>

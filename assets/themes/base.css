@@ -1337,3 +1337,15 @@ select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.product-supplier-form {
+  align-items: end;
+}
+
+.product-supplier-submit {
+  align-self: end;
+}
+
+.product-codes-form {
+  align-items: end;
+}
