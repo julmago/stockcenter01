@@ -280,6 +280,11 @@ $supplier_links = $st->fetchAll();
       color: #ff7d7d;
       font-size: 13px;
     }
+
+    .product-linked-suppliers-form,
+    .product-codes-form {
+      margin-top: var(--space-3);
+    }
   </style>
 </head>
 <body class="app-body">
@@ -362,7 +367,7 @@ $supplier_links = $st->fetchAll();
       </div>
 
       <?php if ($can_edit): ?>
-        <form method="post" class="stack">
+        <form method="post" class="stack product-linked-suppliers-form">
           <input type="hidden" name="action" value="add_supplier_link">
           <div class="form-row product-supplier-form">
             <div class="form-group">
