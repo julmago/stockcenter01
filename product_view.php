@@ -281,13 +281,8 @@ $supplier_links = $st->fetchAll();
       font-size: 13px;
     }
 
-    .product-linked-suppliers-body,
-    .product-codes-body {
-      /*
-       * El espacio se aplica con padding interno para evitar que cualquier
-       * margen del primer hijo colapse con el contenedor.
-       */
-      padding-top: var(--space-4);
+    .product-table-wrapper {
+      margin-top: var(--space-4);
     }
   </style>
 </head>
@@ -410,7 +405,7 @@ $supplier_links = $st->fetchAll();
           </form>
         <?php endif; ?>
 
-        <div class="table-wrapper">
+        <div class="table-wrapper product-table-wrapper">
           <table class="table">
             <thead>
               <tr>
@@ -486,7 +481,7 @@ $supplier_links = $st->fetchAll();
           </form>
         <?php endif; ?>
 
-        <div class="table-wrapper">
+        <div class="table-wrapper product-table-wrapper">
           <table class="table">
             <thead>
               <tr>
