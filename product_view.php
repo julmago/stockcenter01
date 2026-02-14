@@ -281,8 +281,13 @@ $supplier_links = $st->fetchAll();
       font-size: 13px;
     }
 
-    .product-card-body {
-      padding-top: var(--space-3);
+    .product-linked-suppliers-body,
+    .product-codes-body {
+      /*
+       * El espacio se aplica con padding interno para evitar que cualquier
+       * margen del primer hijo colapse con el contenedor.
+       */
+      padding-top: var(--space-4);
     }
   </style>
 </head>
@@ -364,7 +369,7 @@ $supplier_links = $st->fetchAll();
         <h3 class="card-title">Proveedores vinculados</h3>
         <span class="muted small"><?= count($supplier_links) ?> vinculados</span>
       </div>
-      <div class="product-card-body">
+      <div class="card-body product-linked-suppliers-body">
         <?php if ($can_edit): ?>
           <form method="post" class="stack product-linked-suppliers-form">
             <input type="hidden" name="action" value="add_supplier_link">
@@ -460,7 +465,7 @@ $supplier_links = $st->fetchAll();
         <h3 class="card-title">Códigos</h3>
         <span class="muted small"><?= count($codes) ?> registrados</span>
       </div>
-      <div class="product-card-body">
+      <div class="card-body product-codes-body">
         <?php if ($can_add_code): ?>
           <form method="post" class="form-row product-codes-form">
             <input type="hidden" name="action" value="add_code">
