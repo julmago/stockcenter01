@@ -166,6 +166,49 @@ if (is_post() && post('action') === 'set_active_supplier') {
   }
 }
 
+if (is_post() && post('action') === 'create_supplier_inline') {
+  require_permission($can_edit);
+
+  header('Content-Type: application/json; charset=utf-8');
+
+  $supplier_name = trim(post('supplier_name'));
+  if ($supplier_name === '') {
+    http_response_code(422);
+    echo json_encode(['ok' => false, 'message' => 'Ingresá el nombre del proveedor.']);
+    exit;
+  }
+
+  try {
+    $st = db()->prepare('SELECT id, name FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1');
+    $st->execute([$supplier_name]);
+    $existing = $st->fetch();
+
+    if ($existing) {
+      http_response_code(409);
+      echo json_encode(['ok' => false, 'message' => 'Ya existe un proveedor con ese nombre.']);
+      exit;
+    }
+
+    $st = db()->prepare('INSERT INTO suppliers(name, is_active, updated_at) VALUES(?, 1, NOW())');
+    $st->execute([$supplier_name]);
+
+    $supplier_id = (int)db()->lastInsertId();
+
+    echo json_encode([
+      'ok' => true,
+      'supplier' => [
+        'id' => $supplier_id,
+        'name' => $supplier_name,
+      ],
+    ]);
+    exit;
+  } catch (Throwable $t) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'message' => 'No se pudo crear el proveedor.']);
+    exit;
+  }
+}
+
 $brands = fetch_brands();
 
 // recargar
@@ -199,6 +242,45 @@ $supplier_links = $st->fetchAll();
   <meta charset="utf-8">
   <title>TS WORK</title>
   <?= theme_css_links() ?>
+  <style>
+    .inline-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 10, 18, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1200;
+      padding: 16px;
+    }
+
+    .inline-modal-backdrop.is-open {
+      display: flex;
+    }
+
+    .inline-modal {
+      width: 100%;
+      max-width: 420px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: var(--panel, #131a2a);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+      padding: 18px;
+    }
+
+    .inline-modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+
+    .inline-modal-feedback {
+      margin-top: 10px;
+      color: #ff7d7d;
+      font-size: 13px;
+    }
+  </style>
 </head>
 <body class="app-body">
 <?php require __DIR__ . '/partials/header.php'; ?>
@@ -289,8 +371,9 @@ $supplier_links = $st->fetchAll();
             </div>
             <div class="form-group">
               <label class="form-label">Proveedor</label>
-              <select class="form-control" name="supplier_id" required>
+              <select class="form-control" name="supplier_id" id="supplier-id-select" required>
                 <option value="">Seleccionar</option>
+                <option value="__new__">+ Agregar proveedor…</option>
                 <?php foreach ($suppliers as $supplier): ?>
                   <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
                 <?php endforeach; ?>
@@ -435,6 +518,25 @@ $supplier_links = $st->fetchAll();
   </div>
 </main>
 
+<div class="inline-modal-backdrop" id="supplier-inline-modal" aria-hidden="true">
+  <div class="inline-modal" role="dialog" aria-modal="true" aria-labelledby="supplier-inline-modal-title">
+    <div class="card-header" style="padding:0; margin-bottom:10px;">
+      <h3 class="card-title" id="supplier-inline-modal-title">Nuevo proveedor</h3>
+    </div>
+    <form id="supplier-inline-form" class="stack">
+      <div class="form-group">
+        <label class="form-label" for="supplier-inline-name">Nombre del proveedor</label>
+        <input class="form-control" type="text" id="supplier-inline-name" name="supplier_name" maxlength="190" required>
+      </div>
+      <p class="inline-modal-feedback" id="supplier-inline-feedback" hidden></p>
+      <div class="inline-modal-actions">
+        <button class="btn btn-ghost" type="button" id="supplier-inline-cancel">Cancelar</button>
+        <button class="btn" type="submit" id="supplier-inline-submit">Agregar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
   const saleModeSelect = document.getElementById('sale-mode-select');
   const saleUnitsGroup = document.getElementById('sale-units-group');
@@ -470,6 +572,115 @@ $supplier_links = $st->fetchAll();
   if (costTypeSelect) {
     costTypeSelect.addEventListener('change', () => toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput));
     toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput);
+  }
+
+  const supplierSelect = document.getElementById('supplier-id-select');
+  const supplierModal = document.getElementById('supplier-inline-modal');
+  const supplierInlineForm = document.getElementById('supplier-inline-form');
+  const supplierInlineNameInput = document.getElementById('supplier-inline-name');
+  const supplierInlineCancelBtn = document.getElementById('supplier-inline-cancel');
+  const supplierInlineSubmitBtn = document.getElementById('supplier-inline-submit');
+  const supplierInlineFeedback = document.getElementById('supplier-inline-feedback');
+  const supplierNewValue = '__new__';
+  let previousSupplierValue = supplierSelect ? supplierSelect.value : '';
+
+  const closeSupplierModal = () => {
+    if (!supplierModal) return;
+    supplierModal.classList.remove('is-open');
+    supplierModal.setAttribute('aria-hidden', 'true');
+    supplierInlineForm.reset();
+    supplierInlineFeedback.hidden = true;
+    supplierInlineFeedback.textContent = '';
+    supplierInlineSubmitBtn.disabled = false;
+  };
+
+  const openSupplierModal = () => {
+    if (!supplierModal) return;
+    supplierModal.classList.add('is-open');
+    supplierModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => supplierInlineNameInput.focus(), 0);
+  };
+
+  if (supplierSelect) {
+    supplierSelect.addEventListener('focus', () => {
+      if (supplierSelect.value !== supplierNewValue) {
+        previousSupplierValue = supplierSelect.value;
+      }
+    });
+
+    supplierSelect.addEventListener('change', () => {
+      if (supplierSelect.value === supplierNewValue) {
+        openSupplierModal();
+      } else {
+        previousSupplierValue = supplierSelect.value;
+      }
+    });
+  }
+
+  if (supplierInlineCancelBtn) {
+    supplierInlineCancelBtn.addEventListener('click', () => {
+      if (supplierSelect) supplierSelect.value = previousSupplierValue;
+      closeSupplierModal();
+    });
+  }
+
+  if (supplierModal) {
+    supplierModal.addEventListener('click', (event) => {
+      if (event.target === supplierModal) {
+        if (supplierSelect) supplierSelect.value = previousSupplierValue;
+        closeSupplierModal();
+      }
+    });
+  }
+
+  if (supplierInlineForm) {
+    supplierInlineForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const supplierName = supplierInlineNameInput.value.trim();
+      if (supplierName === '') {
+        supplierInlineFeedback.hidden = false;
+        supplierInlineFeedback.textContent = 'Ingresá un nombre.';
+        supplierInlineNameInput.focus();
+        return;
+      }
+
+      supplierInlineSubmitBtn.disabled = true;
+      supplierInlineFeedback.hidden = true;
+
+      try {
+        const body = new URLSearchParams();
+        body.append('action', 'create_supplier_inline');
+        body.append('supplier_name', supplierName);
+
+        const response = await fetch(window.location.href, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: body.toString(),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.ok || !data.supplier) {
+          throw new Error(data.message || 'No se pudo crear el proveedor.');
+        }
+
+        const newOption = document.createElement('option');
+        newOption.value = String(data.supplier.id);
+        newOption.textContent = data.supplier.name;
+        supplierSelect.appendChild(newOption);
+        supplierSelect.value = String(data.supplier.id);
+        previousSupplierValue = supplierSelect.value;
+        closeSupplierModal();
+      } catch (error) {
+        supplierInlineFeedback.hidden = false;
+        supplierInlineFeedback.textContent = error instanceof Error ? error.message : 'No se pudo crear el proveedor.';
+      } finally {
+        supplierInlineSubmitBtn.disabled = false;
+      }
+    });
   }
 </script>
 
