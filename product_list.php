@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
+ensure_brands_schema();
 
 $q = trim(get('q', ''));
 $page = max(1, (int) get('page', 1));
@@ -23,6 +24,7 @@ if ($q !== '') {
 
 $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
   FROM products p
+  LEFT JOIN brands b ON b.id = p.brand_id
   LEFT JOIN product_codes pc ON pc.product_id = p.id
   $where";
 $count_st = db()->prepare($count_sql);
@@ -35,12 +37,13 @@ $total_pages = max(1, (int) ceil($total / $limit));
 $page = min($page, $total_pages);
 $offset = ($page - 1) * $limit;
 
-$select_sql = "SELECT p.id, p.sku, p.name, p.brand,"
+$select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
   . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
   . " FROM products p"
+  . " LEFT JOIN brands b ON b.id = p.brand_id"
   . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
   . " $where"
-  . " GROUP BY p.id, p.sku, p.name, p.brand"
+  . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand)"
   . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
   . " LIMIT :limit OFFSET :offset";
 $select_params = $params;

@@ -89,3 +89,98 @@ function ensure_product_suppliers_schema(): void {
 
   $ready = true;
 }
+
+function ensure_brands_schema(): void {
+  static $ready = false;
+  if ($ready) {
+    return;
+  }
+
+  $pdo = db();
+
+  $pdo->exec("CREATE TABLE IF NOT EXISTS brands (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(120) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_brands_name (name)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $columns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM products");
+  foreach ($st->fetchAll() as $row) {
+    $columns[(string)$row['Field']] = true;
+  }
+
+  if (!isset($columns['brand_id'])) {
+    $pdo->exec("ALTER TABLE products ADD COLUMN brand_id INT UNSIGNED NULL AFTER brand");
+  }
+
+  $pdo->exec("INSERT IGNORE INTO brands(name)
+    SELECT DISTINCT TRIM(brand)
+    FROM products
+    WHERE TRIM(COALESCE(brand, '')) <> ''");
+
+  $pdo->exec("UPDATE products p
+    INNER JOIN brands b ON b.name = TRIM(p.brand)
+    SET p.brand_id = b.id
+    WHERE p.brand_id IS NULL
+      AND TRIM(COALESCE(p.brand, '')) <> ''");
+
+  $indexExists = false;
+  $st = $pdo->query("SHOW INDEX FROM products WHERE Key_name = 'idx_products_brand_id'");
+  foreach ($st->fetchAll() as $row) {
+    $indexExists = true;
+    break;
+  }
+  if (!$indexExists) {
+    $pdo->exec("ALTER TABLE products ADD KEY idx_products_brand_id (brand_id)");
+  }
+
+  $fkExists = false;
+  $st = $pdo->prepare("SELECT CONSTRAINT_NAME
+    FROM information_schema.KEY_COLUMN_USAGE
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'products'
+      AND COLUMN_NAME = 'brand_id'
+      AND REFERENCED_TABLE_NAME = 'brands'");
+  $st->execute();
+  if ($st->fetch()) {
+    $fkExists = true;
+  }
+
+  if (!$fkExists) {
+    $pdo->exec("ALTER TABLE products
+      ADD CONSTRAINT fk_products_brand
+      FOREIGN KEY (brand_id) REFERENCES brands(id)
+      ON DELETE SET NULL");
+  }
+
+  $ready = true;
+}
+
+function fetch_brands(): array {
+  ensure_brands_schema();
+  $st = db()->query("SELECT id, name FROM brands ORDER BY name ASC");
+  return $st->fetchAll();
+}
+
+function resolve_brand_id(string $brandName): ?int {
+  ensure_brands_schema();
+  $name = trim($brandName);
+  if ($name === '') {
+    return null;
+  }
+
+  $st = db()->prepare("INSERT IGNORE INTO brands(name) VALUES(?)");
+  $st->execute([$name]);
+
+  $st = db()->prepare("SELECT id FROM brands WHERE name = ? LIMIT 1");
+  $st->execute([$name]);
+  $brandId = $st->fetchColumn();
+  if ($brandId === false) {
+    return null;
+  }
+
+  return (int)$brandId;
+}
