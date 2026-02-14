@@ -22,6 +22,14 @@ $message = '';
 $can_edit = can_edit_product();
 $can_add_code = can_add_code();
 
+$parse_supplier_cost_integer = static function (string $supplier_cost_raw): ?int {
+  if ($supplier_cost_raw === '') {
+    return null;
+  }
+
+  return max(0, (int)$supplier_cost_raw);
+};
+
 if (is_post() && post('action') === 'update') {
   require_permission($can_edit);
   $sku = post('sku');
@@ -117,15 +125,7 @@ if (is_post() && post('action') === 'add_supplier_link') {
   }
 
 
-  $supplier_cost_value = null;
-  if ($supplier_cost_raw !== '') {
-    $supplier_cost_normalized = str_replace(',', '.', $supplier_cost_raw);
-    if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $supplier_cost_normalized)) {
-      $error = 'Costo del proveedor inválido. Usá hasta 2 decimales.';
-    } else {
-      $supplier_cost_value = number_format((float)$supplier_cost_normalized, 2, '.', '');
-    }
-  }
+  $supplier_cost_value = $parse_supplier_cost_integer($supplier_cost_raw);
 
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
@@ -174,15 +174,7 @@ if (is_post() && post('action') === 'update_supplier_link') {
     }
   }
 
-  $supplier_cost_value = null;
-  if ($supplier_cost_raw !== '') {
-    $supplier_cost_normalized = str_replace(',', '.', $supplier_cost_raw);
-    if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $supplier_cost_normalized)) {
-      $error = 'Costo del proveedor inválido. Usá hasta 2 decimales.';
-    } else {
-      $supplier_cost_value = number_format((float)$supplier_cost_normalized, 2, '.', '');
-    }
-  }
+  $supplier_cost_value = $parse_supplier_cost_integer($supplier_cost_raw);
 
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
@@ -510,7 +502,7 @@ $supplier_links = $st->fetchAll();
                 </div>
                 <div class="form-group">
                   <label class="form-label">Costo del proveedor</label>
-                  <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" id="supplier-cost-input" placeholder="0.00">
+                  <input class="form-control" type="number" step="1" min="0" inputmode="numeric" name="supplier_cost" id="supplier-cost-input" placeholder="0">
                 </div>
               </div>
               <div>
@@ -739,6 +731,31 @@ $supplier_links = $st->fetchAll();
   const supplierLinkCancelBtn = document.getElementById('supplier-link-cancel-btn');
   const editSupplierButtons = document.querySelectorAll('.js-edit-supplier-link');
 
+  const normalizeSupplierCostValue = (value) => {
+    if (value === undefined || value === null) return '';
+    const digitsOnly = String(value).replace(/\D+/g, '');
+    if (digitsOnly === '') return '';
+    return String(parseInt(digitsOnly, 10));
+  };
+
+  const bindIntegerCostInput = (input) => {
+    if (!input) return;
+    const preventDecimalKeys = (event) => {
+      if (event.key === '.' || event.key === ',') {
+        event.preventDefault();
+      }
+    };
+
+    const sanitize = () => {
+      input.value = normalizeSupplierCostValue(input.value);
+    };
+
+    input.addEventListener('keydown', preventDecimalKeys);
+    input.addEventListener('input', sanitize);
+    input.addEventListener('blur', sanitize);
+    sanitize();
+  };
+
   const resetSupplierLinkForm = () => {
     if (!supplierLinkForm) return;
     supplierLinkForm.reset();
@@ -762,13 +779,23 @@ $supplier_links = $st->fetchAll();
           ? (button.dataset.unitsPerPack || '')
           : '';
       }
-      if (supplierCostInput) supplierCostInput.value = button.dataset.supplierCost || '';
+      if (supplierCostInput) supplierCostInput.value = normalizeSupplierCostValue(button.dataset.supplierCost || '');
       if (supplierLinkSubmitBtn) supplierLinkSubmitBtn.textContent = 'Guardar cambios';
       if (supplierLinkCancelBtn) supplierLinkCancelBtn.style.display = '';
       toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput);
       supplierLinkForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
+
+  if (supplierLinkForm) {
+    supplierLinkForm.addEventListener('submit', () => {
+      if (supplierCostInput) {
+        supplierCostInput.value = normalizeSupplierCostValue(supplierCostInput.value);
+      }
+    });
+  }
+
+  bindIntegerCostInput(supplierCostInput);
 
   if (supplierLinkCancelBtn) {
     supplierLinkCancelBtn.addEventListener('click', () => {
