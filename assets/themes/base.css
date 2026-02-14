@@ -1339,11 +1339,35 @@ select:focus {
 }
 
 .product-supplier-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: end;
 }
 
-.product-supplier-submit {
-  align-self: end;
+.product-supplier-cost-column {
+  min-width: 0;
+}
+
+.product-supplier-cost-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.product-supplier-cost-layout.is-pack {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.product-supplier-actions {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 900px) {
+  .product-supplier-form,
+  .product-supplier-cost-layout,
+  .product-supplier-cost-layout.is-pack {
+    grid-template-columns: 1fr;
+  }
 }
 
 .product-codes-form {
