@@ -149,6 +149,56 @@ if (is_post() && post('action') === 'add_supplier_link') {
   }
 }
 
+if (is_post() && post('action') === 'update_supplier_link') {
+  require_permission($can_edit);
+  $link_id = (int)post('edit_link_id', '0');
+  $supplier_id = (int)post('supplier_id', '0');
+  $supplier_sku = post('supplier_sku');
+  $cost_type = post('cost_type', 'UNIDAD');
+  $units_per_pack = post('units_per_pack');
+  $supplier_cost_raw = trim((string)post('supplier_cost'));
+
+  if ($link_id <= 0) {
+    $error = 'Vínculo inválido para editar.';
+  }
+
+  if (!in_array($cost_type, ['UNIDAD', 'PACK'], true)) {
+    $cost_type = 'UNIDAD';
+  }
+
+  $units_per_pack_value = null;
+  if ($cost_type === 'PACK') {
+    $units_per_pack_value = (int)$units_per_pack;
+    if ($units_per_pack_value <= 0) {
+      $error = 'Si el costo del proveedor es Pack, indicá unidades por pack mayores a 0.';
+    }
+  }
+
+  $supplier_cost_value = null;
+  if ($supplier_cost_raw !== '') {
+    $supplier_cost_normalized = str_replace(',', '.', $supplier_cost_raw);
+    if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $supplier_cost_normalized)) {
+      $error = 'Costo del proveedor inválido. Usá hasta 2 decimales.';
+    } else {
+      $supplier_cost_value = number_format((float)$supplier_cost_normalized, 2, '.', '');
+    }
+  }
+
+  if ($error === '' && $supplier_id <= 0) {
+    $error = 'Seleccioná un proveedor.';
+  }
+
+  if ($error === '') {
+    try {
+      $st = db()->prepare("UPDATE product_suppliers SET supplier_id = ?, supplier_sku = ?, cost_type = ?, units_per_pack = ?, supplier_cost = ?, updated_at = NOW() WHERE id = ? AND product_id = ?");
+      $st->execute([$supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $supplier_cost_value, $link_id, $id]);
+      $message = 'Proveedor actualizado.';
+    } catch (Throwable $t) {
+      $error = 'No se pudo actualizar el proveedor vinculado.';
+    }
+  }
+}
+
 if (is_post() && post('action') === 'delete_supplier_link') {
   require_permission($can_edit);
   $link_id = (int)post('link_id', '0');
@@ -440,7 +490,8 @@ $supplier_links = $st->fetchAll();
       <div class="card-body product-linked-suppliers-body">
         <?php if ($can_edit): ?>
           <form method="post" class="stack product-linked-suppliers-form">
-            <input type="hidden" name="action" value="add_supplier_link">
+            <input type="hidden" name="action" value="add_supplier_link" id="supplier-link-action">
+            <input type="hidden" name="edit_link_id" value="" id="edit-link-id-input">
             <div class="form-row product-supplier-form supplier-form-row">
               <div class="form-group">
                 <label class="form-label">SKU / Código del proveedor</label>
@@ -459,7 +510,7 @@ $supplier_links = $st->fetchAll();
                 </div>
                 <div class="form-group">
                   <label class="form-label">Costo del proveedor</label>
-                  <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" placeholder="0.00">
+                  <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" id="supplier-cost-input" placeholder="0.00">
                 </div>
               </div>
               <div>
@@ -479,7 +530,8 @@ $supplier_links = $st->fetchAll();
               </div>
             </div>
             <div class="form-actions product-supplier-actions">
-              <button class="btn" type="submit">Agregar proveedor</button>
+              <button class="btn" type="submit" id="supplier-link-submit-btn">Agregar proveedor</button>
+              <button class="btn btn-ghost" type="button" id="supplier-link-cancel-btn" style="display:none;">Cancelar edición</button>
             </div>
           </form>
         <?php endif; ?>
@@ -509,10 +561,21 @@ $supplier_links = $st->fetchAll();
                     <td><?= e($link['supplier_sku']) ?></td>
                     <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
                     <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
-                    <td><?= $link['supplier_cost'] === null ? '—' : number_format((float)$link['supplier_cost'], 2, '.', '') ?></td>
+                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format((float)$link['supplier_cost'], 0, '', '') ?></td>
                     <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
                     <?php if ($can_edit): ?>
                       <td class="table-actions">
+                        <button
+                          class="btn btn-ghost js-edit-supplier-link"
+                          type="button"
+                          data-link-id="<?= (int)$link['id'] ?>"
+                          data-supplier-id="<?= (int)$link['supplier_id'] ?>"
+                          data-supplier-sku="<?= e($link['supplier_sku']) ?>"
+                          data-cost-type="<?= e($link['cost_type']) ?>"
+                          data-units-per-pack="<?= (int)($link['units_per_pack'] ?? 0) ?>"
+                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : number_format((float)$link['supplier_cost'], 0, '', '') ?>"
+                          style="margin-right:6px;"
+                        >Modificar</button>
                         <?php if ((int)$link['is_active'] !== 1): ?>
                           <form method="post" style="display:inline; margin-right:6px;">
                             <input type="hidden" name="action" value="set_active_supplier">
@@ -667,6 +730,52 @@ $supplier_links = $st->fetchAll();
   }
 
   const supplierSelect = document.getElementById('supplier-id-select');
+  const supplierLinkForm = document.querySelector('.product-linked-suppliers-form');
+  const supplierLinkActionInput = document.getElementById('supplier-link-action');
+  const editLinkIdInput = document.getElementById('edit-link-id-input');
+  const supplierSkuInput = supplierLinkForm ? supplierLinkForm.querySelector('input[name="supplier_sku"]') : null;
+  const supplierCostInput = document.getElementById('supplier-cost-input');
+  const supplierLinkSubmitBtn = document.getElementById('supplier-link-submit-btn');
+  const supplierLinkCancelBtn = document.getElementById('supplier-link-cancel-btn');
+  const editSupplierButtons = document.querySelectorAll('.js-edit-supplier-link');
+
+  const resetSupplierLinkForm = () => {
+    if (!supplierLinkForm) return;
+    supplierLinkForm.reset();
+    if (supplierLinkActionInput) supplierLinkActionInput.value = 'add_supplier_link';
+    if (editLinkIdInput) editLinkIdInput.value = '';
+    if (supplierLinkSubmitBtn) supplierLinkSubmitBtn.textContent = 'Agregar proveedor';
+    if (supplierLinkCancelBtn) supplierLinkCancelBtn.style.display = 'none';
+    toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput);
+  };
+
+  editSupplierButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!supplierLinkForm) return;
+      if (supplierLinkActionInput) supplierLinkActionInput.value = 'update_supplier_link';
+      if (editLinkIdInput) editLinkIdInput.value = button.dataset.linkId || '';
+      if (supplierSkuInput) supplierSkuInput.value = button.dataset.supplierSku || '';
+      if (supplierSelect) supplierSelect.value = button.dataset.supplierId || '';
+      if (costTypeSelect) costTypeSelect.value = button.dataset.costType || 'UNIDAD';
+      if (costUnitsInput) {
+        costUnitsInput.value = button.dataset.costType === 'PACK'
+          ? (button.dataset.unitsPerPack || '')
+          : '';
+      }
+      if (supplierCostInput) supplierCostInput.value = button.dataset.supplierCost || '';
+      if (supplierLinkSubmitBtn) supplierLinkSubmitBtn.textContent = 'Guardar cambios';
+      if (supplierLinkCancelBtn) supplierLinkCancelBtn.style.display = '';
+      toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput);
+      supplierLinkForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  if (supplierLinkCancelBtn) {
+    supplierLinkCancelBtn.addEventListener('click', () => {
+      resetSupplierLinkForm();
+    });
+  }
+
   const supplierModal = document.getElementById('supplier-inline-modal');
   const supplierInlineForm = document.getElementById('supplier-inline-form');
   const supplierInlineNameInput = document.getElementById('supplier-inline-name');
