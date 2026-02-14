@@ -223,15 +223,17 @@ $supplier_links = $st->fetchAll();
       <?php if ($can_edit): ?>
         <form method="post" class="stack">
           <input type="hidden" name="action" value="update">
-          <div class="form-row">
+          <div class="form-row" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
             <div class="form-group">
               <label class="form-label">SKU</label>
               <input class="form-control" type="text" name="sku" value="<?= e($product['sku']) ?>" required>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="grid-column: span 2;">
               <label class="form-label">Nombre</label>
               <input class="form-control" type="text" name="name" value="<?= e($product['name']) ?>" required>
             </div>
+          </div>
+          <div class="form-row" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
             <div class="form-group">
               <label class="form-label">Marca</label>
               <select class="form-control" name="brand_id">
@@ -241,8 +243,6 @@ $supplier_links = $st->fetchAll();
                 <?php endforeach; ?>
               </select>
             </div>
-          </div>
-          <div class="form-row">
             <div class="form-group">
               <label class="form-label">Modo de venta</label>
               <select class="form-control" name="sale_mode" id="sale-mode-select" required>
