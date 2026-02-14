@@ -102,7 +102,6 @@ if (is_post() && post('action') === 'add_supplier_link') {
   $supplier_sku = post('supplier_sku');
   $cost_type = post('cost_type', 'UNIDAD');
   $units_per_pack = post('units_per_pack');
-  $is_active = post('is_active', '0') === '1' ? 1 : 0;
 
   if (!in_array($cost_type, ['UNIDAD', 'PACK'], true)) {
     $cost_type = 'UNIDAD';
@@ -123,13 +122,11 @@ if (is_post() && post('action') === 'add_supplier_link') {
   if ($error === '') {
     try {
       db()->beginTransaction();
-      if ($is_active === 1) {
-        $st = db()->prepare("UPDATE product_suppliers SET is_active = 0, updated_at = NOW() WHERE product_id = ?");
-        $st->execute([$id]);
-      }
+      $st = db()->prepare("UPDATE product_suppliers SET is_active = 0, updated_at = NOW() WHERE product_id = ?");
+      $st->execute([$id]);
 
       $st = db()->prepare("INSERT INTO product_suppliers(product_id, supplier_id, supplier_sku, cost_type, units_per_pack, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, NOW())");
-      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $is_active]);
+      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, 1]);
       db()->commit();
       $message = 'Proveedor vinculado.';
     } catch (Throwable $t) {
@@ -286,40 +283,37 @@ $supplier_links = $st->fetchAll();
         <form method="post" class="stack">
           <input type="hidden" name="action" value="add_supplier_link">
           <div class="form-row product-supplier-form">
-          <div class="form-group">
-            <label class="form-label">Proveedor</label>
-            <select class="form-control" name="supplier_id" required>
-              <option value="">Seleccionar</option>
-              <?php foreach ($suppliers as $supplier): ?>
-                <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
-              <?php endforeach; ?>
-            </select>
+            <div class="form-group">
+              <label class="form-label">SKU / Código del proveedor</label>
+              <input class="form-control" type="text" name="supplier_sku">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Proveedor</label>
+              <select class="form-control" name="supplier_id" required>
+                <option value="">Seleccionar</option>
+                <?php foreach ($suppliers as $supplier): ?>
+                  <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="product-supplier-cost-column">
+              <div class="product-supplier-cost-layout" id="cost-layout-group">
+                <div class="form-group">
+                  <label class="form-label">Tipo de costo recibido</label>
+                  <select class="form-control" name="cost_type" id="cost-type-select">
+                    <option value="UNIDAD">Unidad</option>
+                    <option value="PACK">Pack</option>
+                  </select>
+                </div>
+                <div class="form-group is-hidden" id="cost-units-group" data-toggle-hidden="1">
+                  <label class="form-label">Unidades por pack</label>
+                  <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">SKU / Código del proveedor</label>
-            <input class="form-control" type="text" name="supplier_sku">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Tipo de costo recibido</label>
-            <select class="form-control" name="cost_type" id="cost-type-select">
-              <option value="UNIDAD">Unidad</option>
-              <option value="PACK">Pack</option>
-            </select>
-          </div>
-          <div class="form-group" id="cost-units-group" style="display:none;">
-            <label class="form-label">Unidades pack</label>
-            <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Activo</label>
-            <select class="form-control" name="is_active">
-              <option value="0">No</option>
-              <option value="1">Sí</option>
-            </select>
-          </div>
-          <div class="form-group product-supplier-submit">
+          <div class="form-actions product-supplier-actions">
             <button class="btn" type="submit">Agregar proveedor</button>
-          </div>
           </div>
         </form>
       <?php endif; ?>
@@ -453,7 +447,15 @@ $supplier_links = $st->fetchAll();
   const toggleByMode = (select, group, input) => {
     if (!select || !group || !input) return;
     const isPack = select.value === 'PACK';
-    group.style.display = isPack ? '' : 'none';
+    if (group.dataset.toggleHidden === '1') {
+      group.classList.toggle('is-hidden', !isPack);
+      const packLayout = document.getElementById('cost-layout-group');
+      if (packLayout) {
+        packLayout.classList.toggle('is-pack', isPack);
+      }
+    } else {
+      group.style.display = isPack ? '' : 'none';
+    }
     input.required = isPack;
     if (!isPack) {
       input.value = '';
