@@ -399,23 +399,29 @@ $supplier_links = $st->fetchAll();
         <?php if ($can_edit): ?>
           <form method="post" class="stack product-linked-suppliers-form">
             <input type="hidden" name="action" value="add_supplier_link">
-            <div class="form-row product-supplier-form">
+            <div class="form-row product-supplier-form" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
               <div class="form-group">
                 <label class="form-label">SKU / Código del proveedor</label>
                 <input class="form-control" type="text" name="supplier_sku">
               </div>
-              <div class="form-group">
-                <label class="form-label">Proveedor</label>
-                <select class="form-control" name="supplier_id" id="supplier-id-select" required>
-                  <option value="">Seleccionar</option>
-                  <option value="__new__">+ Agregar proveedor…</option>
-                  <?php foreach ($suppliers as $supplier): ?>
-                    <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
-                  <?php endforeach; ?>
-                </select>
+              <div class="product-supplier-cost-column" style="display:flex; flex-direction:column; gap:var(--space-2);">
+                <div class="form-group">
+                  <label class="form-label">Proveedor</label>
+                  <select class="form-control" name="supplier_id" id="supplier-id-select" required>
+                    <option value="">Seleccionar</option>
+                    <option value="__new__">+ Agregar proveedor…</option>
+                    <?php foreach ($suppliers as $supplier): ?>
+                      <option value="<?= (int)$supplier['id'] ?>"><?= e($supplier['name']) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Costo del proveedor</label>
+                  <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" placeholder="0.00">
+                </div>
               </div>
-              <div class="product-supplier-cost-column">
-                <div class="product-supplier-cost-layout" id="cost-layout-group">
+              <div class="product-supplier-cost-column" style="display:flex; flex-direction:column; gap:var(--space-2);">
+                <div class="product-supplier-cost-layout" id="cost-layout-group" style="display:flex; flex-direction:column; gap:var(--space-2);">
                   <div class="form-group">
                     <label class="form-label">Tipo de costo recibido</label>
                     <select class="form-control" name="cost_type" id="cost-type-select">
@@ -426,10 +432,6 @@ $supplier_links = $st->fetchAll();
                   <div class="form-group is-hidden" id="cost-units-group" data-toggle-hidden="1">
                     <label class="form-label">Unidades por pack</label>
                     <input class="form-control" type="number" min="1" step="1" name="units_per_pack" id="cost-units-input">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Costo del proveedor</label>
-                    <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" placeholder="0.00">
                   </div>
                 </div>
               </div>
