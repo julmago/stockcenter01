@@ -315,6 +315,48 @@ $supplier_links = $st->fetchAll();
     .product-table-wrapper {
       margin-top: var(--space-4);
     }
+
+    .supplier-form-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-3);
+      align-items: start;
+    }
+
+    .supplier-col-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+      align-items: start;
+    }
+
+    .supplier-col-3 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-3);
+      align-items: start;
+    }
+
+    .supplier-col-3.is-pack {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .supplier-col-3 .form-group {
+      margin-bottom: 0;
+    }
+
+    .supplier-col-3 .form-group.is-hidden {
+      display: none;
+    }
+
+    @media (max-width: 980px) {
+      .supplier-form-row,
+      .supplier-col-2,
+      .supplier-col-3,
+      .supplier-col-3.is-pack {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
   </style>
 </head>
 <body class="app-body">
@@ -399,12 +441,12 @@ $supplier_links = $st->fetchAll();
         <?php if ($can_edit): ?>
           <form method="post" class="stack product-linked-suppliers-form">
             <input type="hidden" name="action" value="add_supplier_link">
-            <div class="form-row product-supplier-form" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
+            <div class="form-row product-supplier-form supplier-form-row">
               <div class="form-group">
                 <label class="form-label">SKU / Código del proveedor</label>
                 <input class="form-control" type="text" name="supplier_sku">
               </div>
-              <div class="product-supplier-cost-column" style="display:flex; flex-direction:column; gap:var(--space-2);">
+              <div class="supplier-col-2">
                 <div class="form-group">
                   <label class="form-label">Proveedor</label>
                   <select class="form-control" name="supplier_id" id="supplier-id-select" required>
@@ -420,8 +462,8 @@ $supplier_links = $st->fetchAll();
                   <input class="form-control" type="number" step="0.01" min="0" name="supplier_cost" placeholder="0.00">
                 </div>
               </div>
-              <div class="product-supplier-cost-column" style="display:flex; flex-direction:column; gap:var(--space-2);">
-                <div class="product-supplier-cost-layout" id="cost-layout-group" style="display:flex; flex-direction:column; gap:var(--space-2);">
+              <div>
+                <div class="product-supplier-cost-layout supplier-col-3" id="cost-layout-group">
                   <div class="form-group">
                     <label class="form-label">Tipo de costo recibido</label>
                     <select class="form-control" name="cost_type" id="cost-type-select">
