@@ -40,6 +40,7 @@ try {
   $stBefore = db()->prepare('SELECT supplier_cost, cost_type, units_per_pack, cost_unitario FROM product_suppliers WHERE id = ? LIMIT 1');
   $stUpdate = db()->prepare("UPDATE product_suppliers
     SET supplier_cost = ?,
+        cost_unitario = ?,
         updated_at = NOW()
     WHERE id = ?");
   $stHist = db()->prepare('INSERT INTO product_supplier_cost_history(product_supplier_id, run_id, cost_before, cost_after, changed_by, note) VALUES(?, ?, ?, ?, ?, ?)');
@@ -60,7 +61,11 @@ try {
       continue;
     }
 
-    $supplierCostToSave = round((float)$row['raw_price'], 2);
+    $extraDiscount = isset($run['extra_discount_percent']) ? (float)$run['extra_discount_percent'] : 0.0;
+    $supplierDiscount = isset($run['supplier_discount_percent']) ? (float)$run['supplier_discount_percent'] : 0.0;
+    $priceAfterFileDiscount = (float)$row['raw_price'] * (1 - ($extraDiscount / 100));
+    $priceAfterSupplierDiscount = $priceAfterFileDiscount * (1 - ($supplierDiscount / 100));
+    $supplierCostToSave = (int)round($priceAfterSupplierDiscount, 0);
 
     foreach ($matches as $match) {
       $psId = (int)$match['id'];
@@ -71,7 +76,23 @@ try {
       $stBefore->execute([$psId]);
       $before = $stBefore->fetch();
 
-      $stUpdate->execute([$supplierCostToSave, $psId]);
+      $costType = strtoupper((string)($before['cost_type'] ?? 'UNIDAD'));
+      if (!in_array($costType, ['UNIDAD', 'PACK'], true)) {
+        $costType = 'UNIDAD';
+      }
+      $unitsPerPack = isset($before['units_per_pack']) ? (int)$before['units_per_pack'] : null;
+      if ($unitsPerPack !== null && $unitsPerPack <= 0) {
+        $unitsPerPack = null;
+      }
+
+      $costUnitarioToSave = $supplierCostToSave;
+      if ($costType === 'PACK') {
+        $costUnitarioToSave = ($unitsPerPack !== null && $unitsPerPack > 0)
+          ? (int)round($supplierCostToSave / $unitsPerPack, 0)
+          : null;
+      }
+
+      $stUpdate->execute([$supplierCostToSave, $costUnitarioToSave, $psId]);
       $stHist->execute([$psId, $runId, $before['supplier_cost'] ?? null, $supplierCostToSave, $changedBy, 'supplier import apply']);
     }
   }
