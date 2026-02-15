@@ -1,88 +1,157 @@
 <?php
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ini_set('error_log', __DIR__ . '/logs/php_error.log');
+error_reporting(E_ALL);
+
+$logsDir = __DIR__ . '/logs';
+if (!is_dir($logsDir)) {
+  mkdir($logsDir, 0775, true);
+}
+
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
-require_login();
-ensure_brands_schema();
-ensure_sites_schema();
 
+$visibleSites = [];
+$products = [];
 $q = trim(get('q', ''));
 $page = max(1, (int) get('page', 1));
 $limit = 50;
-$offset = ($page - 1) * $limit;
+$total = 0;
+$total_pages = 1;
+$offset = 0;
 $numeric = ($q !== '' && ctype_digit($q));
-
-$where = '';
-$params = [];
-if ($q !== '') {
-  $like = '%' . $q . '%';
-  $where = "WHERE (p.sku LIKE :like_sku OR p.name LIKE :like_name OR pc.code LIKE :like_code)";
-  $params = [
-    ':like_sku' => $like,
-    ':like_name' => $like,
-    ':like_code' => $like,
-  ];
-}
-
-$visibleSitesSt = db()->query("SELECT * FROM sites WHERE is_active = 1 AND is_visible = 1 ORDER BY id ASC");
-$visibleSites = $visibleSitesSt->fetchAll();
-
-$count_sql = "SELECT COUNT(DISTINCT p.id) AS total
-  FROM products p
-  LEFT JOIN brands b ON b.id = p.brand_id
-  LEFT JOIN product_codes pc ON pc.product_id = p.id
-  $where";
-$count_st = db()->prepare($count_sql);
-foreach ($params as $key => $value) {
-  $count_st->bindValue($key, $value, PDO::PARAM_STR);
-}
-$count_st->execute();
-$total = (int) $count_st->fetchColumn();
-$total_pages = max(1, (int) ceil($total / $limit));
-$page = min($page, $total_pages);
-$offset = ($page - 1) * $limit;
-
-$select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
-  . " s.name AS supplier_name,"
-  . " ps1.supplier_cost,"
-  . " COALESCE(s.default_margin_percent, 0) AS supplier_default_margin_percent,"
-  . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
-  . " FROM products p"
-  . " LEFT JOIN brands b ON b.id = p.brand_id"
-  . " LEFT JOIN ("
-  . "   SELECT x.product_id, x.supplier_id"
-  . "   FROM product_suppliers x"
-  . "   JOIN ("
-  . "     SELECT product_id, MIN(id) AS min_id"
-  . "     FROM product_suppliers"
-  . "     WHERE is_active = 1"
-  . "     GROUP BY product_id"
-  . "   ) y ON y.product_id = x.product_id AND y.min_id = x.id"
-  . " ) ps1 ON ps1.product_id = p.id"
-  . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id"
-  . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
-  . " $where"
-  . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand), s.name, ps1.supplier_cost, s.default_margin_percent"
-  . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
-  . " LIMIT :limit OFFSET :offset";
-$select_params = $params;
-if ($numeric) {
-  $select_params[':code_exact'] = $q;
-}
-$st = db()->prepare($select_sql);
-foreach ($select_params as $key => $value) {
-  $st->bindValue($key, $value, PDO::PARAM_STR);
-}
-$st->bindValue(':limit', $limit, PDO::PARAM_INT);
-$st->bindValue(':offset', $offset, PDO::PARAM_INT);
-$st->execute();
-$products = $st->fetchAll();
-
 $query_base = [];
-if ($q !== '') {
-  $query_base['q'] = $q;
+$prev_page = 1;
+$next_page = 1;
+
+try {
+  require_login();
+  ensure_brands_schema();
+  ensure_sites_schema();
+
+  $where = '';
+  $params = [];
+  if ($q !== '') {
+    $like = '%' . $q . '%';
+    $where = "WHERE (p.sku LIKE :like_sku OR p.name LIKE :like_name OR pc.code LIKE :like_code)";
+    $params = [
+      ':like_sku' => $like,
+      ':like_name' => $like,
+      ':like_code' => $like,
+    ];
+  }
+
+  $siteHasIsVisible = false;
+  $siteVisibleSt = db()->query("SHOW COLUMNS FROM sites LIKE 'is_visible'");
+  if ($siteVisibleSt && $siteVisibleSt->fetch()) {
+    $siteHasIsVisible = true;
+  }
+
+  $visibleSitesSql = "SELECT * FROM sites WHERE is_active = 1";
+  if ($siteHasIsVisible) {
+    $visibleSitesSql .= " AND is_visible = 1";
+  }
+  $visibleSitesSql .= " ORDER BY id ASC";
+
+  $visibleSitesSt = db()->query($visibleSitesSql);
+  $visibleSites = $visibleSitesSt ? $visibleSitesSt->fetchAll() : [];
+
+  $supplierMarginColumn = null;
+  $supplierColumnsSt = db()->query("SHOW COLUMNS FROM suppliers");
+  if ($supplierColumnsSt) {
+    foreach ($supplierColumnsSt->fetchAll() as $supplierColumn) {
+      $field = (string)($supplierColumn['Field'] ?? '');
+      if ($field === 'default_margin_percent') {
+        $supplierMarginColumn = $field;
+        break;
+      }
+      if ($supplierMarginColumn === null && stripos($field, 'margin') !== false) {
+        $supplierMarginColumn = $field;
+      }
+    }
+  }
+
+  $supplierMarginExpr = '0';
+  $groupBySupplierMargin = '';
+  if ($supplierMarginColumn !== null) {
+    $safeSupplierMarginColumn = str_replace('`', '``', $supplierMarginColumn);
+    $supplierMarginExpr = "COALESCE(s.`{$safeSupplierMarginColumn}`, 0)";
+    $groupBySupplierMargin = ", s.`{$safeSupplierMarginColumn}`";
+  }
+
+  $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
+    FROM products p
+    LEFT JOIN brands b ON b.id = p.brand_id
+    LEFT JOIN product_codes pc ON pc.product_id = p.id
+    $where";
+  $count_st = db()->prepare($count_sql);
+  foreach ($params as $key => $value) {
+    $count_st->bindValue($key, $value, PDO::PARAM_STR);
+  }
+  $count_st->execute();
+  $total = (int) $count_st->fetchColumn();
+  $total_pages = max(1, (int) ceil($total / $limit));
+  $page = min($page, $total_pages);
+  $offset = ($page - 1) * $limit;
+
+  $select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
+    . " s.name AS supplier_name,"
+    . " ps1.supplier_cost,"
+    . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
+    . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
+    . " FROM products p"
+    . " LEFT JOIN brands b ON b.id = p.brand_id"
+    . " LEFT JOIN ("
+    . "   SELECT x.product_id, x.supplier_id"
+    . "   FROM product_suppliers x"
+    . "   JOIN ("
+    . "     SELECT product_id, MIN(id) AS min_id"
+    . "     FROM product_suppliers"
+    . "     WHERE is_active = 1"
+    . "     GROUP BY product_id"
+    . "   ) y ON y.product_id = x.product_id AND y.min_id = x.id"
+    . " ) ps1 ON ps1.product_id = p.id"
+    . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id"
+    . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
+    . " $where"
+    . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand), s.name, ps1.supplier_cost{$groupBySupplierMargin}"
+    . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
+    . " LIMIT :limit OFFSET :offset";
+  $select_params = $params;
+  if ($numeric) {
+    $select_params[':code_exact'] = $q;
+  }
+  $st = db()->prepare($select_sql);
+  foreach ($select_params as $key => $value) {
+    $st->bindValue($key, $value, PDO::PARAM_STR);
+  }
+  $st->bindValue(':limit', $limit, PDO::PARAM_INT);
+  $st->bindValue(':offset', $offset, PDO::PARAM_INT);
+  $st->execute();
+  $products = $st->fetchAll();
+
+  if ($q !== '') {
+    $query_base['q'] = $q;
+  }
+  $prev_page = max(1, $page - 1);
+  $next_page = min($total_pages, $page + 1);
+} catch (Throwable $e) {
+  error_log('[product_list] ' . $e->getMessage());
+  if ($e instanceof PDOException && isset($e->errorInfo[2])) {
+    error_log('[product_list][sql] ' . $e->errorInfo[2]);
+  }
+
+  $visibleSites = [];
+  $products = [];
+  $total = 0;
+  $total_pages = 1;
+  $page = 1;
+  $offset = 0;
+  $query_base = ($q !== '') ? ['q' => $q] : [];
+  $prev_page = 1;
+  $next_page = 1;
 }
-$prev_page = max(1, $page - 1);
-$next_page = min($total_pages, $page + 1);
 ?>
 <!doctype html>
 <html>
@@ -139,7 +208,7 @@ $next_page = min($total_pages, $page + 1);
                   <td><?= e($p['sku']) ?></td>
                   <td><?= e($p['name']) ?></td>
                   <td><?= e($p['brand']) ?></td>
-                  <td><?= $p['supplier_name'] ? e($p['supplier_name']) : '—' ?></td>
+                  <td><?= $p['supplier_name'] ? e($p['supplier_name']) : '-' ?></td>
                   <?php foreach ($visibleSites as $site): ?>
                     <td>
                       <?php
