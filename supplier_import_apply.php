@@ -40,10 +40,9 @@ try {
   $stBefore = db()->prepare('SELECT supplier_cost, cost_type, units_per_pack, cost_unitario FROM product_suppliers WHERE id = ? LIMIT 1');
   $stUpdate = db()->prepare("UPDATE product_suppliers
     SET supplier_cost = ?,
-        cost_unitario = ?,
-        cost_type = COALESCE(?, cost_type),
-        units_per_pack = CASE
-          WHEN COALESCE(?, cost_type) = 'PACK' THEN COALESCE(?, units_per_pack)
+        cost_unitario = CASE
+          WHEN cost_type = 'PACK' AND COALESCE(units_per_pack, 0) > 0 THEN ROUND(? / units_per_pack, 4)
+          WHEN cost_type = 'UNIDAD' THEN ROUND(?, 4)
           ELSE NULL
         END,
         updated_at = NOW()
@@ -62,19 +61,11 @@ try {
       continue;
     }
 
-    $normalized = (float)$row['normalized_unit_cost'];
-    $rawCostType = (string)($row['raw_cost_type'] ?? '');
-    if (!in_array($rawCostType, ['UNIDAD', 'PACK'], true)) {
-      $rawCostType = null;
+    if (!isset($row['raw_price']) || $row['raw_price'] === null || (float)$row['raw_price'] < 0) {
+      continue;
     }
 
-    $rawUnits = $row['raw_units_per_pack'] !== null ? (int)$row['raw_units_per_pack'] : null;
-    if ($rawUnits !== null && $rawUnits <= 0) {
-      $rawUnits = null;
-    }
-
-    $supplierCostToSave = round($normalized, 2);
-    $costUnitarioToSave = round($normalized, 4);
+    $supplierCostToSave = round((float)$row['raw_price'], 2);
 
     foreach ($matches as $match) {
       $psId = (int)$match['id'];
@@ -85,7 +76,7 @@ try {
       $stBefore->execute([$psId]);
       $before = $stBefore->fetch();
 
-      $stUpdate->execute([$supplierCostToSave, $costUnitarioToSave, $rawCostType, $rawCostType, $rawUnits, $psId]);
+      $stUpdate->execute([$supplierCostToSave, $supplierCostToSave, $supplierCostToSave, $psId]);
       $stHist->execute([$psId, $runId, $before['supplier_cost'] ?? null, $supplierCostToSave, $changedBy, 'supplier import apply']);
     }
   }
