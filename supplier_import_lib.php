@@ -21,7 +21,7 @@ function supplier_import_normalize_discount($raw): ?string {
 }
 
 function supplier_import_detect_separator(string $line): string {
-  $candidates = [',', ';', "\t"];
+  $candidates = ["\t", ';', ',', '|'];
   $best = ';';
   $bestCount = -1;
   foreach ($candidates as $candidate) {
@@ -32,6 +32,97 @@ function supplier_import_detect_separator(string $line): string {
     }
   }
   return $best;
+}
+
+function supplier_import_detect_file_format(string $tmpPath, string $filename = '', string $mimeHint = ''): array {
+  $ext = strtolower((string)pathinfo($filename, PATHINFO_EXTENSION));
+  $head = (string)file_get_contents($tmpPath, false, null, 0, 8);
+  $head4 = substr($head, 0, 4);
+  $mime = strtolower(trim($mimeHint));
+  if (function_exists('finfo_open')) {
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    if ($finfo) {
+      $detected = finfo_file($finfo, $tmpPath);
+      finfo_close($finfo);
+      if (is_string($detected) && trim($detected) !== '') {
+        $mime = strtolower(trim($detected));
+      }
+    }
+  }
+
+  $byExt = [
+    'csv' => 'csv',
+    'xlsx' => 'xlsx',
+    'xls' => 'xls',
+    'txt' => 'txt',
+    'pdf' => 'pdf',
+  ];
+  if (isset($byExt[$ext])) {
+    return ['format' => $byExt[$ext], 'mime' => $mime];
+  }
+
+  if ($head4 === "%PDF") {
+    return ['format' => 'pdf', 'mime' => $mime];
+  }
+  if ($head4 === "PK\x03\x04") {
+    return ['format' => 'xlsx', 'mime' => $mime];
+  }
+  if (strncmp($head, "\xD0\xCF\x11\xE0", 4) === 0) {
+    return ['format' => 'xls', 'mime' => $mime];
+  }
+
+  $mimeMap = [
+    'text/csv' => 'csv',
+    'application/csv' => 'csv',
+    'text/plain' => 'txt',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+    'application/vnd.ms-excel' => 'xls',
+    'application/pdf' => 'pdf',
+  ];
+  if (isset($mimeMap[$mime])) {
+    return ['format' => $mimeMap[$mime], 'mime' => $mime];
+  }
+
+  return ['format' => 'unknown', 'mime' => $mime];
+}
+
+function supplier_import_parse_delimited_text(string $content, ?string $forcedSeparator = null): array {
+  $rows = [];
+  $lines = preg_split('/\R/u', $content) ?: [];
+  $sample = '';
+  foreach ($lines as $line) {
+    if (trim($line) !== '') {
+      $sample = $line;
+      break;
+    }
+  }
+  $sep = $forcedSeparator ?? supplier_import_detect_separator($sample);
+  foreach ($lines as $line) {
+    if (trim($line) === '') {
+      continue;
+    }
+    $rows[] = array_map(static fn($v) => trim((string)$v), str_getcsv($line, $sep));
+  }
+  return ['rows' => $rows, 'delimiter' => $sep];
+}
+
+
+function supplier_import_row_looks_like_header(array $row): bool {
+  if (!$row) {
+    return false;
+  }
+  $signals = ['sku', 'codigo', 'cod', 'precio', 'price', 'costo', 'descripcion', 'description', 'detalle', 'cost_type', 'units', 'pack'];
+  $hits = 0;
+  foreach ($row as $cell) {
+    $norm = supplier_import_normalize_header((string)$cell);
+    foreach ($signals as $sig) {
+      if ($norm !== '' && str_contains($norm, $sig)) {
+        $hits++;
+        break;
+      }
+    }
+  }
+  return $hits >= 1;
 }
 
 function supplier_import_normalize_price($raw): ?float {
@@ -563,7 +654,7 @@ function supplier_import_build_run(int $supplierId, array $supplier, array $payl
   return $runId;
 }
 
-function supplier_import_parse_table(string $sourceType, string $tmpPath, string $pasteText): array {
+function supplier_import_parse_table(string $sourceType, string $tmpPath, string $pasteText, array $options = []): array {
   $sourceType = strtoupper($sourceType);
   $rows = [];
 
@@ -572,15 +663,12 @@ function supplier_import_parse_table(string $sourceType, string $tmpPath, string
     if ($content === false) {
       return [];
     }
-    $lines = preg_split('/\R/u', $content) ?: [];
-    $sample = '';
-    foreach ($lines as $line) {
-      if (trim($line) !== '') {
-        $sample = $line;
-        break;
-      }
+    $forced = $options['forced_delimiter'] ?? null;
+    $sep = $forced;
+    if ($sep === null) {
+      $parsed = supplier_import_parse_delimited_text($content);
+      $sep = $parsed['delimiter'];
     }
-    $sep = supplier_import_detect_separator($sample);
     $fh = fopen($tmpPath, 'r');
     if (!$fh) {
       return [];
@@ -613,21 +701,13 @@ function supplier_import_parse_table(string $sourceType, string $tmpPath, string
     if (trim($content) === '') {
       return [];
     }
-    $rows[] = ['supplier_sku', 'price', 'description'];
-    $lines = preg_split('/\R/u', $content) ?: [];
-    foreach ($lines as $line) {
-      $line = trim($line);
-      if ($line === '') {
-        continue;
-      }
-      $parts = preg_split('/\t+/', $line) ?: [];
-      if (count($parts) < 2) {
-        $parts = preg_split('/\s{2,}/', $line) ?: [];
-      }
-      if (count($parts) < 2) {
-        $parts = preg_split('/\s+/', $line, 3) ?: [];
-      }
-      $rows[] = [trim((string)($parts[0] ?? '')), trim((string)($parts[1] ?? '')), trim((string)($parts[2] ?? ''))];
+    $parsed = supplier_import_parse_delimited_text($content, $options['forced_delimiter'] ?? null);
+    $rows = $parsed['rows'];
+    if (!$rows) {
+      return [];
+    }
+    if (!supplier_import_row_looks_like_header((array)$rows[0])) {
+      array_unshift($rows, ['supplier_sku', 'price', 'description']);
     }
     return $rows;
   }
