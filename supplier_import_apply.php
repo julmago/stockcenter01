@@ -40,11 +40,6 @@ try {
   $stBefore = db()->prepare('SELECT supplier_cost, cost_type, units_per_pack, cost_unitario FROM product_suppliers WHERE id = ? LIMIT 1');
   $stUpdate = db()->prepare("UPDATE product_suppliers
     SET supplier_cost = ?,
-        cost_unitario = CASE
-          WHEN cost_type = 'PACK' AND COALESCE(units_per_pack, 0) > 0 THEN ROUND(? / units_per_pack, 4)
-          WHEN cost_type = 'UNIDAD' THEN ROUND(?, 4)
-          ELSE NULL
-        END,
         updated_at = NOW()
     WHERE id = ?");
   $stHist = db()->prepare('INSERT INTO product_supplier_cost_history(product_supplier_id, run_id, cost_before, cost_after, changed_by, note) VALUES(?, ?, ?, ?, ?, ?)');
@@ -76,7 +71,7 @@ try {
       $stBefore->execute([$psId]);
       $before = $stBefore->fetch();
 
-      $stUpdate->execute([$supplierCostToSave, $supplierCostToSave, $supplierCostToSave, $psId]);
+      $stUpdate->execute([$supplierCostToSave, $psId]);
       $stHist->execute([$psId, $runId, $before['supplier_cost'] ?? null, $supplierCostToSave, $changedBy, 'supplier import apply']);
     }
   }
