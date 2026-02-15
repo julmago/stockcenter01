@@ -208,16 +208,16 @@ $nextPage = min($totalPages, $page + 1);
           <?php if ($editSite): ?>
             <input type="hidden" name="id" value="<?= (int)$editSite['id'] ?>">
           <?php endif; ?>
-          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4);">
+          <div class="grid" style="grid-template-columns: minmax(240px, 1.2fr) minmax(320px, 1fr) minmax(320px, 1fr); gap: var(--space-4); align-items: end;">
             <label class="form-field">
               <span class="form-label">Nombre del sitio</span>
               <input class="form-control" type="text" name="name" maxlength="80" required value="<?= e($editSite ? (string)$editSite['name'] : '') ?>">
             </label>
-            <label class="form-field">
-              <span class="form-label">Margen (%)</span>
-              <input class="form-control" type="number" name="margin_percent" min="-100" max="999.99" step="0.01" required value="<?= e($editSite ? number_format((float)$editSite['margin_percent'], 2, '.', '') : '0') ?>">
-            </label>
-            <div class="grid" style="grid-template-columns: repeat(2, minmax(160px, 1fr)); gap: var(--space-3); align-self: end;">
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(140px, 1fr)); gap: var(--space-3);">
+              <label class="form-field">
+                <span class="form-label">Margen (%)</span>
+                <input class="form-control" type="number" name="margin_percent" min="-100" max="999.99" step="0.01" required value="<?= e($editSite ? number_format((float)$editSite['margin_percent'], 2, '.', '') : '0') ?>">
+              </label>
               <label class="form-field">
                 <span class="form-label">Estado</span>
                 <select class="form-control" name="is_active">
@@ -226,24 +226,24 @@ $nextPage = min($totalPages, $page + 1);
                   <option value="0" <?= $activeValue === 0 ? 'selected' : '' ?>>Inactivo</option>
                 </select>
               </label>
-              <div class="stack" style="gap: var(--space-3);">
-                <label class="form-field">
-                  <span class="form-label">Mostrar en lista</span>
-                  <select class="form-control" name="is_visible">
-                    <?php $visibleValue = $editSite ? (int)$editSite['is_visible'] : 1; ?>
-                    <option value="1" <?= $visibleValue === 1 ? 'selected' : '' ?>>Activo</option>
-                    <option value="0" <?= $visibleValue === 0 ? 'selected' : '' ?>>Inactivo</option>
-                  </select>
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Mostrar en producto</span>
-                  <select class="form-control" name="show_in_product">
-                    <?php $showProductValue = $editSite ? (int)$editSite['show_in_product'] : 1; ?>
-                    <option value="1" <?= $showProductValue === 1 ? 'selected' : '' ?>>Activo</option>
-                    <option value="0" <?= $showProductValue === 0 ? 'selected' : '' ?>>Inactivo</option>
-                  </select>
-                </label>
-              </div>
+            </div>
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(140px, 1fr)); gap: var(--space-3);">
+              <label class="form-field">
+                <span class="form-label">Mostrar en lista</span>
+                <select class="form-control" name="is_visible">
+                  <?php $visibleValue = $editSite ? (int)$editSite['is_visible'] : 1; ?>
+                  <option value="1" <?= $visibleValue === 1 ? 'selected' : '' ?>>Activo</option>
+                  <option value="0" <?= $visibleValue === 0 ? 'selected' : '' ?>>Inactivo</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span class="form-label">Mostrar en producto</span>
+                <select class="form-control" name="show_in_product">
+                  <?php $showProductValue = $editSite ? (int)$editSite['show_in_product'] : 1; ?>
+                  <option value="1" <?= $showProductValue === 1 ? 'selected' : '' ?>>Activo</option>
+                  <option value="0" <?= $showProductValue === 0 ? 'selected' : '' ?>>Inactivo</option>
+                </select>
+              </label>
             </div>
           </div>
           <div class="inline-actions">
