@@ -34,11 +34,25 @@ try {
   $params = [];
   if ($q !== '') {
     $like = '%' . $q . '%';
-    $where = "WHERE (p.sku LIKE :like_sku OR p.name LIKE :like_name OR pc.code LIKE :like_code)";
+    $where = "WHERE (
+      p.sku LIKE :like_term
+      OR p.name LIKE :like_term
+      OR EXISTS (
+        SELECT 1
+        FROM product_codes pc_search
+        WHERE pc_search.product_id = p.id
+          AND pc_search.code LIKE :like_term
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM product_suppliers ps_search
+        WHERE ps_search.product_id = p.id
+          AND ps_search.is_active = 1
+          AND ps_search.supplier_sku LIKE :like_term
+      )
+    )";
     $params = [
-      ':like_sku' => $like,
-      ':like_name' => $like,
-      ':like_code' => $like,
+      ':like_term' => $like,
     ];
   }
 
@@ -82,8 +96,6 @@ try {
 
   $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
     FROM products p
-    LEFT JOIN brands b ON b.id = p.brand_id
-    LEFT JOIN product_codes pc ON pc.product_id = p.id
     $where";
   $count_st = db()->prepare($count_sql);
   foreach ($params as $key => $value) {
@@ -99,23 +111,35 @@ try {
     . " s.name AS supplier_name,"
     . " ps1.supplier_cost,"
     . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
-    . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
+    . ($numeric
+      ? " CASE WHEN EXISTS ("
+        . "   SELECT 1 FROM product_codes pc_exact"
+        . "   WHERE pc_exact.product_id = p.id"
+        . "     AND pc_exact.code = :code_exact"
+        . " ) THEN 1 ELSE 0 END AS code_exact_match"
+      : " 0 AS code_exact_match")
     . " FROM products p"
     . " LEFT JOIN brands b ON b.id = p.brand_id"
     . " LEFT JOIN ("
-    . "   SELECT x.product_id, x.supplier_id"
-    . "   FROM product_suppliers x"
-    . "   JOIN ("
-    . "     SELECT product_id, MIN(id) AS min_id"
-    . "     FROM product_suppliers"
-    . "     WHERE is_active = 1"
-    . "     GROUP BY product_id"
-    . "   ) y ON y.product_id = x.product_id AND y.min_id = x.id"
+    . "   SELECT ps_pick.product_id, ps_pick.supplier_id, ps_pick.supplier_cost"
+    . "   FROM product_suppliers ps_pick"
+    . "   WHERE ps_pick.is_active = 1"
+    . "     AND NOT EXISTS ("
+    . "       SELECT 1"
+    . "       FROM product_suppliers ps_better"
+    . "       WHERE ps_better.product_id = ps_pick.product_id"
+    . "         AND ps_better.is_active = 1"
+    . "         AND ("
+    . "           COALESCE(ps_better.supplier_cost, 999999999) < COALESCE(ps_pick.supplier_cost, 999999999)"
+    . "           OR ("
+    . "             COALESCE(ps_better.supplier_cost, 999999999) = COALESCE(ps_pick.supplier_cost, 999999999)"
+    . "             AND ps_better.id < ps_pick.id"
+    . "           )"
+    . "         )"
+    . "     )"
     . " ) ps1 ON ps1.product_id = p.id"
-    . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id"
-    . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
+    . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id AND s.is_active = 1"
     . " $where"
-    . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand), s.name, ps1.supplier_cost{$groupBySupplierMargin}"
     . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
     . " LIMIT :limit OFFSET :offset";
   $select_params = $params;
@@ -208,7 +232,7 @@ try {
                   <td><?= e($p['sku']) ?></td>
                   <td><?= e($p['name']) ?></td>
                   <td><?= e($p['brand']) ?></td>
-                  <td><?= $p['supplier_name'] ? e($p['supplier_name']) : '-' ?></td>
+                  <td><?= $p['supplier_name'] ? e($p['supplier_name']) : '—' ?></td>
                   <?php foreach ($visibleSites as $site): ?>
                     <td>
                       <?php
@@ -221,7 +245,7 @@ try {
                           );
                           echo e((string)(int)$finalPrice);
                         } else {
-                          echo '-';
+                          echo '—';
                         }
                       ?>
                     </td>
