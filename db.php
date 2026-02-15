@@ -179,11 +179,22 @@ function ensure_sites_schema(): void {
     name VARCHAR(80) NOT NULL,
     margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    is_visible TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_sites_name (name)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $site_columns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM sites");
+  foreach ($st->fetchAll() as $row) {
+    $site_columns[(string)$row['Field']] = true;
+  }
+
+  if (!isset($site_columns['is_visible'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN is_visible TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active");
+  }
 
   $ready = true;
 }

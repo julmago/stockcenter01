@@ -3,6 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_login();
 ensure_brands_schema();
+ensure_sites_schema();
 
 $q = trim(get('q', ''));
 $page = max(1, (int) get('page', 1));
@@ -22,6 +23,9 @@ if ($q !== '') {
   ];
 }
 
+$visibleSitesSt = db()->query("SELECT * FROM sites WHERE is_active = 1 AND is_visible = 1 ORDER BY id ASC");
+$visibleSites = $visibleSitesSt->fetchAll();
+
 $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
   FROM products p
   LEFT JOIN brands b ON b.id = p.brand_id
@@ -39,6 +43,8 @@ $offset = ($page - 1) * $limit;
 
 $select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
   . " s.name AS supplier_name,"
+  . " ps1.supplier_cost,"
+  . " COALESCE(s.default_margin_percent, 0) AS supplier_default_margin_percent,"
   . ($numeric ? " MAX(pc.code = :code_exact) AS code_exact_match" : " 0 AS code_exact_match")
   . " FROM products p"
   . " LEFT JOIN brands b ON b.id = p.brand_id"
@@ -55,7 +61,7 @@ $select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
   . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id"
   . " LEFT JOIN product_codes pc ON pc.product_id = p.id"
   . " $where"
-  . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand), s.name"
+  . " GROUP BY p.id, p.sku, p.name, COALESCE(b.name, p.brand), s.name, ps1.supplier_cost, s.default_margin_percent"
   . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
   . " LIMIT :limit OFFSET :offset";
 $select_params = $params;
@@ -122,11 +128,11 @@ $next_page = min($total_pages, $page + 1);
       <div class="table-wrapper">
         <table class="table">
           <thead>
-            <tr><th>sku</th><th>nombre</th><th>marca</th><th>proveedor</th></tr>
+            <tr><th>sku</th><th>nombre</th><th>marca</th><th>proveedor</th><?php foreach ($visibleSites as $site): ?><th><?= e($site['name']) ?></th><?php endforeach; ?></tr>
           </thead>
           <tbody>
             <?php if (!$products): ?>
-              <tr><td colspan="4">Sin productos.</td></tr>
+              <tr><td colspan="<?= 4 + count($visibleSites) ?>">Sin productos.</td></tr>
             <?php else: ?>
               <?php foreach ($products as $p): ?>
                 <tr style="cursor:pointer;" onclick="window.location='product_view.php?id=<?= (int)$p['id'] ?>'">
@@ -134,6 +140,23 @@ $next_page = min($total_pages, $page + 1);
                   <td><?= e($p['name']) ?></td>
                   <td><?= e($p['brand']) ?></td>
                   <td><?= $p['supplier_name'] ? e($p['supplier_name']) : '—' ?></td>
+                  <?php foreach ($visibleSites as $site): ?>
+                    <td>
+                      <?php
+                        if ($p['supplier_name'] && $p['supplier_cost'] !== null) {
+                          $finalPrice = round(
+                            (float)$p['supplier_cost']
+                            * (1 + ((float)$p['supplier_default_margin_percent'] / 100))
+                            * (1 + ((float)$site['margin_percent'] / 100)),
+                            0
+                          );
+                          echo e((string)(int)$finalPrice);
+                        } else {
+                          echo '-';
+                        }
+                      ?>
+                    </td>
+                  <?php endforeach; ?>
                 </tr>
               <?php endforeach; ?>
             <?php endif; ?>
