@@ -24,6 +24,9 @@ $numeric = ($q !== '' && ctype_digit($q));
 $query_base = [];
 $prev_page = 1;
 $next_page = 1;
+$count_sql = '';
+$select_sql = '';
+$select_params = [];
 
 try {
   require_login();
@@ -169,6 +172,14 @@ try {
   error_log('[product_list] ' . $e->getMessage());
   if ($e instanceof PDOException && isset($e->errorInfo[2])) {
     error_log('[product_list][sql] ' . $e->errorInfo[2]);
+  }
+  if ($count_sql !== '') {
+    error_log('[product_list][count_sql] ' . $count_sql);
+    error_log('[product_list][count_params] ' . json_encode($params, JSON_UNESCAPED_UNICODE));
+  }
+  if ($select_sql !== '') {
+    error_log('[product_list][select_sql] ' . $select_sql);
+    error_log('[product_list][select_params] ' . json_encode($select_params, JSON_UNESCAPED_UNICODE));
   }
 
   $visibleSites = [];

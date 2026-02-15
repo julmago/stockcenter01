@@ -914,7 +914,9 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
       $status = 'INVALID';
       $reason = 'Precio inválido';
     } else {
-      $afterDiscount = $rawPrice * (1 - ($supplierDiscount / 100)) * (1 - ((float)$extraDiscount / 100));
+      $extraDiscountFloat = (float)$extraDiscount;
+      $priceAfterFileDiscount = $rawPrice * (1 - ($extraDiscountFloat / 100));
+      $priceAfterSupplierDiscount = $priceAfterFileDiscount * (1 - ($supplierDiscount / 100));
 
       $stMatch->execute([$supplierId, $supplierSku]);
       $matches = $stMatch->fetchAll();
@@ -937,12 +939,18 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
             $status = 'INVALID';
             $reason = 'Vínculo PACK sin units_per_pack válido';
           } else {
-            $normalizedUnitCost = (float)round($afterDiscount / $dbUnitsPerPack, 0);
-            $costCalcDetail = 'PACK BD: ' . number_format($afterDiscount, 2, '.', '') . ' / ' . $dbUnitsPerPack;
+            $normalizedUnitCost = (float)round($priceAfterSupplierDiscount / $dbUnitsPerPack, 0);
+            $costCalcDetail = 'raw=' . number_format($rawPrice, 2, '.', '')
+              . ' -> file=' . number_format($priceAfterFileDiscount, 2, '.', '')
+              . ' -> supplier=' . number_format($priceAfterSupplierDiscount, 2, '.', '')
+              . ' -> unit=' . number_format($priceAfterSupplierDiscount / $dbUnitsPerPack, 2, '.', '')
+              . ' (PACK/' . $dbUnitsPerPack . ')';
           }
         } else {
-          $normalizedUnitCost = (float)round($afterDiscount, 0);
-          $costCalcDetail = 'UNIDAD BD: ' . number_format($afterDiscount, 2, '.', '');
+          $normalizedUnitCost = (float)round($priceAfterSupplierDiscount, 0);
+          $costCalcDetail = 'raw=' . number_format($rawPrice, 2, '.', '')
+            . ' -> file=' . number_format($priceAfterFileDiscount, 2, '.', '')
+            . ' -> supplier=' . number_format($priceAfterSupplierDiscount, 2, '.', '');
         }
 
         if ($status !== 'INVALID') {
