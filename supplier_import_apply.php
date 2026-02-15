@@ -27,6 +27,8 @@ $rowsSt = db()->prepare("SELECT * FROM supplier_import_rows WHERE run_id = ? AND
 $rowsSt->execute([$runId]);
 $rows = $rowsSt->fetchAll();
 
+$stMatches = db()->prepare('SELECT id, product_id FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? AND is_active = 1 ORDER BY id ASC');
+
 $changedBy = (int)(current_user()['id'] ?? 0);
 if ($changedBy <= 0) {
   $changedBy = null;
@@ -49,13 +51,16 @@ try {
   $stHist = db()->prepare('INSERT INTO product_supplier_cost_history(product_supplier_id, run_id, cost_before, cost_after, changed_by, note) VALUES(?, ?, ?, ?, ?, ?)');
 
   foreach ($rows as $row) {
-    $psId = (int)$row['matched_product_supplier_id'];
-    if ($psId <= 0) {
+    $supplierSku = trim((string)($row['supplier_sku'] ?? ''));
+    if ($supplierSku === '') {
       continue;
     }
 
-    $stBefore->execute([$psId]);
-    $before = $stBefore->fetch();
+    $stMatches->execute([(int)$run['supplier_id'], $supplierSku]);
+    $matches = $stMatches->fetchAll();
+    if (!$matches) {
+      continue;
+    }
 
     $normalized = (float)$row['normalized_unit_cost'];
     $rawCostType = (string)($row['raw_cost_type'] ?? '');
@@ -70,8 +75,19 @@ try {
 
     $supplierCostToSave = round($normalized, 2);
     $costUnitarioToSave = round($normalized, 4);
-    $stUpdate->execute([$supplierCostToSave, $costUnitarioToSave, $rawCostType, $rawCostType, $rawUnits, $psId]);
-    $stHist->execute([$psId, $runId, $before['supplier_cost'] ?? null, $supplierCostToSave, $changedBy, 'supplier import apply']);
+
+    foreach ($matches as $match) {
+      $psId = (int)$match['id'];
+      if ($psId <= 0) {
+        continue;
+      }
+
+      $stBefore->execute([$psId]);
+      $before = $stBefore->fetch();
+
+      $stUpdate->execute([$supplierCostToSave, $costUnitarioToSave, $rawCostType, $rawCostType, $rawUnits, $psId]);
+      $stHist->execute([$psId, $runId, $before['supplier_cost'] ?? null, $supplierCostToSave, $changedBy, 'supplier import apply']);
+    }
   }
 
   $stDone = db()->prepare('UPDATE supplier_import_runs SET applied_at = NOW() WHERE id = ?');

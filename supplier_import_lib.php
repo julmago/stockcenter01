@@ -498,7 +498,7 @@ function supplier_import_build_run(int $supplierId, array $supplier, array $payl
   $stRun->execute([$supplierId, $filename, $sourceType, $extraDiscount, $createdBy, null]);
   $runId = (int)$pdo->lastInsertId();
 
-  $stMatch = $pdo->prepare('SELECT id, product_id FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? LIMIT 1');
+  $stMatch = $pdo->prepare('SELECT id, product_id FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? AND is_active = 1 ORDER BY id ASC');
 
   $prepared = [];
   foreach ($rows as $row) {
@@ -548,11 +548,14 @@ function supplier_import_build_run(int $supplierId, array $supplier, array $payl
 
       if ($status !== 'INVALID') {
         $stMatch->execute([$supplierId, $supplierSku]);
-        $match = $stMatch->fetch();
-        if ($match) {
+        $matches = $stMatch->fetchAll();
+        if ($matches) {
           $status = 'MATCHED';
-          $matchedProductSupplierId = (int)$match['id'];
-          $matchedProductId = (int)$match['product_id'];
+          $matchedProductSupplierId = (int)$matches[0]['id'];
+          $matchedProductId = (int)$matches[0]['product_id'];
+          if (count($matches) > 1) {
+            $reason = 'match_multiple=' . count($matches);
+          }
         } else {
           $status = 'UNMATCHED';
           $reason = 'No vinculado por supplier_sku';
@@ -885,7 +888,7 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
   $stRun->execute([$supplierId, $filename, $sourceType, $extraDiscount, $supplierDiscount, $totalDiscount, $skuColumn, $priceColumn, $costTypeColumn !== '' ? $costTypeColumn : null, $unitsColumn !== '' ? $unitsColumn : null, $dedupeMode, $analysis['header_hash'] ?? null, $createdBy, null]);
   $runId = (int)$pdo->lastInsertId();
 
-  $stMatch = $pdo->prepare('SELECT id, product_id FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? LIMIT 1');
+  $stMatch = $pdo->prepare('SELECT id, product_id FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? AND is_active = 1 ORDER BY id ASC');
 
   $prepared = [];
   $line = 1;
@@ -948,11 +951,14 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
 
       if ($status !== 'INVALID') {
         $stMatch->execute([$supplierId, $supplierSku]);
-        $match = $stMatch->fetch();
-        if ($match) {
+        $matches = $stMatch->fetchAll();
+        if ($matches) {
           $status = 'MATCHED';
-          $matchedProductSupplierId = (int)$match['id'];
-          $matchedProductId = (int)$match['product_id'];
+          $matchedProductSupplierId = (int)$matches[0]['id'];
+          $matchedProductId = (int)$matches[0]['product_id'];
+          if (count($matches) > 1) {
+            $reason = 'match_multiple=' . count($matches);
+          }
         } else {
           $status = 'UNMATCHED';
           $reason = 'No vinculado por supplier_sku';
