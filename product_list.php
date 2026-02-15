@@ -110,8 +110,9 @@ try {
   $offset = ($page - 1) * $limit;
 
   $select_sql = "SELECT p.id, p.sku, p.name, COALESCE(b.name, p.brand) AS brand,"
+    . " p.sale_mode, p.sale_units_per_pack,"
     . " s.name AS supplier_name,"
-    . " ps1.supplier_cost,"
+    . " ps1.supplier_cost, ps1.cost_unitario, ps1.cost_type, ps1.units_per_pack,"
     . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
     . ($numeric
       ? " CASE WHEN EXISTS ("
@@ -123,7 +124,7 @@ try {
     . " FROM products p"
     . " LEFT JOIN brands b ON b.id = p.brand_id"
     . " LEFT JOIN ("
-    . "   SELECT ps_pick.product_id, ps_pick.supplier_id, ps_pick.supplier_cost"
+    . "   SELECT ps_pick.product_id, ps_pick.supplier_id, ps_pick.supplier_cost, ps_pick.cost_unitario, ps_pick.cost_type, ps_pick.units_per_pack"
     . "   FROM product_suppliers ps_pick"
     . "   WHERE ps_pick.is_active = 1"
     . "     AND NOT EXISTS ("
@@ -132,9 +133,11 @@ try {
     . "       WHERE ps_better.product_id = ps_pick.product_id"
     . "         AND ps_better.is_active = 1"
     . "         AND ("
-    . "           COALESCE(ps_better.supplier_cost, 999999999) < COALESCE(ps_pick.supplier_cost, 999999999)"
+    . "           COALESCE(ps_better.cost_unitario, CASE WHEN ps_better.cost_type = 'PACK' AND COALESCE(ps_better.units_per_pack, 0) > 0 THEN ps_better.supplier_cost / ps_better.units_per_pack ELSE ps_better.supplier_cost END, 999999999)"
+    . "           < COALESCE(ps_pick.cost_unitario, CASE WHEN ps_pick.cost_type = 'PACK' AND COALESCE(ps_pick.units_per_pack, 0) > 0 THEN ps_pick.supplier_cost / ps_pick.units_per_pack ELSE ps_pick.supplier_cost END, 999999999)"
     . "           OR ("
-    . "             COALESCE(ps_better.supplier_cost, 999999999) = COALESCE(ps_pick.supplier_cost, 999999999)"
+    . "             COALESCE(ps_better.cost_unitario, CASE WHEN ps_better.cost_type = 'PACK' AND COALESCE(ps_better.units_per_pack, 0) > 0 THEN ps_better.supplier_cost / ps_better.units_per_pack ELSE ps_better.supplier_cost END, 999999999)"
+    . "             = COALESCE(ps_pick.cost_unitario, CASE WHEN ps_pick.cost_type = 'PACK' AND COALESCE(ps_pick.units_per_pack, 0) > 0 THEN ps_pick.supplier_cost / ps_pick.units_per_pack ELSE ps_pick.supplier_cost END, 999999999)"
     . "             AND ps_better.id < ps_pick.id"
     . "           )"
     . "         )"
@@ -238,14 +241,33 @@ try {
                   <?php foreach ($visibleSites as $site): ?>
                     <td>
                       <?php
-                        if ($p['supplier_name'] && $p['supplier_cost'] !== null) {
+                        $normalizedUnitCost = null;
+                        if ($p['supplier_cost'] !== null) {
+                          if ($p['cost_unitario'] !== null && trim((string)$p['cost_unitario']) !== '') {
+                            $normalizedUnitCost = (float)$p['cost_unitario'];
+                          } elseif (($p['cost_type'] ?? 'UNIDAD') === 'PACK' && (int)($p['units_per_pack'] ?? 0) > 0) {
+                            $normalizedUnitCost = (float)$p['supplier_cost'] / (int)$p['units_per_pack'];
+                          } else {
+                            $normalizedUnitCost = (float)$p['supplier_cost'];
+                          }
+                        }
+
+                        if ($p['supplier_name'] && $normalizedUnitCost !== null) {
+                          $productCost = $normalizedUnitCost;
+                          if (($p['sale_mode'] ?? 'UNIDAD') === 'PACK' && (int)($p['sale_units_per_pack'] ?? 0) > 0) {
+                            $productCost = $normalizedUnitCost * (int)$p['sale_units_per_pack'];
+                          }
+
                           $finalPrice = round(
-                            (float)$p['supplier_cost']
+                            $productCost
                             * (1 + ((float)$p['supplier_default_margin_percent'] / 100))
                             * (1 + ((float)$site['margin_percent'] / 100)),
                             0
                           );
                           echo e((string)(int)$finalPrice);
+                          if (($p['sale_mode'] ?? 'UNIDAD') === 'PACK' && (int)($p['sale_units_per_pack'] ?? 0) > 0) {
+                            echo '<br><span class="muted small">Pack x' . e((string)(int)$p['sale_units_per_pack']) . '</span>';
+                          }
                         } else {
                           echo '—';
                         }

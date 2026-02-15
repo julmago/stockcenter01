@@ -139,6 +139,7 @@ function ensure_product_suppliers_schema(): void {
     cost_type ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
     units_per_pack INT UNSIGNED NULL,
     supplier_cost DECIMAL(10,2) NULL,
+    cost_unitario DECIMAL(10,4) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
@@ -159,6 +160,18 @@ function ensure_product_suppliers_schema(): void {
   if (!isset($product_supplier_columns['supplier_cost'])) {
     $pdo->exec("ALTER TABLE product_suppliers ADD COLUMN supplier_cost DECIMAL(10,2) NULL AFTER units_per_pack");
   }
+
+  if (!isset($product_supplier_columns['cost_unitario'])) {
+    $pdo->exec("ALTER TABLE product_suppliers ADD COLUMN cost_unitario DECIMAL(10,4) NULL AFTER supplier_cost");
+  }
+
+  $pdo->exec("UPDATE product_suppliers
+    SET cost_unitario = CASE
+      WHEN supplier_cost IS NULL THEN NULL
+      WHEN cost_type = 'PACK' AND COALESCE(units_per_pack, 0) > 0 THEN ROUND(supplier_cost / units_per_pack, 4)
+      ELSE supplier_cost
+    END
+    WHERE cost_unitario IS NULL");
 
   $productSupplierUniqueExists = false;
   $st = $pdo->query("SHOW INDEX FROM product_suppliers WHERE Key_name = 'uq_product_supplier_link'");
