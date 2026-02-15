@@ -22,16 +22,16 @@ $message = '';
 $can_edit = can_edit_product();
 $can_add_code = can_add_code();
 
-$parse_supplier_cost_decimal = static function (string $supplier_cost_raw): ?float {
+$parse_supplier_cost_decimal = static function (string $supplier_cost_raw): ?int {
   $supplier_cost_raw = str_replace(',', '.', trim($supplier_cost_raw));
   if ($supplier_cost_raw === '') {
     return null;
   }
 
-  return max(0, (float)$supplier_cost_raw);
+  return max(0, (int)round((float)$supplier_cost_raw));
 };
 
-$calculate_unit_cost = static function (?float $supplier_cost_value, string $cost_type, ?int $units_per_pack_value): ?float {
+$calculate_unit_cost = static function (?int $supplier_cost_value, string $cost_type, ?int $units_per_pack_value): ?int {
   if ($supplier_cost_value === null) {
     return null;
   }
@@ -40,10 +40,10 @@ $calculate_unit_cost = static function (?float $supplier_cost_value, string $cos
     if ($units_per_pack_value === null || $units_per_pack_value <= 0) {
       return null;
     }
-    return round($supplier_cost_value / $units_per_pack_value, 4);
+    return (int)round($supplier_cost_value / $units_per_pack_value);
   }
 
-  return round($supplier_cost_value, 4);
+  return (int)round($supplier_cost_value);
 };
 
 if (is_post() && post('action') === 'update') {
@@ -322,24 +322,24 @@ $st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type
   CASE
     WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
     WHEN ps.supplier_cost IS NULL THEN NULL
-    WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 4)
+    WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 0)
     ELSE ps.supplier_cost
   END AS normalized_unit_cost,
   CASE
     WHEN p.sale_mode = 'PACK' AND COALESCE(p.sale_units_per_pack, 0) > 0 THEN
-      (CASE
+      ROUND((CASE
         WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
         WHEN ps.supplier_cost IS NULL THEN NULL
-        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 4)
+        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 0)
         ELSE ps.supplier_cost
-      END) * p.sale_units_per_pack
+      END) * p.sale_units_per_pack, 0)
     ELSE
-      (CASE
+      ROUND((CASE
         WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
         WHEN ps.supplier_cost IS NULL THEN NULL
-        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 4)
+        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 0)
         ELSE ps.supplier_cost
-      END)
+      END), 0)
   END AS normalized_product_cost
   FROM product_suppliers ps
   INNER JOIN products p ON p.id = ps.product_id
@@ -543,7 +543,7 @@ $supplier_links = $st->fetchAll();
                 </div>
                 <div class="form-group">
                   <label class="form-label">Costo del proveedor</label>
-                  <input class="form-control" type="number" step="0.01" min="0" inputmode="decimal" name="supplier_cost" id="supplier-cost-input" placeholder="0">
+                  <input class="form-control" type="number" step="1" min="0" pattern="\d*" inputmode="numeric" name="supplier_cost" id="supplier-cost-input" placeholder="0">
                 </div>
               </div>
               <div>
@@ -595,8 +595,8 @@ $supplier_links = $st->fetchAll();
                     <td><?= e($link['supplier_sku']) ?></td>
                     <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
                     <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
-                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format((float)$link['supplier_cost'], 2, ',', '.') ?></td>
-                    <td><?= ($link['normalized_unit_cost'] === null || trim((string)$link['normalized_unit_cost']) === '') ? '—' : number_format((float)$link['normalized_unit_cost'], 4, ',', '.') ?></td>
+                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format(round((float)$link['supplier_cost']), 0, '', '') ?></td>
+                    <td><?= ($link['normalized_unit_cost'] === null || trim((string)$link['normalized_unit_cost']) === '') ? '—' : number_format(round((float)$link['normalized_unit_cost']), 0, '', '') ?></td>
                     <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
                     <?php if ($can_edit): ?>
                       <td class="table-actions">
@@ -608,7 +608,7 @@ $supplier_links = $st->fetchAll();
                           data-supplier-sku="<?= e($link['supplier_sku']) ?>"
                           data-cost-type="<?= e($link['cost_type']) ?>"
                           data-units-per-pack="<?= (int)($link['units_per_pack'] ?? 0) ?>"
-                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : number_format((float)$link['supplier_cost'], 2, '.', '') ?>"
+                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : number_format(round((float)$link['supplier_cost']), 0, '', '') ?>"
                           style="margin-right:6px;"
                         >Modificar</button>
                         <?php if ((int)$link['is_active'] !== 1): ?>
@@ -786,7 +786,7 @@ $supplier_links = $st->fetchAll();
 
     const parsed = parseFloat(compact);
     if (!Number.isFinite(parsed) || parsed < 0) return '';
-    return compact;
+    return String(Math.round(parsed));
   };
 
   const bindCostInput = (input) => {
