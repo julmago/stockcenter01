@@ -150,6 +150,32 @@ $dedupeModeLabels = [
   <meta charset="utf-8">
   <title>TS WORK</title>
   <?= theme_css_links() ?>
+  <style>
+    .supplier-form-grid {
+      display: grid;
+      gap: var(--space-4);
+      grid-template-columns: 1fr;
+    }
+    .supplier-inline-grid {
+      display: grid;
+      gap: var(--space-3);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .supplier-cost-grid {
+      display: grid;
+      gap: var(--space-3);
+      grid-template-columns: 1fr;
+      align-items: end;
+    }
+    @media (min-width: 1100px) {
+      .supplier-form-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .supplier-cost-grid.is-pack {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
 </head>
 <body class="app-body">
 <?php require __DIR__ . '/partials/header.php'; ?>
@@ -191,15 +217,21 @@ $dedupeModeLabels = [
         <?php if ($editSupplier): ?>
           <input type="hidden" name="id" value="<?= (int)$editSupplier['id'] ?>">
         <?php endif; ?>
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4);">
+        <div class="supplier-form-grid">
           <label class="form-field">
             <span class="form-label">Nombre del proveedor</span>
             <input class="form-control" type="text" name="name" maxlength="190" required value="<?= e($editSupplier ? (string)$editSupplier['name'] : '') ?>">
           </label>
-          <label class="form-field">
-            <span class="form-label">Base (%)</span>
-            <input class="form-control" type="number" name="base_margin_percent" min="0" max="999.99" step="0.01" required value="<?= e($editSupplier ? number_format((float)$editSupplier['base_margin_percent'], 2, '.', '') : '0') ?>">
-          </label>
+          <div class="supplier-inline-grid">
+            <label class="form-field">
+              <span class="form-label">Base (%)</span>
+              <input class="form-control" type="number" name="base_margin_percent" min="0" max="999.99" step="0.01" required value="<?= e($editSupplier ? number_format((float)$editSupplier['base_margin_percent'], 2, '.', '') : '0') ?>">
+            </label>
+            <label class="form-field">
+              <span class="form-label">Descuento (%)</span>
+              <input class="form-control" type="number" min="-100" max="100" step="0.01" name="import_discount_default" value="<?= e($editSupplier && $editSupplier['import_discount_default'] !== null ? number_format((float)$editSupplier['import_discount_default'], 2, '.', '') : '0') ?>">
+            </label>
+          </div>
           <label class="form-field">
             <span class="form-label">Regla duplicados</span>
             <?php $dedupeValue = $editSupplier ? (string)$editSupplier['import_dedupe_mode'] : 'LAST'; ?>
@@ -209,22 +241,20 @@ $dedupeModeLabels = [
               <?php endforeach; ?>
             </select>
           </label>
-          <label class="form-field">
-            <span class="form-label">Cost type default</span>
-            <?php $costTypeValue = $editSupplier ? (string)$editSupplier['import_default_cost_type'] : 'UNIDAD'; ?>
-            <select class="form-control" name="import_default_cost_type">
-              <option value="UNIDAD" <?= $costTypeValue === 'UNIDAD' ? 'selected' : '' ?>>UNIDAD</option>
-              <option value="PACK" <?= $costTypeValue === 'PACK' ? 'selected' : '' ?>>PACK</option>
-            </select>
-          </label>
-          <label class="form-field">
-            <span class="form-label">Units por pack default</span>
-            <input class="form-control" type="number" min="1" step="1" name="import_default_units_per_pack" value="<?= e($editSupplier && $editSupplier['import_default_units_per_pack'] !== null ? (string)$editSupplier['import_default_units_per_pack'] : '') ?>">
-          </label>
-          <label class="form-field">
-            <span class="form-label">Descuento default (%)</span>
-            <input class="form-control" type="number" min="-100" max="100" step="0.01" name="import_discount_default" value="<?= e($editSupplier && $editSupplier['import_discount_default'] !== null ? number_format((float)$editSupplier['import_discount_default'], 2, '.', '') : '0') ?>">
-          </label>
+          <?php $costTypeValue = $editSupplier ? (string)$editSupplier['import_default_cost_type'] : 'UNIDAD'; ?>
+          <div class="supplier-cost-grid<?= $costTypeValue === 'PACK' ? ' is-pack' : '' ?>" id="supplier-cost-grid">
+            <label class="form-field">
+              <span class="form-label">Tipo de costo</span>
+              <select class="form-control" name="import_default_cost_type" id="import-default-cost-type">
+                <option value="UNIDAD" <?= $costTypeValue === 'UNIDAD' ? 'selected' : '' ?>>UNIDAD</option>
+                <option value="PACK" <?= $costTypeValue === 'PACK' ? 'selected' : '' ?>>PACK</option>
+              </select>
+            </label>
+            <label class="form-field" id="import-default-units-field" style="display: none;">
+              <span class="form-label">Uds. por paquete</span>
+              <input class="form-control" type="number" min="1" step="1" name="import_default_units_per_pack" value="<?= e($editSupplier && $editSupplier['import_default_units_per_pack'] !== null ? (string)$editSupplier['import_default_units_per_pack'] : '') ?>">
+            </label>
+          </div>
         </div>
         <div class="inline-actions">
           <?php if ($editSupplier): ?>
@@ -344,6 +374,9 @@ $dedupeModeLabels = [
   const fileField = document.getElementById('source-file-field');
   const fileInput = document.getElementById('source-file-input');
   const detectedFileFormat = document.getElementById('detected-file-format');
+  const defaultCostType = document.getElementById('import-default-cost-type');
+  const defaultUnitsField = document.getElementById('import-default-units-field');
+  const supplierCostGrid = document.getElementById('supplier-cost-grid');
 
   const detectFromName = (name) => {
     const ext = (name.split('.').pop() || '').toLowerCase();
@@ -375,6 +408,16 @@ $dedupeModeLabels = [
       }
       detectedFileFormat.textContent = `Detectado: ${detectFromName(f.name)}`;
     });
+  }
+
+  if (defaultCostType && defaultUnitsField && supplierCostGrid) {
+    const syncDefaultCostType = () => {
+      const isPack = defaultCostType.value === 'PACK';
+      defaultUnitsField.style.display = isPack ? 'block' : 'none';
+      supplierCostGrid.classList.toggle('is-pack', isPack);
+    };
+    defaultCostType.addEventListener('change', syncDefaultCostType);
+    syncDefaultCostType();
   }
 </script>
 </body>
