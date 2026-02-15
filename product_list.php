@@ -11,6 +11,7 @@ if (!is_dir($logsDir)) {
 
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/pricing.php';
 
 $visibleSites = [];
 $products = [];
@@ -125,6 +126,7 @@ try {
     . " p.sale_mode, p.sale_units_per_pack,"
     . " s.name AS supplier_name,"
     . " ps1.supplier_cost, ps1.cost_unitario, ps1.cost_type, ps1.units_per_pack,"
+    . " COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,"
     . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
     . ($numeric
       ? " CASE WHEN EXISTS ("
@@ -261,35 +263,27 @@ try {
                   <?php foreach ($visibleSites as $site): ?>
                     <td>
                       <?php
-                        $normalizedUnitCost = null;
-                        if ($p['supplier_cost'] !== null) {
-                          if ($p['cost_unitario'] !== null && trim((string)$p['cost_unitario']) !== '') {
-                            $normalizedUnitCost = (float)$p['cost_unitario'];
-                          } elseif (($p['cost_type'] ?? 'UNIDAD') === 'PACK' && (int)($p['units_per_pack'] ?? 0) > 0) {
-                            $normalizedUnitCost = (float)$p['supplier_cost'] / (int)$p['units_per_pack'];
+                        $effectiveUnitCost = get_effective_unit_cost($p, ['import_default_units_per_pack' => $p['supplier_default_units_per_pack'] ?? 0]);
+                        $costForMode = get_cost_for_product_mode($effectiveUnitCost, $p);
+                        $priceReason = get_price_unavailable_reason($p, $p);
+
+                        if ($p['supplier_name'] && $costForMode !== null) {
+                          $finalPrice = get_final_site_price($costForMode, [
+                            'base_percent' => $p['supplier_default_margin_percent'] ?? 0,
+                            'discount_percent' => 0,
+                          ], $site, 0.0);
+
+                          if ($finalPrice === null) {
+                            echo '<span title="' . e($priceReason ?? 'Precio incompleto') . '">—</span>';
                           } else {
-                            $normalizedUnitCost = (float)$p['supplier_cost'];
-                          }
-                        }
-
-                        if ($p['supplier_name'] && $normalizedUnitCost !== null) {
-                          $productCost = $normalizedUnitCost;
-                          if (($p['sale_mode'] ?? 'UNIDAD') === 'PACK' && (int)($p['sale_units_per_pack'] ?? 0) > 0) {
-                            $productCost = $normalizedUnitCost * (int)$p['sale_units_per_pack'];
+                            echo e((string)(int)$finalPrice);
                           }
 
-                          $finalPrice = round(
-                            $productCost
-                            * (1 + ((float)$p['supplier_default_margin_percent'] / 100))
-                            * (1 + ((float)$site['margin_percent'] / 100)),
-                            0
-                          );
-                          echo e((string)(int)$finalPrice);
                           if (($p['sale_mode'] ?? 'UNIDAD') === 'PACK' && (int)($p['sale_units_per_pack'] ?? 0) > 0) {
                             echo '<br><span class="muted small">Pack x' . e((string)(int)$p['sale_units_per_pack']) . '</span>';
                           }
                         } else {
-                          echo '—';
+                          echo '<span title="' . e($priceReason ?? 'Precio incompleto') . '">—</span>';
                         }
                       ?>
                     </td>

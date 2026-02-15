@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/pricing.php';
 require_login();
 ensure_product_suppliers_schema();
 ensure_brands_schema();
@@ -30,21 +31,6 @@ $parse_supplier_cost_decimal = static function (string $supplier_cost_raw): ?int
   }
 
   return max(0, (int)round((float)$supplier_cost_raw));
-};
-
-$calculate_unit_cost = static function (?int $supplier_cost_value, string $cost_type, ?int $units_per_pack_value): ?int {
-  if ($supplier_cost_value === null) {
-    return null;
-  }
-
-  if ($cost_type === 'PACK') {
-    if ($units_per_pack_value === null || $units_per_pack_value <= 0) {
-      return null;
-    }
-    return (int)round($supplier_cost_value / $units_per_pack_value);
-  }
-
-  return (int)round($supplier_cost_value);
 };
 
 if (is_post() && post('action') === 'update') {
@@ -143,7 +129,19 @@ if (is_post() && post('action') === 'add_supplier_link') {
 
 
   $supplier_cost_value = $parse_supplier_cost_decimal($supplier_cost_raw);
-  $cost_unitario_value = $calculate_unit_cost($supplier_cost_value, $cost_type, $units_per_pack_value);
+  $supplier_for_cost = [];
+  if ($supplier_id > 0) {
+    $st = db()->prepare('SELECT import_default_units_per_pack FROM suppliers WHERE id = ? LIMIT 1');
+    $st->execute([$supplier_id]);
+    $supplier_for_cost = $st->fetch() ?: [];
+  }
+
+  $cost_unitario_value = get_effective_unit_cost([
+    'supplier_cost' => $supplier_cost_value,
+    'cost_type' => $cost_type,
+    'units_per_pack' => $units_per_pack_value,
+  ], $supplier_for_cost);
+  $cost_unitario_value = ($cost_unitario_value === null) ? null : (int)round($cost_unitario_value, 0);
 
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
@@ -193,7 +191,19 @@ if (is_post() && post('action') === 'update_supplier_link') {
   }
 
   $supplier_cost_value = $parse_supplier_cost_decimal($supplier_cost_raw);
-  $cost_unitario_value = $calculate_unit_cost($supplier_cost_value, $cost_type, $units_per_pack_value);
+  $supplier_for_cost = [];
+  if ($supplier_id > 0) {
+    $st = db()->prepare('SELECT import_default_units_per_pack FROM suppliers WHERE id = ? LIMIT 1');
+    $st->execute([$supplier_id]);
+    $supplier_for_cost = $st->fetch() ?: [];
+  }
+
+  $cost_unitario_value = get_effective_unit_cost([
+    'supplier_cost' => $supplier_cost_value,
+    'cost_type' => $cost_type,
+    'units_per_pack' => $units_per_pack_value,
+  ], $supplier_for_cost);
+  $cost_unitario_value = ($cost_unitario_value === null) ? null : (int)round($cost_unitario_value, 0);
 
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
@@ -351,6 +361,7 @@ $st->execute([$id]);
 $supplier_links = $st->fetchAll();
 
 $supplier_margin_column = 'default_margin_percent';
+$supplier_discount_column = null;
 $supplier_columns_st = db()->query("SHOW COLUMNS FROM suppliers");
 if ($supplier_columns_st) {
   $supplier_margin_column = null;
@@ -358,12 +369,14 @@ if ($supplier_columns_st) {
     $field = (string)($supplier_column['Field'] ?? '');
     if ($field === 'base_percent' || $field === 'base_margin_percent') {
       $supplier_margin_column = $field;
-      break;
     }
-    if ($field === 'default_margin_percent') {
+    if ($field === 'default_margin_percent' && $supplier_margin_column === null) {
       $supplier_margin_column = $field;
     } elseif ($supplier_margin_column === null && stripos($field, 'margin') !== false) {
       $supplier_margin_column = $field;
+    }
+    if ($field === 'discount_percent') {
+      $supplier_discount_column = $field;
     }
   }
 }
@@ -374,8 +387,16 @@ if ($supplier_margin_column !== null) {
   $supplier_margin_expr = "COALESCE(s.`{$safe_supplier_margin_column}`, 0)";
 }
 
+$supplier_discount_expr = '0';
+if ($supplier_discount_column !== null) {
+  $safe_supplier_discount_column = str_replace('`', '``', $supplier_discount_column);
+  $supplier_discount_expr = "COALESCE(s.`{$safe_supplier_discount_column}`, 0)";
+}
+
 $st = db()->prepare("SELECT ps.id, ps.supplier_cost, ps.cost_unitario, ps.cost_type, ps.units_per_pack,
-  {$supplier_margin_expr} AS supplier_base_percent
+  {$supplier_margin_expr} AS supplier_base_percent,
+  {$supplier_discount_expr} AS supplier_discount_percent,
+  COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack
   FROM product_suppliers ps
   INNER JOIN suppliers s ON s.id = ps.supplier_id
   WHERE ps.product_id = ? AND ps.is_active = 1
@@ -383,21 +404,6 @@ $st = db()->prepare("SELECT ps.id, ps.supplier_cost, ps.cost_unitario, ps.cost_t
   LIMIT 1");
 $st->execute([$id]);
 $active_supplier_link = $st->fetch();
-
-$active_supplier_unit_cost = null;
-$active_supplier_base_percent = 0.0;
-if ($active_supplier_link) {
-  if ($active_supplier_link['cost_unitario'] !== null && trim((string)$active_supplier_link['cost_unitario']) !== '') {
-    $active_supplier_unit_cost = (float)$active_supplier_link['cost_unitario'];
-  } elseif ($active_supplier_link['supplier_cost'] !== null && trim((string)$active_supplier_link['supplier_cost']) !== '') {
-    if (($active_supplier_link['cost_type'] ?? 'UNIDAD') === 'PACK' && (int)($active_supplier_link['units_per_pack'] ?? 0) > 0) {
-      $active_supplier_unit_cost = (float)$active_supplier_link['supplier_cost'] / (int)$active_supplier_link['units_per_pack'];
-    } else {
-      $active_supplier_unit_cost = (float)$active_supplier_link['supplier_cost'];
-    }
-  }
-  $active_supplier_base_percent = (float)($active_supplier_link['supplier_base_percent'] ?? 0);
-}
 
 $site_prices = [];
 $st = db()->query("SELECT id, name, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE show_in_product = 1 ORDER BY id ASC");
@@ -787,16 +793,31 @@ if ($st) {
                     <td><?= (int)$site['show_in_product'] === 1 ? 'Activo' : 'Inactivo' ?></td>
                     <td>
                       <?php
-                        if ($active_supplier_unit_cost === null) {
+                        if (!$active_supplier_link) {
                           echo '—';
                         } else {
-                          $final_price = round(
-                            $active_supplier_unit_cost
-                            * (1 + ($active_supplier_base_percent / 100))
-                            * (1 + ((float)$site['margin_percent'] / 100)),
-                            0
-                          );
-                          echo e((string)(int)$final_price);
+                          $effective_unit_cost = get_effective_unit_cost($active_supplier_link, [
+                            'import_default_units_per_pack' => $active_supplier_link['supplier_default_units_per_pack'] ?? 0,
+                          ]);
+                          $cost_for_mode = get_cost_for_product_mode($effective_unit_cost, $product);
+                          $price_reason = get_price_unavailable_reason($active_supplier_link, $product);
+
+                          if ($cost_for_mode === null) {
+                            $title = $price_reason ?? 'Precio incompleto';
+                            echo '<span title="' . e($title) . '">—</span>';
+                          } else {
+                            $final_price = get_final_site_price($cost_for_mode, [
+                              'base_percent' => $active_supplier_link['supplier_base_percent'] ?? 0,
+                              'discount_percent' => $active_supplier_link['supplier_discount_percent'] ?? 0,
+                            ], $site, 0.0);
+
+                            if ($final_price === null) {
+                              $title = $price_reason ?? 'Precio incompleto';
+                              echo '<span title="' . e($title) . '">—</span>';
+                            } else {
+                              echo e((string)(int)$final_price);
+                            }
+                          }
                         }
                       ?>
                     </td>
