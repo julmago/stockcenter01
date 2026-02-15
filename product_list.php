@@ -59,15 +59,24 @@ try {
     ];
   }
 
-  $siteHasIsVisible = false;
-  $siteVisibleSt = db()->query("SHOW COLUMNS FROM sites LIKE 'is_visible'");
-  if ($siteVisibleSt && $siteVisibleSt->fetch()) {
-    $siteHasIsVisible = true;
+  $showInListColumn = null;
+  $siteShowInListSt = db()->query("SHOW COLUMNS FROM sites");
+  if ($siteShowInListSt) {
+    foreach ($siteShowInListSt->fetchAll() as $siteColumn) {
+      $field = (string)($siteColumn['Field'] ?? '');
+      if ($field === 'show_in_list') {
+        $showInListColumn = 'show_in_list';
+        break;
+      }
+      if ($field === 'is_visible') {
+        $showInListColumn = 'is_visible';
+      }
+    }
   }
 
   $visibleSitesSql = "SELECT * FROM sites WHERE is_active = 1";
-  if ($siteHasIsVisible) {
-    $visibleSitesSql .= " AND is_visible = 1";
+  if ($showInListColumn !== null) {
+    $visibleSitesSql .= " AND {$showInListColumn} = 1";
   }
   $visibleSitesSql .= " ORDER BY id ASC";
 
