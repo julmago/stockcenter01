@@ -255,28 +255,15 @@ $nextPage = min($totalPages, $page + 1);
               <span class="form-label">Archivo</span>
               <input class="form-control" type="file" name="source_file" accept=".csv,.xlsx,.txt,.pdf">
             </label>
-            <label class="form-field">
-              <span class="form-label">Descuento extra (%)</span>
-              <input class="form-control" type="number" min="-100" max="100" step="0.01" name="extra_discount_percent" value="<?= e($editSupplier['import_discount_default'] !== null ? number_format((float)$editSupplier['import_discount_default'], 2, '.', '') : '0') ?>">
-            </label>
-            <label class="form-field">
-              <span class="form-label">Cost type default</span>
-              <select class="form-control" name="default_cost_type">
-                <option value="UNIDAD" <?= ((string)$editSupplier['import_default_cost_type'] === 'UNIDAD') ? 'selected' : '' ?>>UNIDAD</option>
-                <option value="PACK" <?= ((string)$editSupplier['import_default_cost_type'] === 'PACK') ? 'selected' : '' ?>>PACK</option>
-              </select>
-            </label>
-            <label class="form-field">
-              <span class="form-label">Units por pack default</span>
-              <input class="form-control" type="number" min="1" step="1" name="default_units_per_pack" value="<?= e($editSupplier['import_default_units_per_pack'] !== null ? (string)$editSupplier['import_default_units_per_pack'] : '') ?>">
-            </label>
+
           </div>
           <label class="form-field" id="paste-text-field" style="display:none;">
             <span class="form-label">Pegar texto</span>
             <textarea class="form-control" name="paste_text" rows="8" placeholder="SKU precio descripción"></textarea>
           </label>
+          <p class="muted">Luego de subir el archivo se abrirá el Paso 2 para elegir columnas y descuentos.</p>
           <div class="inline-actions">
-            <button class="btn" type="submit">Previsualizar importación</button>
+            <button class="btn" type="submit">Continuar a Paso 2</button>
           </div>
         </form>
       </div>

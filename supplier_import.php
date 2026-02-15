@@ -46,16 +46,21 @@ if ($sourceType === 'PASTE') {
 }
 
 try {
-  $runId = supplier_import_build_run($supplierId, $supplier, [
+  $table = supplier_import_parse_table($sourceType, $tmpName, $pasteText);
+  $analysis = supplier_import_analyze_table($table);
+  if (empty($analysis['data_rows'])) {
+    throw new RuntimeException('No se encontraron filas válidas para importar.');
+  }
+
+  $token = bin2hex(random_bytes(16));
+  $_SESSION['supplier_import_mapping'][$token] = [
+    'supplier_id' => $supplierId,
     'source_type' => $sourceType,
-    'tmp_name' => $tmpName,
     'filename' => $filename,
-    'paste_text' => $pasteText,
-    'extra_discount_percent' => post('extra_discount_percent', $supplier['import_discount_default'] ?? '0'),
-    'default_cost_type' => post('default_cost_type', $supplier['import_default_cost_type'] ?? 'UNIDAD'),
-    'default_units_per_pack' => post('default_units_per_pack', $supplier['import_default_units_per_pack'] ?? ''),
-  ]);
-  redirect('supplier_import_preview.php?run_id=' . $runId);
+    'analysis' => $analysis,
+  ];
+
+  redirect('supplier_import_mapping.php?token=' . urlencode($token));
 } catch (Throwable $t) {
   abort(400, 'No se pudo procesar la importación: ' . $t->getMessage());
 }
