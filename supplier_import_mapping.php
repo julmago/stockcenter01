@@ -23,8 +23,6 @@ $analysis = $ctx['analysis'] ?? [];
 $headers = (array)($analysis['headers'] ?? []);
 $priceCandidates = (array)($analysis['price_candidates'] ?? []);
 $skuCandidates = (array)($analysis['sku_candidates'] ?? []);
-$costTypeCandidates = (array)($analysis['cost_type_candidates'] ?? []);
-$unitsCandidates = (array)($analysis['units_candidates'] ?? []);
 $sameHeaderAsMapping = !empty($supplier['import_mapping_header_hash']) && !empty($analysis['header_hash']) && (string)$supplier['import_mapping_header_hash'] === (string)$analysis['header_hash'];
 
 $defaultSku = (string)($supplier['import_sku_column'] ?? '');
@@ -35,28 +33,18 @@ $defaultPrice = (string)($supplier['import_price_column'] ?? '');
 if ($defaultPrice === '' || !in_array($defaultPrice, $headers, true)) {
   $defaultPrice = $priceCandidates[0] ?? '';
 }
-if (count($priceCandidates) > 1 && !$sameHeaderAsMapping) {
+if (count($priceCandidates) > 1) {
   $defaultPrice = '';
-}
-$defaultCostTypeCol = (string)($supplier['import_cost_type_column'] ?? '');
-if ($defaultCostTypeCol !== '' && !in_array($defaultCostTypeCol, $headers, true)) {
-  $defaultCostTypeCol = '';
-}
-$defaultUnitsCol = (string)($supplier['import_units_per_pack_column'] ?? '');
-if ($defaultUnitsCol !== '' && !in_array($defaultUnitsCol, $headers, true)) {
-  $defaultUnitsCol = '';
 }
 
 $error = '';
 if (is_post()) {
   $skuColumn = trim((string)post('sku_column', ''));
   $priceColumn = trim((string)post('price_column', ''));
-  $costTypeColumn = trim((string)post('cost_type_column', ''));
-  $unitsPerPackColumn = trim((string)post('units_per_pack_column', ''));
   $extraDiscount = post('extra_discount_percent', '0');
   $saveMapping = post('save_mapping', '0') === '1' ? 1 : 0;
 
-  $mustSelectPrice = count($priceCandidates) > 1 && !$sameHeaderAsMapping;
+  $mustSelectPrice = count($priceCandidates) > 1;
   if ($mustSelectPrice && $priceColumn === '') {
     $error = 'Debés seleccionar la columna de precio antes de procesar.';
   }
@@ -68,8 +56,6 @@ if (is_post()) {
         'filename' => $ctx['filename'] ?? '',
         'sku_column' => $skuColumn,
         'price_column' => $priceColumn,
-        'cost_type_column' => $costTypeColumn,
-        'units_per_pack_column' => $unitsPerPackColumn,
         'extra_discount_percent' => $extraDiscount,
         'save_mapping' => $saveMapping,
       ]);
@@ -82,11 +68,9 @@ if (is_post()) {
 
   $defaultSku = $skuColumn;
   $defaultPrice = $priceColumn;
-  $defaultCostTypeCol = $costTypeColumn;
-  $defaultUnitsCol = $unitsPerPackColumn;
 }
 
-$mustSelectPrice = count($priceCandidates) > 1 && !$sameHeaderAsMapping;
+$mustSelectPrice = count($priceCandidates) > 1;
 ?>
 <!doctype html>
 <html>
@@ -133,26 +117,6 @@ $mustSelectPrice = count($priceCandidates) > 1 && !$sameHeaderAsMapping;
               <option value="">Seleccionar...</option>
               <?php foreach (($priceCandidates ?: $headers) as $header): ?>
                 <option value="<?= e($header) ?>" <?= $defaultPrice === $header ? 'selected' : '' ?>><?= e($header) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-
-          <label class="form-field">
-            <span class="form-label">Columna cost type (opcional)</span>
-            <select class="form-control" name="cost_type_column">
-              <option value="">Usar default del proveedor</option>
-              <?php foreach ($headers as $header): ?>
-                <option value="<?= e($header) ?>" <?= $defaultCostTypeCol === $header ? 'selected' : '' ?>><?= e($header) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-
-          <label class="form-field">
-            <span class="form-label">Columna units per pack (opcional)</span>
-            <select class="form-control" name="units_per_pack_column">
-              <option value="">Usar default del proveedor</option>
-              <?php foreach ($headers as $header): ?>
-                <option value="<?= e($header) ?>" <?= $defaultUnitsCol === $header ? 'selected' : '' ?>><?= e($header) ?></option>
               <?php endforeach; ?>
             </select>
           </label>
