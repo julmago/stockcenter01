@@ -22,12 +22,28 @@ $message = '';
 $can_edit = can_edit_product();
 $can_add_code = can_add_code();
 
-$parse_supplier_cost_integer = static function (string $supplier_cost_raw): ?int {
+$parse_supplier_cost_decimal = static function (string $supplier_cost_raw): ?float {
+  $supplier_cost_raw = str_replace(',', '.', trim($supplier_cost_raw));
   if ($supplier_cost_raw === '') {
     return null;
   }
 
-  return max(0, (int)round((float)$supplier_cost_raw, 0));
+  return max(0, (float)$supplier_cost_raw);
+};
+
+$calculate_unit_cost = static function (?float $supplier_cost_value, string $cost_type, ?int $units_per_pack_value): ?float {
+  if ($supplier_cost_value === null) {
+    return null;
+  }
+
+  if ($cost_type === 'PACK') {
+    if ($units_per_pack_value === null || $units_per_pack_value <= 0) {
+      return null;
+    }
+    return round($supplier_cost_value / $units_per_pack_value, 4);
+  }
+
+  return round($supplier_cost_value, 4);
 };
 
 if (is_post() && post('action') === 'update') {
@@ -125,7 +141,8 @@ if (is_post() && post('action') === 'add_supplier_link') {
   }
 
 
-  $supplier_cost_value = $parse_supplier_cost_integer($supplier_cost_raw);
+  $supplier_cost_value = $parse_supplier_cost_decimal($supplier_cost_raw);
+  $cost_unitario_value = $calculate_unit_cost($supplier_cost_value, $cost_type, $units_per_pack_value);
 
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
@@ -137,9 +154,9 @@ if (is_post() && post('action') === 'add_supplier_link') {
       $st = db()->prepare("UPDATE product_suppliers SET is_active = 0, updated_at = NOW() WHERE product_id = ?");
       $st->execute([$id]);
 
-      $st = db()->prepare("INSERT INTO product_suppliers(product_id, supplier_id, supplier_sku, cost_type, units_per_pack, supplier_cost, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, 1, NOW())
-        ON DUPLICATE KEY UPDATE supplier_sku = VALUES(supplier_sku), cost_type = VALUES(cost_type), units_per_pack = VALUES(units_per_pack), supplier_cost = VALUES(supplier_cost), is_active = 1, updated_at = NOW()");
-      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $supplier_cost_value]);
+      $st = db()->prepare("INSERT INTO product_suppliers(product_id, supplier_id, supplier_sku, cost_type, units_per_pack, supplier_cost, cost_unitario, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, 1, NOW())
+        ON DUPLICATE KEY UPDATE supplier_sku = VALUES(supplier_sku), cost_type = VALUES(cost_type), units_per_pack = VALUES(units_per_pack), supplier_cost = VALUES(supplier_cost), cost_unitario = VALUES(cost_unitario), is_active = 1, updated_at = NOW()");
+      $st->execute([$id, $supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $supplier_cost_value, $cost_unitario_value]);
       db()->commit();
       $message = 'Proveedor vinculado.';
     } catch (Throwable $t) {
@@ -174,7 +191,8 @@ if (is_post() && post('action') === 'update_supplier_link') {
     }
   }
 
-  $supplier_cost_value = $parse_supplier_cost_integer($supplier_cost_raw);
+  $supplier_cost_value = $parse_supplier_cost_decimal($supplier_cost_raw);
+  $cost_unitario_value = $calculate_unit_cost($supplier_cost_value, $cost_type, $units_per_pack_value);
 
   if ($error === '' && $supplier_id <= 0) {
     $error = 'Seleccioná un proveedor.';
@@ -182,8 +200,8 @@ if (is_post() && post('action') === 'update_supplier_link') {
 
   if ($error === '') {
     try {
-      $st = db()->prepare("UPDATE product_suppliers SET supplier_id = ?, supplier_sku = ?, cost_type = ?, units_per_pack = ?, supplier_cost = ?, updated_at = NOW() WHERE id = ? AND product_id = ?");
-      $st->execute([$supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $supplier_cost_value, $link_id, $id]);
+      $st = db()->prepare("UPDATE product_suppliers SET supplier_id = ?, supplier_sku = ?, cost_type = ?, units_per_pack = ?, supplier_cost = ?, cost_unitario = ?, updated_at = NOW() WHERE id = ? AND product_id = ?");
+      $st->execute([$supplier_id, $supplier_sku, $cost_type, $units_per_pack_value, $supplier_cost_value, $cost_unitario_value, $link_id, $id]);
       $message = 'Proveedor actualizado.';
     } catch (Throwable $t) {
       $error = 'No se pudo actualizar el proveedor vinculado.';
@@ -300,8 +318,31 @@ $codes = $st->fetchAll();
 $st = db()->query("SELECT id, name, default_margin_percent FROM suppliers WHERE is_active = 1 ORDER BY name ASC");
 $suppliers = $st->fetchAll();
 
-$st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.supplier_cost, ps.is_active, s.name AS supplier_name
+$st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.supplier_cost, ps.cost_unitario, ps.is_active, s.name AS supplier_name,
+  CASE
+    WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
+    WHEN ps.supplier_cost IS NULL THEN NULL
+    WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 4)
+    ELSE ps.supplier_cost
+  END AS normalized_unit_cost,
+  CASE
+    WHEN p.sale_mode = 'PACK' AND COALESCE(p.sale_units_per_pack, 0) > 0 THEN
+      (CASE
+        WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
+        WHEN ps.supplier_cost IS NULL THEN NULL
+        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 4)
+        ELSE ps.supplier_cost
+      END) * p.sale_units_per_pack
+    ELSE
+      (CASE
+        WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
+        WHEN ps.supplier_cost IS NULL THEN NULL
+        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 4)
+        ELSE ps.supplier_cost
+      END)
+  END AS normalized_product_cost
   FROM product_suppliers ps
+  INNER JOIN products p ON p.id = ps.product_id
   INNER JOIN suppliers s ON s.id = ps.supplier_id
   WHERE ps.product_id = ?
   ORDER BY ps.is_active DESC, ps.id DESC");
@@ -502,7 +543,7 @@ $supplier_links = $st->fetchAll();
                 </div>
                 <div class="form-group">
                   <label class="form-label">Costo del proveedor</label>
-                  <input class="form-control" type="number" step="1" min="0" inputmode="numeric" name="supplier_cost" id="supplier-cost-input" placeholder="0">
+                  <input class="form-control" type="number" step="0.01" min="0" inputmode="decimal" name="supplier_cost" id="supplier-cost-input" placeholder="0">
                 </div>
               </div>
               <div>
@@ -537,6 +578,7 @@ $supplier_links = $st->fetchAll();
                 <th>costo recibido</th>
                 <th>unidades pack</th>
                 <th>costo proveedor</th>
+                <th>costo unitario</th>
                 <th>activo</th>
                 <?php if ($can_edit): ?>
                   <th>acciones</th>
@@ -545,7 +587,7 @@ $supplier_links = $st->fetchAll();
             </thead>
             <tbody>
               <?php if (!$supplier_links): ?>
-                <tr><td colspan="<?= $can_edit ? 7 : 6 ?>">Sin proveedores vinculados.</td></tr>
+                <tr><td colspan="<?= $can_edit ? 8 : 7 ?>">Sin proveedores vinculados.</td></tr>
               <?php else: ?>
                 <?php foreach ($supplier_links as $link): ?>
                   <tr>
@@ -553,7 +595,8 @@ $supplier_links = $st->fetchAll();
                     <td><?= e($link['supplier_sku']) ?></td>
                     <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
                     <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
-                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format((float)$link['supplier_cost'], 0, ',', '.') ?></td>
+                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format((float)$link['supplier_cost'], 2, ',', '.') ?></td>
+                    <td><?= ($link['normalized_unit_cost'] === null || trim((string)$link['normalized_unit_cost']) === '') ? '—' : number_format((float)$link['normalized_unit_cost'], 4, ',', '.') ?></td>
                     <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
                     <?php if ($can_edit): ?>
                       <td class="table-actions">
@@ -565,7 +608,7 @@ $supplier_links = $st->fetchAll();
                           data-supplier-sku="<?= e($link['supplier_sku']) ?>"
                           data-cost-type="<?= e($link['cost_type']) ?>"
                           data-units-per-pack="<?= (int)($link['units_per_pack'] ?? 0) ?>"
-                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : (string)(int)round((float)$link['supplier_cost'], 0) ?>"
+                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : number_format((float)$link['supplier_cost'], 2, '.', '') ?>"
                           style="margin-right:6px;"
                         >Modificar</button>
                         <?php if ((int)$link['is_active'] !== 1): ?>
@@ -733,24 +776,26 @@ $supplier_links = $st->fetchAll();
 
   const normalizeSupplierCostValue = (value) => {
     if (value === undefined || value === null) return '';
-    const digitsOnly = String(value).replace(/\D+/g, '');
-    if (digitsOnly === '') return '';
-    return String(parseInt(digitsOnly, 10));
+    const normalized = String(value).replace(',', '.').replace(/[^0-9.]/g, '');
+    if (normalized === '') return '';
+
+    const firstDot = normalized.indexOf('.');
+    const compact = firstDot >= 0
+      ? normalized.slice(0, firstDot + 1) + normalized.slice(firstDot + 1).replace(/\./g, '')
+      : normalized;
+
+    const parsed = parseFloat(compact);
+    if (!Number.isFinite(parsed) || parsed < 0) return '';
+    return compact;
   };
 
-  const bindIntegerCostInput = (input) => {
+  const bindCostInput = (input) => {
     if (!input) return;
-    const preventDecimalKeys = (event) => {
-      if (event.key === '.' || event.key === ',') {
-        event.preventDefault();
-      }
-    };
 
     const sanitize = () => {
       input.value = normalizeSupplierCostValue(input.value);
     };
 
-    input.addEventListener('keydown', preventDecimalKeys);
     input.addEventListener('input', sanitize);
     input.addEventListener('blur', sanitize);
     sanitize();
@@ -795,7 +840,7 @@ $supplier_links = $st->fetchAll();
     });
   }
 
-  bindIntegerCostInput(supplierCostInput);
+  bindCostInput(supplierCostInput);
 
   if (supplierLinkCancelBtn) {
     supplierLinkCancelBtn.addEventListener('click', () => {
