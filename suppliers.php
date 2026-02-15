@@ -136,6 +136,13 @@ $queryBase = [];
 if ($q !== '') $queryBase['q'] = $q;
 $prevPage = max(1, $page - 1);
 $nextPage = min($totalPages, $page + 1);
+$dedupeModeLabels = [
+  'LAST' => 'Ultimo precio',
+  'FIRST' => 'Primer precio',
+  'MIN' => 'Precio mas bajo',
+  'MAX' => 'Precio mas alto',
+  'PREFER_PROMO' => 'Precio promo',
+];
 ?>
 <!doctype html>
 <html>
@@ -197,8 +204,8 @@ $nextPage = min($totalPages, $page + 1);
             <span class="form-label">Regla duplicados</span>
             <?php $dedupeValue = $editSupplier ? (string)$editSupplier['import_dedupe_mode'] : 'LAST'; ?>
             <select class="form-control" name="import_dedupe_mode">
-              <?php foreach (['LAST', 'FIRST', 'MIN', 'MAX', 'PREFER_PROMO'] as $mode): ?>
-                <option value="<?= e($mode) ?>" <?= $dedupeValue === $mode ? 'selected' : '' ?>><?= e($mode) ?></option>
+              <?php foreach ($dedupeModeLabels as $mode => $label): ?>
+                <option value="<?= e($mode) ?>" <?= $dedupeValue === $mode ? 'selected' : '' ?>><?= e($label) ?></option>
               <?php endforeach; ?>
             </select>
           </label>
