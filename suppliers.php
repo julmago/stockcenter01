@@ -91,9 +91,6 @@ if (get('created') === '1') {
 if (get('updated') === '1') {
   $message = 'Proveedor modificado.';
 }
-if (get('error') === 'pdf_manual') {
-  $error = 'PDF requiere conversión previa a texto/CSV.';
-}
 
 $where = '';
 $params = [];
@@ -244,24 +241,31 @@ $nextPage = min($totalPages, $page + 1);
             <label class="form-field">
               <span class="form-label">Tipo de fuente</span>
               <select class="form-control" name="source_type" id="source-type-select" required>
-                <option value="CSV">CSV</option>
-                <option value="XLSX">XLSX</option>
-                <option value="TXT">TXT</option>
-                <option value="PASTE">PEGAR TEXTO</option>
-                <option value="PDF">PDF (manual)</option>
+                <option value="FILE">Archivo</option>
+                <option value="PASTE">Pegar texto</option>
               </select>
             </label>
             <label class="form-field" id="source-file-field">
               <span class="form-label">Archivo</span>
-              <input class="form-control" type="file" name="source_file" accept=".csv,.xlsx,.txt,.pdf">
+              <input class="form-control" type="file" name="source_file" id="source-file-input" accept=".csv,.xlsx,.xls,.txt,.pdf">
+              <small class="muted" id="detected-file-format">Detectado: —</small>
             </label>
-
           </div>
           <label class="form-field" id="paste-text-field" style="display:none;">
             <span class="form-label">Pegar texto</span>
-            <textarea class="form-control" name="paste_text" rows="8" placeholder="SKU precio descripción"></textarea>
+            <textarea class="form-control" name="paste_text" id="paste-text-input" rows="10" placeholder="Pegá contenido desde WhatsApp / email / txt"></textarea>
           </label>
-          <p class="muted">Luego de subir el archivo se abrirá el Paso 2 para elegir columnas y descuentos.</p>
+          <label class="form-field" id="paste-separator-field" style="display:none; max-width: 280px;">
+            <span class="form-label">Separador</span>
+            <select class="form-control" name="paste_separator">
+              <option value="AUTO">Automático</option>
+              <option value="TAB">Tab</option>
+              <option value="SEMICOLON">;</option>
+              <option value="COMMA">,</option>
+              <option value="PIPE">| (pipe)</option>
+            </select>
+          </label>
+          <p class="muted">El sistema detecta formato automáticamente para archivos y analiza encabezados antes del Paso 2.</p>
           <div class="inline-actions">
             <button class="btn" type="submit">Continuar a Paso 2</button>
           </div>
@@ -329,18 +333,41 @@ $nextPage = min($totalPages, $page + 1);
 <script>
   const sourceType = document.getElementById('source-type-select');
   const pasteField = document.getElementById('paste-text-field');
+  const pasteSeparatorField = document.getElementById('paste-separator-field');
   const fileField = document.getElementById('source-file-field');
-  if (sourceType && pasteField && fileField) {
+  const fileInput = document.getElementById('source-file-input');
+  const detectedFileFormat = document.getElementById('detected-file-format');
+
+  const detectFromName = (name) => {
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    if (ext === 'xlsx') return 'XLSX';
+    if (ext === 'xls') return 'XLS';
+    if (ext === 'csv') return 'CSV';
+    if (ext === 'txt') return 'TXT';
+    if (ext === 'pdf') return 'PDF';
+    return 'Desconocido';
+  };
+
+  if (sourceType && pasteField && fileField && pasteSeparatorField) {
     const sync = () => {
-      const val = sourceType.value;
-      pasteField.style.display = val === 'PASTE' ? 'block' : 'none';
-      fileField.style.display = val === 'PASTE' ? 'none' : 'block';
-      if (val === 'PDF') {
-        alert('PDF requiere conversión previa a texto/CSV.');
-      }
+      const isPaste = sourceType.value === 'PASTE';
+      pasteField.style.display = isPaste ? 'block' : 'none';
+      pasteSeparatorField.style.display = isPaste ? 'block' : 'none';
+      fileField.style.display = isPaste ? 'none' : 'block';
     };
     sourceType.addEventListener('change', sync);
     sync();
+  }
+
+  if (fileInput && detectedFileFormat) {
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) {
+        detectedFileFormat.textContent = 'Detectado: —';
+        return;
+      }
+      detectedFileFormat.textContent = `Detectado: ${detectFromName(f.name)}`;
+    });
   }
 </script>
 </body>

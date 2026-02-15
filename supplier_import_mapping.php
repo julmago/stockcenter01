@@ -64,7 +64,7 @@ if (is_post()) {
   if ($error === '') {
     try {
       $runId = supplier_import_build_run_with_mapping($supplierId, $supplier, $analysis, [
-        'source_type' => $ctx['source_type'] ?? 'CSV',
+        'source_type' => $ctx['parse_source_type'] ?? 'CSV',
         'filename' => $ctx['filename'] ?? '',
         'sku_column' => $skuColumn,
         'price_column' => $priceColumn,
@@ -112,6 +112,7 @@ $mustSelectPrice = count($priceCandidates) > 1 && !$sameHeaderAsMapping;
     <?php if ($error !== ''): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 
     <div class="card">
+      <p class="muted">Fuente: <?= e((string)($ctx['source_type'] ?? 'file')) ?> | Detectado: <?= e((string)($ctx['detected_label'] ?? ($ctx['detected_format'] ?? 'unknown'))) ?><?= !empty($ctx['detected_delimiter']) ? ' | Separador: ' . e((string)$ctx['detected_delimiter']) : '' ?></p>
       <p class="muted">Headers detectados: <?= e(implode(', ', $headers)) ?></p>
       <?php if ($sameHeaderAsMapping): ?><p class="muted">Se detectó un mapping guardado para este mismo header. Podés editarlo antes de procesar.</p><?php endif; ?>
       <form method="post" class="stack">
