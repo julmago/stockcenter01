@@ -562,3 +562,409 @@ function supplier_import_build_run(int $supplierId, array $supplier, array $payl
 
   return $runId;
 }
+
+function supplier_import_parse_table(string $sourceType, string $tmpPath, string $pasteText): array {
+  $sourceType = strtoupper($sourceType);
+  $rows = [];
+
+  if ($sourceType === 'CSV') {
+    $content = file_get_contents($tmpPath);
+    if ($content === false) {
+      return [];
+    }
+    $lines = preg_split('/\R/u', $content) ?: [];
+    $sample = '';
+    foreach ($lines as $line) {
+      if (trim($line) !== '') {
+        $sample = $line;
+        break;
+      }
+    }
+    $sep = supplier_import_detect_separator($sample);
+    $fh = fopen($tmpPath, 'r');
+    if (!$fh) {
+      return [];
+    }
+    while (($data = fgetcsv($fh, 0, $sep)) !== false) {
+      $rows[] = array_map(static fn($v) => trim((string)$v), $data);
+    }
+    fclose($fh);
+    return $rows;
+  }
+
+  if ($sourceType === 'XLSX') {
+    $autoload = __DIR__ . '/vendor/autoload.php';
+    if (file_exists($autoload)) {
+      require_once $autoload;
+      $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpPath);
+      $sheet = $spreadsheet->getSheet(0);
+      foreach ($sheet->toArray(null, true, true, false) as $row) {
+        $rows[] = array_map(static fn($v) => trim((string)$v), $row);
+      }
+      return $rows;
+    }
+
+    $rows = supplier_import_parse_xlsx_basic($tmpPath);
+    return array_map(static fn($r) => array_map(static fn($v) => trim((string)$v), $r), $rows);
+  }
+
+  if ($sourceType === 'TXT' || $sourceType === 'PASTE') {
+    $content = $sourceType === 'TXT' ? (string)file_get_contents($tmpPath) : $pasteText;
+    if (trim($content) === '') {
+      return [];
+    }
+    $rows[] = ['supplier_sku', 'price', 'description'];
+    $lines = preg_split('/\R/u', $content) ?: [];
+    foreach ($lines as $line) {
+      $line = trim($line);
+      if ($line === '') {
+        continue;
+      }
+      $parts = preg_split('/\t+/', $line) ?: [];
+      if (count($parts) < 2) {
+        $parts = preg_split('/\s{2,}/', $line) ?: [];
+      }
+      if (count($parts) < 2) {
+        $parts = preg_split('/\s+/', $line, 3) ?: [];
+      }
+      $rows[] = [trim((string)($parts[0] ?? '')), trim((string)($parts[1] ?? '')), trim((string)($parts[2] ?? ''))];
+    }
+    return $rows;
+  }
+
+  if ($sourceType === 'PDF') {
+    throw new RuntimeException('PDF requiere conversión previa a texto/CSV.');
+  }
+
+  return [];
+}
+
+function supplier_import_analyze_table(array $table): array {
+  if (!$table) {
+    return ['headers' => [], 'header_map' => [], 'data_rows' => [], 'price_candidates' => [], 'sku_candidates' => [], 'cost_type_candidates' => [], 'units_candidates' => [], 'header_hash' => null];
+  }
+
+  $first = array_map(static fn($v) => trim((string)$v), (array)$table[0]);
+  $nonEmptyFirst = array_values(array_filter($first, static fn($v) => $v !== ''));
+  $hasHeader = !empty($nonEmptyFirst);
+
+  $headers = [];
+  if ($hasHeader) {
+    foreach ($first as $idx => $raw) {
+      $label = $raw !== '' ? $raw : ('col_' . ($idx + 1));
+      $headers[] = $label;
+    }
+  } else {
+    $maxCols = count((array)$first);
+    for ($i = 0; $i < $maxCols; $i++) {
+      $headers[] = 'col_' . ($i + 1);
+    }
+  }
+
+  $dataStart = $hasHeader ? 1 : 0;
+  $dataRows = [];
+  for ($i = $dataStart; $i < count($table); $i++) {
+    $row = (array)$table[$i];
+    $normalized = [];
+    for ($c = 0; $c < count($headers); $c++) {
+      $normalized[$headers[$c]] = trim((string)($row[$c] ?? ''));
+    }
+    if (implode('', $normalized) === '') {
+      continue;
+    }
+    $dataRows[] = $normalized;
+  }
+
+  $priceRegex = '/(precio|costo|cost|price|lista|mayor|minor|pvp|importe|precio\d+)/u';
+  $skuRegex = '/(supplier_sku|sku|codigo|cod|ref|mpn)/u';
+  $costTypeRegex = '/(cost_type|tipo.*costo|tipo)/u';
+  $unitsRegex = '/(units|unidades|pack|bulto|upp)/u';
+
+  $priceCandidates = [];
+  $skuCandidates = [];
+  $costTypeCandidates = [];
+  $unitsCandidates = [];
+
+  foreach ($headers as $header) {
+    $nh = supplier_import_normalize_header($header);
+    if (preg_match($priceRegex, $nh)) {
+      $priceCandidates[] = $header;
+    }
+    if (preg_match($skuRegex, $nh)) {
+      $skuCandidates[] = $header;
+    }
+    if (preg_match($costTypeRegex, $nh)) {
+      $costTypeCandidates[] = $header;
+    }
+    if (preg_match($unitsRegex, $nh)) {
+      $unitsCandidates[] = $header;
+    }
+  }
+
+  if (in_array('supplier_sku', array_map('supplier_import_normalize_header', $headers), true)) {
+    usort($skuCandidates, static function ($a, $b) {
+      return supplier_import_normalize_header($a) === 'supplier_sku' ? -1 : 1;
+    });
+  }
+
+  if (count($priceCandidates) === 0 && $dataRows) {
+    foreach ($headers as $header) {
+      $numericCount = 0;
+      $sampleCount = 0;
+      foreach ($dataRows as $row) {
+        $value = trim((string)($row[$header] ?? ''));
+        if ($value === '') {
+          continue;
+        }
+        $sampleCount++;
+        if (supplier_import_normalize_price($value) !== null) {
+          $numericCount++;
+        }
+        if ($sampleCount >= 30) {
+          break;
+        }
+      }
+      if ($sampleCount > 0 && ($numericCount / $sampleCount) >= 0.8) {
+        $priceCandidates[] = $header;
+      }
+    }
+  }
+
+  $headerMap = [];
+  foreach ($headers as $idx => $header) {
+    $headerMap[$header] = $idx;
+  }
+
+  $headerHash = hash('sha256', implode('|', array_map('supplier_import_normalize_header', $headers)));
+
+  return [
+    'headers' => $headers,
+    'header_map' => $headerMap,
+    'data_rows' => $dataRows,
+    'price_candidates' => array_values(array_unique($priceCandidates)),
+    'sku_candidates' => array_values(array_unique($skuCandidates)),
+    'cost_type_candidates' => array_values(array_unique($costTypeCandidates)),
+    'units_candidates' => array_values(array_unique($unitsCandidates)),
+    'header_hash' => $headerHash,
+  ];
+}
+
+function supplier_import_build_run_with_mapping(int $supplierId, array $supplier, array $analysis, array $payload): int {
+  $pdo = db();
+  $headers = (array)($analysis['headers'] ?? []);
+  $rows = (array)($analysis['data_rows'] ?? []);
+  if (!$headers || !$rows) {
+    throw new RuntimeException('No se encontraron filas válidas para importar.');
+  }
+
+  $skuColumn = trim((string)($payload['sku_column'] ?? ''));
+  $priceColumn = trim((string)($payload['price_column'] ?? ''));
+  $costTypeColumn = trim((string)($payload['cost_type_column'] ?? ''));
+  $unitsColumn = trim((string)($payload['units_per_pack_column'] ?? ''));
+
+  if ($skuColumn === '' || !in_array($skuColumn, $headers, true)) {
+    throw new RuntimeException('Seleccioná una columna SKU válida.');
+  }
+  if ($priceColumn === '' || !in_array($priceColumn, $headers, true)) {
+    throw new RuntimeException('Seleccioná una columna de precio válida.');
+  }
+
+  if ($costTypeColumn !== '' && !in_array($costTypeColumn, $headers, true)) {
+    $costTypeColumn = '';
+  }
+  if ($unitsColumn !== '' && !in_array($unitsColumn, $headers, true)) {
+    $unitsColumn = '';
+  }
+
+  $extraDiscount = supplier_import_normalize_discount($payload['extra_discount_percent'] ?? '0');
+  if ($extraDiscount === null) {
+    throw new RuntimeException('Descuento extra inválido.');
+  }
+  $supplierDiscount = (float)($supplier['import_discount_default'] ?? 0);
+  $totalDiscount = $supplierDiscount + (float)$extraDiscount;
+
+  $defaultCostType = (string)($supplier['import_default_cost_type'] ?? 'UNIDAD');
+  if (!in_array($defaultCostType, ['UNIDAD', 'PACK'], true)) {
+    $defaultCostType = 'UNIDAD';
+  }
+  $defaultUnits = $supplier['import_default_units_per_pack'] !== null ? (int)$supplier['import_default_units_per_pack'] : null;
+  if ($defaultUnits !== null && $defaultUnits <= 0) {
+    $defaultUnits = null;
+  }
+
+  $sourceType = strtoupper((string)($payload['source_type'] ?? 'CSV'));
+  $filename = trim((string)($payload['filename'] ?? '')) ?: null;
+  $createdBy = (int)(current_user()['id'] ?? 0);
+  if ($createdBy <= 0) {
+    $createdBy = null;
+  }
+
+  $dedupeMode = (string)($supplier['import_dedupe_mode'] ?? 'LAST');
+
+  $stRun = $pdo->prepare('INSERT INTO supplier_import_runs(supplier_id, filename, source_type, extra_discount_percent, supplier_discount_percent, total_discount_percent, selected_sku_column, selected_price_column, selected_cost_type_column, selected_units_per_pack_column, dedupe_mode, mapping_header_hash, created_by, notes) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  $stRun->execute([$supplierId, $filename, $sourceType, $extraDiscount, $supplierDiscount, $totalDiscount, $skuColumn, $priceColumn, $costTypeColumn !== '' ? $costTypeColumn : null, $unitsColumn !== '' ? $unitsColumn : null, $dedupeMode, $analysis['header_hash'] ?? null, $createdBy, null]);
+  $runId = (int)$pdo->lastInsertId();
+
+  $stMatch = $pdo->prepare('SELECT id, product_id FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? LIMIT 1');
+
+  $prepared = [];
+  $line = 1;
+  foreach ($rows as $row) {
+    $line++;
+    $supplierSku = trim((string)($row[$skuColumn] ?? ''));
+    $description = '';
+    foreach (['description', 'descripcion', 'nombre', 'detalle'] as $cand) {
+      foreach ($headers as $header) {
+        if (supplier_import_normalize_header($header) === $cand) {
+          $description = trim((string)($row[$header] ?? ''));
+          break 2;
+        }
+      }
+    }
+    $rawPriceInput = $row[$priceColumn] ?? null;
+    $rawPrice = supplier_import_normalize_price($rawPriceInput);
+
+    $rawCostTypeInput = $costTypeColumn !== '' ? strtoupper(trim((string)($row[$costTypeColumn] ?? ''))) : '';
+    if (!in_array($rawCostTypeInput, ['UNIDAD', 'PACK'], true)) {
+      $rawCostTypeInput = $defaultCostType;
+    }
+
+    $unitsInput = $unitsColumn !== '' ? trim((string)($row[$unitsColumn] ?? '')) : '';
+    $rawUnitsPerPack = $unitsInput === '' ? null : (int)$unitsInput;
+    if ($rawUnitsPerPack !== null && $rawUnitsPerPack <= 0) {
+      $rawUnitsPerPack = null;
+    }
+    if ($rawCostTypeInput === 'PACK' && $rawUnitsPerPack === null) {
+      $rawUnitsPerPack = $defaultUnits;
+    }
+
+    $status = 'UNMATCHED';
+    $reason = null;
+    $normalizedUnitCost = null;
+    $matchedProductSupplierId = null;
+    $matchedProductId = null;
+    $costCalcDetail = null;
+
+    if ($supplierSku === '') {
+      $status = 'INVALID';
+      $reason = 'SKU vacío';
+    } elseif ($rawPrice === null || $rawPrice < 0) {
+      $status = 'INVALID';
+      $reason = 'Precio inválido';
+    } else {
+      $afterDiscount = $rawPrice * (1 - ($totalDiscount / 100));
+      if ($rawCostTypeInput === 'PACK') {
+        if ($rawUnitsPerPack === null || $rawUnitsPerPack <= 0) {
+          $status = 'INVALID';
+          $reason = 'PACK sin units_per_pack válido';
+        } else {
+          $normalizedUnitCost = (float)round($afterDiscount / $rawUnitsPerPack, 0);
+          $costCalcDetail = 'PACK: ' . number_format($afterDiscount, 2, '.', '') . ' / ' . $rawUnitsPerPack;
+        }
+      } else {
+        $normalizedUnitCost = (float)round($afterDiscount, 0);
+        $costCalcDetail = 'UNIDAD: ' . number_format($afterDiscount, 2, '.', '');
+      }
+
+      if ($status !== 'INVALID') {
+        $stMatch->execute([$supplierId, $supplierSku]);
+        $match = $stMatch->fetch();
+        if ($match) {
+          $status = 'MATCHED';
+          $matchedProductSupplierId = (int)$match['id'];
+          $matchedProductId = (int)$match['product_id'];
+        } else {
+          $status = 'UNMATCHED';
+          $reason = 'No vinculado por supplier_sku';
+        }
+      }
+    }
+
+    $prepared[] = [
+      'supplier_sku' => $supplierSku,
+      'description' => $description,
+      'raw_price' => $rawPrice,
+      'price_column_name' => $priceColumn,
+      'discount_applied_percent' => $totalDiscount,
+      'raw_cost_type' => $rawCostTypeInput,
+      'raw_units_per_pack' => $rawUnitsPerPack,
+      'normalized_unit_cost' => $normalizedUnitCost,
+      'cost_calc_detail' => $costCalcDetail,
+      'matched_product_supplier_id' => $matchedProductSupplierId,
+      'matched_product_id' => $matchedProductId,
+      'status' => $status,
+      'chosen_by_rule' => 0,
+      'reason' => $reason,
+      'line_number' => $line,
+    ];
+  }
+
+  $groups = [];
+  foreach ($prepared as $idx => $row) {
+    $sku = $row['supplier_sku'];
+    if ($sku === '' || $row['status'] === 'INVALID') {
+      continue;
+    }
+    $groups[$sku][] = $idx;
+  }
+
+  foreach ($groups as $sku => $indexes) {
+    $validIndexes = array_values(array_filter($indexes, static fn($idx) => $prepared[$idx]['status'] !== 'INVALID'));
+    if (!$validIndexes) {
+      continue;
+    }
+
+    $chosen = $validIndexes[0];
+    if (count($validIndexes) > 1) {
+      if ($dedupeMode === 'LAST') {
+        $chosen = $validIndexes[count($validIndexes) - 1];
+      } elseif ($dedupeMode === 'MIN' || $dedupeMode === 'MAX') {
+        foreach ($validIndexes as $candidate) {
+          $candCost = (float)($prepared[$candidate]['normalized_unit_cost'] ?? 0);
+          $bestCost = (float)($prepared[$chosen]['normalized_unit_cost'] ?? 0);
+          if (($dedupeMode === 'MIN' && $candCost < $bestCost) || ($dedupeMode === 'MAX' && $candCost > $bestCost)) {
+            $chosen = $candidate;
+          }
+        }
+      }
+    }
+
+    foreach ($validIndexes as $candidate) {
+      if ($candidate === $chosen) {
+        $prepared[$candidate]['chosen_by_rule'] = 1;
+        $prepared[$candidate]['reason'] = 'dedupe_mode=' . $dedupeMode . '; winner=' . $dedupeMode;
+      } else {
+        $prepared[$candidate]['status'] = 'DUPLICATE_SKU';
+        $prepared[$candidate]['reason'] = 'dedupe_mode=' . $dedupeMode . '; winner=row ' . $prepared[$chosen]['line_number'];
+      }
+    }
+  }
+
+  $stRow = $pdo->prepare('INSERT INTO supplier_import_rows(run_id, supplier_sku, description, raw_price, price_column_name, discount_applied_percent, raw_cost_type, raw_units_per_pack, normalized_unit_cost, cost_calc_detail, matched_product_supplier_id, matched_product_id, status, chosen_by_rule, reason) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  foreach ($prepared as $row) {
+    $stRow->execute([
+      $runId,
+      $row['supplier_sku'],
+      $row['description'] !== '' ? $row['description'] : null,
+      $row['raw_price'],
+      $row['price_column_name'],
+      $row['discount_applied_percent'],
+      $row['raw_cost_type'],
+      $row['raw_units_per_pack'],
+      $row['normalized_unit_cost'],
+      $row['cost_calc_detail'],
+      $row['matched_product_supplier_id'],
+      $row['matched_product_id'],
+      $row['status'],
+      $row['chosen_by_rule'],
+      $row['reason'],
+    ]);
+  }
+
+  if ((int)($payload['save_mapping'] ?? 0) === 1) {
+    $stSave = $pdo->prepare('UPDATE suppliers SET import_sku_column = ?, import_price_column = ?, import_cost_type_column = ?, import_units_per_pack_column = ?, import_mapping_header_hash = ?, updated_at = NOW() WHERE id = ?');
+    $stSave->execute([$skuColumn, $priceColumn, $costTypeColumn !== '' ? $costTypeColumn : null, $unitsColumn !== '' ? $unitsColumn : null, $analysis['header_hash'] ?? null, $supplierId]);
+  }
+
+  return $runId;
+}

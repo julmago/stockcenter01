@@ -68,6 +68,11 @@ function ensure_product_suppliers_schema(): void {
     import_default_cost_type ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
     import_default_units_per_pack INT NULL,
     import_discount_default DECIMAL(10,2) NULL,
+    import_sku_column VARCHAR(120) NULL,
+    import_price_column VARCHAR(120) NULL,
+    import_cost_type_column VARCHAR(120) NULL,
+    import_units_per_pack_column VARCHAR(120) NULL,
+    import_mapping_header_hash VARCHAR(64) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
@@ -104,6 +109,26 @@ function ensure_product_suppliers_schema(): void {
 
   if (!isset($supplier_columns['import_discount_default'])) {
     $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_discount_default DECIMAL(10,2) NULL AFTER import_default_units_per_pack");
+  }
+
+  if (!isset($supplier_columns['import_sku_column'])) {
+    $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_sku_column VARCHAR(120) NULL AFTER import_discount_default");
+  }
+
+  if (!isset($supplier_columns['import_price_column'])) {
+    $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_price_column VARCHAR(120) NULL AFTER import_sku_column");
+  }
+
+  if (!isset($supplier_columns['import_cost_type_column'])) {
+    $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_cost_type_column VARCHAR(120) NULL AFTER import_price_column");
+  }
+
+  if (!isset($supplier_columns['import_units_per_pack_column'])) {
+    $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_units_per_pack_column VARCHAR(120) NULL AFTER import_cost_type_column");
+  }
+
+  if (!isset($supplier_columns['import_mapping_header_hash'])) {
+    $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_mapping_header_hash VARCHAR(64) NULL AFTER import_units_per_pack_column");
   }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS product_suppliers (
@@ -159,6 +184,14 @@ function ensure_product_suppliers_schema(): void {
     filename VARCHAR(255) NULL,
     source_type ENUM('CSV','XLSX','TXT','PASTE') NOT NULL,
     extra_discount_percent DECIMAL(10,2) NOT NULL DEFAULT 0,
+    supplier_discount_percent DECIMAL(10,2) NOT NULL DEFAULT 0,
+    total_discount_percent DECIMAL(10,2) NOT NULL DEFAULT 0,
+    selected_sku_column VARCHAR(120) NULL,
+    selected_price_column VARCHAR(120) NULL,
+    selected_cost_type_column VARCHAR(120) NULL,
+    selected_units_per_pack_column VARCHAR(120) NULL,
+    dedupe_mode VARCHAR(30) NULL,
+    mapping_header_hash VARCHAR(64) NULL,
     created_by INT UNSIGNED NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     applied_at DATETIME NULL,
@@ -172,9 +205,12 @@ function ensure_product_suppliers_schema(): void {
     supplier_sku VARCHAR(120) NOT NULL,
     description VARCHAR(255) NULL,
     raw_price DECIMAL(10,2) NULL,
+    price_column_name VARCHAR(120) NULL,
+    discount_applied_percent DECIMAL(10,2) NULL,
     raw_cost_type ENUM('UNIDAD','PACK') NULL,
     raw_units_per_pack INT NULL,
     normalized_unit_cost DECIMAL(10,2) NULL,
+    cost_calc_detail VARCHAR(255) NULL,
     matched_product_supplier_id INT UNSIGNED NULL,
     matched_product_id INT UNSIGNED NULL,
     status ENUM('MATCHED','UNMATCHED','DUPLICATE_SKU','INVALID') NOT NULL DEFAULT 'UNMATCHED',
@@ -185,6 +221,43 @@ function ensure_product_suppliers_schema(): void {
     INDEX idx_supplier_import_rows_sku (supplier_sku),
     INDEX idx_supplier_import_rows_matched_product (matched_product_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $runColumns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM supplier_import_runs");
+  foreach ($st->fetchAll() as $row) {
+    $runColumns[(string)$row['Field']] = true;
+  }
+  $runAlterMap = [
+    'supplier_discount_percent' => "ALTER TABLE supplier_import_runs ADD COLUMN supplier_discount_percent DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER extra_discount_percent",
+    'total_discount_percent' => "ALTER TABLE supplier_import_runs ADD COLUMN total_discount_percent DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER supplier_discount_percent",
+    'selected_sku_column' => "ALTER TABLE supplier_import_runs ADD COLUMN selected_sku_column VARCHAR(120) NULL AFTER total_discount_percent",
+    'selected_price_column' => "ALTER TABLE supplier_import_runs ADD COLUMN selected_price_column VARCHAR(120) NULL AFTER selected_sku_column",
+    'selected_cost_type_column' => "ALTER TABLE supplier_import_runs ADD COLUMN selected_cost_type_column VARCHAR(120) NULL AFTER selected_price_column",
+    'selected_units_per_pack_column' => "ALTER TABLE supplier_import_runs ADD COLUMN selected_units_per_pack_column VARCHAR(120) NULL AFTER selected_cost_type_column",
+    'dedupe_mode' => "ALTER TABLE supplier_import_runs ADD COLUMN dedupe_mode VARCHAR(30) NULL AFTER selected_units_per_pack_column",
+    'mapping_header_hash' => "ALTER TABLE supplier_import_runs ADD COLUMN mapping_header_hash VARCHAR(64) NULL AFTER dedupe_mode",
+  ];
+  foreach ($runAlterMap as $col => $sql) {
+    if (!isset($runColumns[$col])) {
+      $pdo->exec($sql);
+    }
+  }
+
+  $rowColumns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM supplier_import_rows");
+  foreach ($st->fetchAll() as $row) {
+    $rowColumns[(string)$row['Field']] = true;
+  }
+  $rowAlterMap = [
+    'price_column_name' => "ALTER TABLE supplier_import_rows ADD COLUMN price_column_name VARCHAR(120) NULL AFTER raw_price",
+    'discount_applied_percent' => "ALTER TABLE supplier_import_rows ADD COLUMN discount_applied_percent DECIMAL(10,2) NULL AFTER price_column_name",
+    'cost_calc_detail' => "ALTER TABLE supplier_import_rows ADD COLUMN cost_calc_detail VARCHAR(255) NULL AFTER normalized_unit_cost",
+  ];
+  foreach ($rowAlterMap as $col => $sql) {
+    if (!isset($rowColumns[$col])) {
+      $pdo->exec($sql);
+    }
+  }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS product_supplier_cost_history (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

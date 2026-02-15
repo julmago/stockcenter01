@@ -57,7 +57,7 @@ $unmatchedRows = $unmatchedSt->fetchAll();
     <div class="page-header">
       <div>
         <h2 class="page-title">Previsualización importación</h2>
-        <span class="muted">Proveedor: <?= e((string)$run['supplier_name']) ?> | Fuente: <?= e((string)$run['source_type']) ?></span>
+        <span class="muted">Proveedor: <?= e((string)$run['supplier_name']) ?> | Fuente: <?= e((string)$run['source_type']) ?> | price_col=<?= e((string)($run['selected_price_column'] ?? '—')) ?> | dedupe=<?= e((string)($run['dedupe_mode'] ?? '—')) ?></span>
       </div>
       <div class="inline-actions">
         <a class="btn btn-ghost" href="suppliers.php?edit_id=<?= (int)$run['supplier_id'] ?>">Volver</a>
@@ -86,10 +86,10 @@ $unmatchedRows = $unmatchedSt->fetchAll();
     <div class="card">
       <div class="card-header"><h3 class="card-title">Matcheados (OK)</h3></div>
       <div class="table-wrapper"><table class="table">
-        <thead><tr><th>SKU proveedor</th><th>SKU interno</th><th>Producto</th><th>Costo unitario</th><th>Costo raw</th><th>Regla</th></tr></thead>
+        <thead><tr><th>SKU proveedor</th><th>SKU interno</th><th>Producto</th><th>Costo unitario</th><th>Costo raw</th><th>price_col</th><th>discount_applied</th><th>cost_calc</th><th>Regla</th></tr></thead>
         <tbody>
         <?php if (!$matchedRows): ?>
-          <tr><td colspan="6">Sin filas.</td></tr>
+          <tr><td colspan="9">Sin filas.</td></tr>
         <?php else: foreach ($matchedRows as $row): ?>
           <tr>
             <td><?= e((string)$row['supplier_sku']) ?></td>
@@ -97,6 +97,9 @@ $unmatchedRows = $unmatchedSt->fetchAll();
             <td><?= e((string)($row['product_name'] ?? '—')) ?></td>
             <td><?= $row['normalized_unit_cost'] !== null ? (int)round((float)$row['normalized_unit_cost'], 0) : '—' ?></td>
             <td><?= $row['raw_price'] !== null ? (int)round((float)$row['raw_price'], 0) : '—' ?></td>
+            <td><?= e((string)($row['price_column_name'] ?? '')) ?></td>
+            <td><?= $row['discount_applied_percent'] !== null ? e(number_format((float)$row['discount_applied_percent'], 2, '.', '')) . '%' : '—' ?></td>
+            <td><?= e((string)($row['cost_calc_detail'] ?? '')) ?></td>
             <td><?= e((string)($row['reason'] ?? '')) ?><?= (int)$row['chosen_by_rule'] === 1 ? ' [elegida]' : '' ?></td>
           </tr>
         <?php endforeach; endif; ?>
@@ -127,15 +130,18 @@ $unmatchedRows = $unmatchedSt->fetchAll();
     <div class="card">
       <div class="card-header"><h3 class="card-title">No matcheados / inválidos</h3></div>
       <div class="table-wrapper"><table class="table">
-        <thead><tr><th>SKU proveedor</th><th>Descripción</th><th>Precio</th><th>Estado</th><th>Motivo</th></tr></thead>
+        <thead><tr><th>SKU proveedor</th><th>Descripción</th><th>Precio</th><th>price_col</th><th>discount_applied</th><th>cost_calc</th><th>Estado</th><th>Motivo</th></tr></thead>
         <tbody>
         <?php if (!$unmatchedRows): ?>
-          <tr><td colspan="5">Sin filas no vinculadas.</td></tr>
+          <tr><td colspan="8">Sin filas no vinculadas.</td></tr>
         <?php else: foreach ($unmatchedRows as $row): ?>
           <tr>
             <td><?= e((string)$row['supplier_sku']) ?></td>
             <td><?= e((string)($row['description'] ?? '')) ?></td>
             <td><?= $row['raw_price'] !== null ? (int)round((float)$row['raw_price'], 0) : '—' ?></td>
+            <td><?= e((string)($row['price_column_name'] ?? '')) ?></td>
+            <td><?= $row['discount_applied_percent'] !== null ? e(number_format((float)$row['discount_applied_percent'], 2, '.', '')) . '%' : '—' ?></td>
+            <td><?= e((string)($row['cost_calc_detail'] ?? '')) ?></td>
             <td><?= e((string)$row['status']) ?></td>
             <td><?= e((string)($row['reason'] ?? '')) ?></td>
           </tr>
