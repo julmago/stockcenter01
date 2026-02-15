@@ -76,11 +76,13 @@ try {
   if ($supplierColumnsSt) {
     foreach ($supplierColumnsSt->fetchAll() as $supplierColumn) {
       $field = (string)($supplierColumn['Field'] ?? '');
-      if ($field === 'default_margin_percent') {
+      if ($field === 'base_margin_percent') {
         $supplierMarginColumn = $field;
         break;
       }
-      if ($supplierMarginColumn === null && stripos($field, 'margin') !== false) {
+      if ($field === 'default_margin_percent') {
+        $supplierMarginColumn = $field;
+      } elseif ($supplierMarginColumn === null && stripos($field, 'margin') !== false) {
         $supplierMarginColumn = $field;
       }
     }
