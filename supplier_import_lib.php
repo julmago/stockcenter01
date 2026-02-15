@@ -125,6 +125,164 @@ function supplier_import_extract_rows(array $rows): array {
   return $result;
 }
 
+function supplier_import_xlsx_col_to_index(string $ref): int {
+  $letters = preg_replace('/[^A-Z]/', '', strtoupper($ref)) ?? '';
+  if ($letters === '') {
+    return -1;
+  }
+
+  $index = 0;
+  for ($i = 0; $i < strlen($letters); $i++) {
+    $index = ($index * 26) + (ord($letters[$i]) - 64);
+  }
+
+  return $index - 1;
+}
+
+function supplier_import_xlsx_load_shared_strings(ZipArchive $zip): array {
+  $sharedRaw = $zip->getFromName('xl/sharedStrings.xml');
+  if (!is_string($sharedRaw) || trim($sharedRaw) === '') {
+    return [];
+  }
+
+  $xml = simplexml_load_string($sharedRaw);
+  if (!$xml) {
+    return [];
+  }
+
+  $strings = [];
+  foreach ($xml->xpath('//*[local-name()="si"]') ?: [] as $si) {
+    $parts = [];
+    foreach ($si->xpath('.//*[local-name()="t"]') ?: [] as $textNode) {
+      $parts[] = (string)$textNode;
+    }
+    $strings[] = implode('', $parts);
+  }
+
+  return $strings;
+}
+
+function supplier_import_xlsx_sheet_path(ZipArchive $zip): ?string {
+  $workbookRaw = $zip->getFromName('xl/workbook.xml');
+  $relsRaw = $zip->getFromName('xl/_rels/workbook.xml.rels');
+  if (!is_string($workbookRaw) || !is_string($relsRaw)) {
+    return null;
+  }
+
+  $workbookXml = simplexml_load_string($workbookRaw);
+  $relsXml = simplexml_load_string($relsRaw);
+  if (!$workbookXml || !$relsXml) {
+    return null;
+  }
+
+  $sheetNodes = $workbookXml->xpath('//*[local-name()="sheet"]') ?: [];
+  if (!$sheetNodes) {
+    return null;
+  }
+
+  $sheetAttrs = $sheetNodes[0]->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+  $rid = (string)($sheetAttrs['id'] ?? '');
+  if ($rid === '') {
+    return null;
+  }
+
+  foreach ($relsXml->xpath('//*[local-name()="Relationship"]') ?: [] as $relNode) {
+    $id = (string)($relNode['Id'] ?? '');
+    if ($id !== $rid) {
+      continue;
+    }
+
+    $target = (string)($relNode['Target'] ?? '');
+    if ($target === '') {
+      return null;
+    }
+
+    $target = ltrim($target, '/');
+    if (strpos($target, 'xl/') === 0) {
+      return $target;
+    }
+    return 'xl/' . ltrim($target, './');
+  }
+
+  return null;
+}
+
+function supplier_import_parse_xlsx_basic(string $tmpPath): array {
+  if (!class_exists('ZipArchive')) {
+    throw new RuntimeException('No se puede leer XLSX: falta extensión ZipArchive.');
+  }
+
+  $zip = new ZipArchive();
+  if ($zip->open($tmpPath) !== true) {
+    throw new RuntimeException('No se pudo abrir el archivo XLSX.');
+  }
+
+  try {
+    $sheetPath = supplier_import_xlsx_sheet_path($zip);
+    if ($sheetPath === null) {
+      throw new RuntimeException('No se encontró una hoja válida dentro del XLSX.');
+    }
+
+    $sheetRaw = $zip->getFromName($sheetPath);
+    if (!is_string($sheetRaw) || trim($sheetRaw) === '') {
+      throw new RuntimeException('La hoja del XLSX está vacía o dañada.');
+    }
+
+    $sheetXml = simplexml_load_string($sheetRaw);
+    if (!$sheetXml) {
+      throw new RuntimeException('No se pudo interpretar el contenido del XLSX.');
+    }
+
+    $sharedStrings = supplier_import_xlsx_load_shared_strings($zip);
+    $rows = [];
+
+    foreach ($sheetXml->xpath('//*[local-name()="sheetData"]/*[local-name()="row"]') ?: [] as $rowNode) {
+      $row = [];
+      $fallbackIndex = 0;
+      foreach ($rowNode->xpath('./*[local-name()="c"]') ?: [] as $cellNode) {
+        $ref = (string)($cellNode['r'] ?? '');
+        $idx = supplier_import_xlsx_col_to_index($ref);
+        if ($idx < 0) {
+          $idx = $fallbackIndex;
+        }
+        $fallbackIndex = $idx + 1;
+
+        $type = (string)($cellNode['t'] ?? '');
+        $value = '';
+        if ($type === 'inlineStr') {
+          $parts = [];
+          foreach ($cellNode->xpath('.//*[local-name()="is"]//*[local-name()="t"]') ?: [] as $textNode) {
+            $parts[] = (string)$textNode;
+          }
+          $value = implode('', $parts);
+        } else {
+          $value = (string)($cellNode->v ?? '');
+          if ($type === 's') {
+            $sharedIndex = (int)$value;
+            $value = (string)($sharedStrings[$sharedIndex] ?? '');
+          }
+        }
+
+        $row[$idx] = $value;
+      }
+
+      if ($row) {
+        ksort($row);
+        $normalized = [];
+        $maxIndex = (int)max(array_keys($row));
+        for ($i = 0; $i <= $maxIndex; $i++) {
+          $normalized[] = $row[$i] ?? '';
+        }
+        $rows[] = $normalized;
+      }
+    }
+
+    return $rows;
+  } finally {
+    $zip->close();
+  }
+}
+
 function supplier_import_parse_input(string $sourceType, string $tmpPath, string $pasteText): array {
   $sourceType = strtoupper($sourceType);
   $rows = [];
@@ -156,15 +314,17 @@ function supplier_import_parse_input(string $sourceType, string $tmpPath, string
 
   if ($sourceType === 'XLSX') {
     $autoload = __DIR__ . '/vendor/autoload.php';
-    if (!file_exists($autoload)) {
-      throw new RuntimeException('No está disponible PhpSpreadsheet (vendor/autoload.php).');
+    if (file_exists($autoload)) {
+      require_once $autoload;
+      $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpPath);
+      $sheet = $spreadsheet->getSheet(0);
+      foreach ($sheet->toArray(null, true, true, false) as $row) {
+        $rows[] = $row;
+      }
+      return supplier_import_extract_rows($rows);
     }
-    require_once $autoload;
-    $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpPath);
-    $sheet = $spreadsheet->getSheet(0);
-    foreach ($sheet->toArray(null, true, true, false) as $row) {
-      $rows[] = $row;
-    }
+
+    $rows = supplier_import_parse_xlsx_basic($tmpPath);
     return supplier_import_extract_rows($rows);
   }
 
