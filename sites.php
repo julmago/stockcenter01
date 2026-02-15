@@ -166,6 +166,13 @@ $nextPage = min($totalPages, $page + 1);
         <h2 class="page-title">Sitios</h2>
         <span class="muted">Configurá márgenes por canal (extra %).</span>
       </div>
+      <div class="inline-actions">
+        <?php if ($showNewForm && !$editSite): ?>
+          <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
+        <?php else: ?>
+          <a class="btn" href="sites.php?<?= e(http_build_query(array_merge($queryBase, ['new' => 1]))) ?>">Nuevo sitio</a>
+        <?php endif; ?>
+      </div>
     </div>
 
     <?php if ($error !== ''): ?>
@@ -185,14 +192,6 @@ $nextPage = min($totalPages, $page + 1);
           <?php if ($q !== ''): ?><a class="btn btn-ghost" href="sites.php">Limpiar</a><?php endif; ?>
         </div>
       </form>
-    </div>
-
-    <div class="inline-actions" style="margin-bottom: var(--space-4);">
-      <?php if ($showNewForm && !$editSite): ?>
-        <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
-      <?php else: ?>
-        <a class="btn" href="sites.php?<?= e(http_build_query(array_merge($queryBase, ['new' => 1]))) ?>">Nuevo sitio</a>
-      <?php endif; ?>
     </div>
 
     <?php if ($showNewForm): ?>
