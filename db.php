@@ -338,6 +338,7 @@ function ensure_sites_schema(): void {
     margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     is_visible TINYINT(1) NOT NULL DEFAULT 1,
+    show_in_product TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
     PRIMARY KEY (id),
@@ -352,6 +353,10 @@ function ensure_sites_schema(): void {
 
   if (!isset($site_columns['is_visible'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN is_visible TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active");
+  }
+
+  if (!isset($site_columns['show_in_product'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN show_in_product TINYINT(1) NOT NULL DEFAULT 1 AFTER is_visible");
   }
 
   $ready = true;

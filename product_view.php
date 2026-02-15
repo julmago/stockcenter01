@@ -4,6 +4,7 @@ require_once __DIR__ . '/db.php';
 require_login();
 ensure_product_suppliers_schema();
 ensure_brands_schema();
+ensure_sites_schema();
 
 $id = (int)get('id','0');
 if ($id <= 0) abort(400, 'Falta id.');
@@ -349,6 +350,61 @@ $st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type
 $st->execute([$id]);
 $supplier_links = $st->fetchAll();
 
+$supplier_margin_column = 'default_margin_percent';
+$supplier_columns_st = db()->query("SHOW COLUMNS FROM suppliers");
+if ($supplier_columns_st) {
+  $supplier_margin_column = null;
+  foreach ($supplier_columns_st->fetchAll() as $supplier_column) {
+    $field = (string)($supplier_column['Field'] ?? '');
+    if ($field === 'base_percent' || $field === 'base_margin_percent') {
+      $supplier_margin_column = $field;
+      break;
+    }
+    if ($field === 'default_margin_percent') {
+      $supplier_margin_column = $field;
+    } elseif ($supplier_margin_column === null && stripos($field, 'margin') !== false) {
+      $supplier_margin_column = $field;
+    }
+  }
+}
+
+$supplier_margin_expr = '0';
+if ($supplier_margin_column !== null) {
+  $safe_supplier_margin_column = str_replace('`', '``', $supplier_margin_column);
+  $supplier_margin_expr = "COALESCE(s.`{$safe_supplier_margin_column}`, 0)";
+}
+
+$st = db()->prepare("SELECT ps.id, ps.supplier_cost, ps.cost_unitario, ps.cost_type, ps.units_per_pack,
+  {$supplier_margin_expr} AS supplier_base_percent
+  FROM product_suppliers ps
+  INNER JOIN suppliers s ON s.id = ps.supplier_id
+  WHERE ps.product_id = ? AND ps.is_active = 1
+  ORDER BY ps.id ASC
+  LIMIT 1");
+$st->execute([$id]);
+$active_supplier_link = $st->fetch();
+
+$active_supplier_unit_cost = null;
+$active_supplier_base_percent = 0.0;
+if ($active_supplier_link) {
+  if ($active_supplier_link['cost_unitario'] !== null && trim((string)$active_supplier_link['cost_unitario']) !== '') {
+    $active_supplier_unit_cost = (float)$active_supplier_link['cost_unitario'];
+  } elseif ($active_supplier_link['supplier_cost'] !== null && trim((string)$active_supplier_link['supplier_cost']) !== '') {
+    if (($active_supplier_link['cost_type'] ?? 'UNIDAD') === 'PACK' && (int)($active_supplier_link['units_per_pack'] ?? 0) > 0) {
+      $active_supplier_unit_cost = (float)$active_supplier_link['supplier_cost'] / (int)$active_supplier_link['units_per_pack'];
+    } else {
+      $active_supplier_unit_cost = (float)$active_supplier_link['supplier_cost'];
+    }
+  }
+  $active_supplier_base_percent = (float)($active_supplier_link['supplier_base_percent'] ?? 0);
+}
+
+$site_prices = [];
+$st = db()->query("SELECT id, name, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE show_in_product = 1 ORDER BY id ASC");
+if ($st) {
+  $site_prices = $st->fetchAll();
+}
+
 ?>
 <!doctype html>
 <html>
@@ -514,6 +570,70 @@ $supplier_links = $st->fetchAll();
         </div>
       <?php endif; ?>
     </div>
+<div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Códigos</h3>
+        <span class="muted small"><?= count($codes) ?> registrados</span>
+      </div>
+      <div class="card-body product-codes-body">
+        <?php if ($can_add_code): ?>
+          <form method="post" class="form-row product-codes-form">
+            <input type="hidden" name="action" value="add_code">
+            <div class="form-group">
+              <label class="form-label">Código</label>
+              <input class="form-control" type="text" name="code" placeholder="Escaneá código" autofocus>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tipo</label>
+              <select name="code_type">
+                <option value="BARRA">BARRA</option>
+                <option value="MPN">MPN</option>
+              </select>
+            </div>
+            <div class="form-group" style="align-self:end;">
+              <button class="btn" type="submit">Agregar</button>
+            </div>
+          </form>
+        <?php endif; ?>
+
+        <div class="table-wrapper product-table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>código</th>
+                <th>tipo</th>
+                <th>fecha</th>
+                <?php if ($can_add_code): ?>
+                  <th>acciones</th>
+                <?php endif; ?>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!$codes): ?>
+                <tr><td colspan="<?= $can_add_code ? 4 : 3 ?>">Sin códigos todavía.</td></tr>
+              <?php else: ?>
+                <?php foreach ($codes as $c): ?>
+                  <tr>
+                    <td><?= e($c['code']) ?></td>
+                    <td><?= e($c['code_type']) ?></td>
+                    <td><?= e($c['created_at']) ?></td>
+                    <?php if ($can_add_code): ?>
+                      <td class="table-actions">
+                        <form method="post" style="display:inline;">
+                          <input type="hidden" name="action" value="delete_code">
+                          <input type="hidden" name="code_id" value="<?= (int)$c['id'] ?>">
+                          <button class="btn btn-danger" type="submit">Eliminar</button>
+                        </form>
+                      </td>
+                    <?php endif; ?>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <div class="card-header">
@@ -634,62 +754,52 @@ $supplier_links = $st->fetchAll();
       </div>
     </div>
 
+    
+
     <div class="card">
       <div class="card-header">
-        <h3 class="card-title">Códigos</h3>
-        <span class="muted small"><?= count($codes) ?> registrados</span>
+        <h3 class="card-title">Precios por sitio</h3>
+        <span class="muted small"><?= count($site_prices) ?> visibles en producto</span>
       </div>
-      <div class="card-body product-codes-body">
-        <?php if ($can_add_code): ?>
-          <form method="post" class="form-row product-codes-form">
-            <input type="hidden" name="action" value="add_code">
-            <div class="form-group">
-              <label class="form-label">Código</label>
-              <input class="form-control" type="text" name="code" placeholder="Escaneá código" autofocus>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Tipo</label>
-              <select name="code_type">
-                <option value="BARRA">BARRA</option>
-                <option value="MPN">MPN</option>
-              </select>
-            </div>
-            <div class="form-group" style="align-self:end;">
-              <button class="btn" type="submit">Agregar</button>
-            </div>
-          </form>
-        <?php endif; ?>
-
+      <div class="card-body">
         <div class="table-wrapper product-table-wrapper">
           <table class="table">
             <thead>
               <tr>
-                <th>código</th>
-                <th>tipo</th>
-                <th>fecha</th>
-                <?php if ($can_add_code): ?>
-                  <th>acciones</th>
-                <?php endif; ?>
+                <th>sitio</th>
+                <th>margen (%)</th>
+                <th>estado</th>
+                <th>mostrar en lista</th>
+                <th>mostrar en producto</th>
+                <th>precio</th>
               </tr>
             </thead>
             <tbody>
-              <?php if (!$codes): ?>
-                <tr><td colspan="<?= $can_add_code ? 4 : 3 ?>">Sin códigos todavía.</td></tr>
+              <?php if (!$site_prices): ?>
+                <tr><td colspan="6">Sin sitios configurados para producto.</td></tr>
               <?php else: ?>
-                <?php foreach ($codes as $c): ?>
+                <?php foreach ($site_prices as $site): ?>
                   <tr>
-                    <td><?= e($c['code']) ?></td>
-                    <td><?= e($c['code_type']) ?></td>
-                    <td><?= e($c['created_at']) ?></td>
-                    <?php if ($can_add_code): ?>
-                      <td class="table-actions">
-                        <form method="post" style="display:inline;">
-                          <input type="hidden" name="action" value="delete_code">
-                          <input type="hidden" name="code_id" value="<?= (int)$c['id'] ?>">
-                          <button class="btn btn-danger" type="submit">Eliminar</button>
-                        </form>
-                      </td>
-                    <?php endif; ?>
+                    <td><?= e($site['name']) ?></td>
+                    <td><?= e(number_format((float)$site['margin_percent'], 2, '.', '')) ?></td>
+                    <td><?= (int)$site['is_active'] === 1 ? 'Activo' : 'Inactivo' ?></td>
+                    <td><?= (int)$site['is_visible'] === 1 ? 'Activo' : 'Inactivo' ?></td>
+                    <td><?= (int)$site['show_in_product'] === 1 ? 'Activo' : 'Inactivo' ?></td>
+                    <td>
+                      <?php
+                        if ($active_supplier_unit_cost === null) {
+                          echo '—';
+                        } else {
+                          $final_price = round(
+                            $active_supplier_unit_cost
+                            * (1 + ($active_supplier_base_percent / 100))
+                            * (1 + ((float)$site['margin_percent'] / 100)),
+                            0
+                          );
+                          echo e((string)(int)$final_price);
+                        }
+                      ?>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>
