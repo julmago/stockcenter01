@@ -71,7 +71,7 @@ $unmatchedRows = $unmatchedSt->fetchAll();
         <span class="muted">Proveedor: <?= e((string)$run['supplier_name']) ?> | Fuente: <?= e((string)$run['source_type']) ?> | price_col=<?= e((string)($run['selected_price_column'] ?? '—')) ?> | dedupe=<?= e((string)($run['dedupe_mode'] ?? '—')) ?></span>
       </div>
       <div class="inline-actions">
-        <a class="btn btn-ghost" href="suppliers.php?edit_id=<?= (int)$run['supplier_id'] ?>">Volver</a>
+        <a class="btn btn-ghost" href="suppliers_import.php?supplier_id=<?= (int)$run['supplier_id'] ?>">Volver</a>
       </div>
     </div>
 

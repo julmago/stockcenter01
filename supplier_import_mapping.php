@@ -89,7 +89,7 @@ $mustSelectPrice = count($priceCandidates) > 1;
         <span class="muted">Proveedor: <?= e((string)$supplier['name']) ?><?= !empty($ctx['filename']) ? ' | Archivo: ' . e((string)$ctx['filename']) : '' ?></span>
       </div>
       <div class="inline-actions">
-        <a class="btn btn-ghost" href="suppliers.php?edit_id=<?= (int)$supplierId ?>#importacion">Volver</a>
+        <a class="btn btn-ghost" href="suppliers_import.php?supplier_id=<?= (int)$supplierId ?>">Volver</a>
       </div>
     </div>
 
