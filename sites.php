@@ -20,6 +20,7 @@ if (is_post()) {
     $name = trim(post('name'));
     $margin = normalize_site_margin_percent_value(post('margin_percent'));
     $isActive = post('is_active') === '1' ? 1 : 0;
+    $isVisible = post('is_visible', '1') === '0' ? 0 : 1;
 
     if ($name === '') {
       $error = 'Ingresá el nombre del sitio.';
@@ -34,8 +35,8 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('INSERT INTO sites(name, margin_percent, is_active, updated_at) VALUES(?, ?, ?, NOW())');
-          $st->execute([$name, $margin, $isActive]);
+          $st = $pdo->prepare('INSERT INTO sites(name, margin_percent, is_active, is_visible, updated_at) VALUES(?, ?, ?, ?, NOW())');
+          $st->execute([$name, $margin, $isActive, $isVisible]);
           header('Location: sites.php?created=1');
           exit;
         }
@@ -50,6 +51,7 @@ if (is_post()) {
     $name = trim(post('name'));
     $margin = normalize_site_margin_percent_value(post('margin_percent'));
     $isActive = post('is_active') === '1' ? 1 : 0;
+    $isVisible = post('is_visible', '1') === '0' ? 0 : 1;
 
     if ($id <= 0) {
       $error = 'Sitio inválido.';
@@ -66,8 +68,8 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('UPDATE sites SET name = ?, margin_percent = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
-          $st->execute([$name, $margin, $isActive, $id]);
+          $st = $pdo->prepare('UPDATE sites SET name = ?, margin_percent = ?, is_active = ?, is_visible = ?, updated_at = NOW() WHERE id = ?');
+          $st->execute([$name, $margin, $isActive, $isVisible, $id]);
           header('Location: sites.php?updated=1');
           exit;
         }
@@ -120,7 +122,7 @@ $totalPages = max(1, (int)ceil($total / $limit));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $limit;
 
-$listSql = "SELECT s.id, s.name, s.margin_percent, s.is_active
+$listSql = "SELECT s.id, s.name, s.margin_percent, s.is_active, s.is_visible
   FROM sites s
   $where
   ORDER BY s.name ASC
@@ -137,7 +139,7 @@ $sites = $listSt->fetchAll();
 $editId = (int)get('edit_id', '0');
 $editSite = null;
 if ($editId > 0) {
-  $st = $pdo->prepare('SELECT id, name, margin_percent, is_active FROM sites WHERE id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT id, name, margin_percent, is_active, is_visible FROM sites WHERE id = ? LIMIT 1');
   $st->execute([$editId]);
   $editSite = $st->fetch();
 }
@@ -213,14 +215,24 @@ $nextPage = min($totalPages, $page + 1);
               <span class="form-label">Margen (%)</span>
               <input class="form-control" type="number" name="margin_percent" min="-100" max="999.99" step="0.01" required value="<?= e($editSite ? number_format((float)$editSite['margin_percent'], 2, '.', '') : '0') ?>">
             </label>
-            <label class="form-field" style="align-self: end;">
-              <span class="form-label">Estado</span>
-              <select class="form-control" name="is_active">
-                <?php $activeValue = $editSite ? (int)$editSite['is_active'] : 1; ?>
-                <option value="1" <?= $activeValue === 1 ? 'selected' : '' ?>>Activo</option>
-                <option value="0" <?= $activeValue === 0 ? 'selected' : '' ?>>Inactivo</option>
-              </select>
-            </label>
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: var(--space-3); align-self: end;">
+              <label class="form-field">
+                <span class="form-label">Estado</span>
+                <select class="form-control" name="is_active">
+                  <?php $activeValue = $editSite ? (int)$editSite['is_active'] : 1; ?>
+                  <option value="1" <?= $activeValue === 1 ? 'selected' : '' ?>>Activo</option>
+                  <option value="0" <?= $activeValue === 0 ? 'selected' : '' ?>>Inactivo</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span class="form-label">Mostrar</span>
+                <select class="form-control" name="is_visible">
+                  <?php $visibleValue = $editSite ? (int)$editSite['is_visible'] : 1; ?>
+                  <option value="1" <?= $visibleValue === 1 ? 'selected' : '' ?>>Activo</option>
+                  <option value="0" <?= $visibleValue === 0 ? 'selected' : '' ?>>Inactivo</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div class="inline-actions">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
@@ -238,18 +250,20 @@ $nextPage = min($totalPages, $page + 1);
               <th>Nombre</th>
               <th>Margen (%)</th>
               <th>Estado</th>
+              <th>Mostrar</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$sites): ?>
-              <tr><td colspan="4">Sin sitios.</td></tr>
+              <tr><td colspan="5">Sin sitios.</td></tr>
             <?php else: ?>
               <?php foreach ($sites as $site): ?>
                 <tr>
                   <td><?= e($site['name']) ?></td>
                   <td><?= e(number_format((float)$site['margin_percent'], 2, '.', '')) ?></td>
                   <td><?= (int)$site['is_active'] === 1 ? 'Activo' : 'Inactivo' ?></td>
+                  <td><?= (int)$site['is_visible'] === 1 ? 'Activo' : 'Inactivo' ?></td>
                   <td>
                     <div class="inline-actions">
                       <a class="btn btn-ghost btn-sm" href="sites.php?<?= e(http_build_query(array_merge($queryBase, ['page' => $page, 'edit_id' => (int)$site['id']])) ) ?>">Modificar</a>
