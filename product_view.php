@@ -27,7 +27,7 @@ $parse_supplier_cost_integer = static function (string $supplier_cost_raw): ?int
     return null;
   }
 
-  return max(0, (int)$supplier_cost_raw);
+  return max(0, (int)round((float)$supplier_cost_raw, 0));
 };
 
 if (is_post() && post('action') === 'update') {
@@ -553,7 +553,7 @@ $supplier_links = $st->fetchAll();
                     <td><?= e($link['supplier_sku']) ?></td>
                     <td><?= e($link['cost_type'] === 'PACK' ? 'Pack' : 'Unidad') ?></td>
                     <td><?= $link['cost_type'] === 'PACK' ? (int)$link['units_per_pack'] : '-' ?></td>
-                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format((float)$link['supplier_cost'], 0, '', '') ?></td>
+                    <td><?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '—' : number_format((float)$link['supplier_cost'], 0, ',', '.') ?></td>
                     <td><?= (int)$link['is_active'] === 1 ? 'Sí' : 'No' ?></td>
                     <?php if ($can_edit): ?>
                       <td class="table-actions">
@@ -565,7 +565,7 @@ $supplier_links = $st->fetchAll();
                           data-supplier-sku="<?= e($link['supplier_sku']) ?>"
                           data-cost-type="<?= e($link['cost_type']) ?>"
                           data-units-per-pack="<?= (int)($link['units_per_pack'] ?? 0) ?>"
-                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : number_format((float)$link['supplier_cost'], 0, '', '') ?>"
+                          data-supplier-cost="<?= ($link['supplier_cost'] === null || trim((string)$link['supplier_cost']) === '') ? '' : (string)(int)round((float)$link['supplier_cost'], 0) ?>"
                           style="margin-right:6px;"
                         >Modificar</button>
                         <?php if ((int)$link['is_active'] !== 1): ?>

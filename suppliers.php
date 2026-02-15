@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/supplier_import_lib.php';
 require_login();
 ensure_product_suppliers_schema();
 
@@ -16,57 +17,69 @@ $message = '';
 if (is_post()) {
   $action = post('action');
 
-  if ($action === 'create_supplier') {
+  if ($action === 'create_supplier' || $action === 'update_supplier') {
+    $id = (int)post('id', '0');
     $name = trim(post('name'));
-    $margin = normalize_margin_percent_value(post('default_margin_percent'));
+    $margin = normalize_margin_percent_value(post('base_margin_percent'));
+    $dedupeMode = strtoupper(trim((string)post('import_dedupe_mode', 'LAST')));
+    $defaultCostType = strtoupper(trim((string)post('import_default_cost_type', 'UNIDAD')));
+    $defaultUnitsRaw = trim((string)post('import_default_units_per_pack', ''));
+    $defaultDiscount = supplier_import_normalize_discount(post('import_discount_default', '0'));
+
+    if (!in_array($dedupeMode, ['LAST', 'FIRST', 'MIN', 'MAX', 'PREFER_PROMO'], true)) {
+      $dedupeMode = 'LAST';
+    }
+    if (!in_array($defaultCostType, ['UNIDAD', 'PACK'], true)) {
+      $defaultCostType = 'UNIDAD';
+    }
+
+    $defaultUnits = null;
+    if ($defaultUnitsRaw !== '') {
+      $defaultUnits = (int)$defaultUnitsRaw;
+      if ($defaultUnits <= 0) {
+        $error = 'Units por pack default inválido.';
+      }
+    }
 
     if ($name === '') {
       $error = 'Ingresá el nombre del proveedor.';
     } elseif ($margin === null) {
       $error = 'Base (%) inválida. Usá un valor entre 0 y 999.99.';
-    } else {
-      try {
-        $st = $pdo->prepare('SELECT id FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1');
-        $st->execute([$name]);
-        if ($st->fetch()) {
-          $error = 'Ese proveedor ya existe.';
-        } else {
-          $st = $pdo->prepare('INSERT INTO suppliers(name, default_margin_percent, is_active, updated_at) VALUES(?, ?, 1, NOW())');
-          $st->execute([$name, $margin]);
-          header('Location: suppliers.php?created=1');
-          exit;
-        }
-      } catch (Throwable $t) {
-        $error = 'No se pudo crear el proveedor.';
-      }
+    } elseif ($defaultDiscount === null) {
+      $error = 'Descuento default inválido. Usá un valor entre -100 y 100.';
     }
-  }
 
-  if ($action === 'update_supplier') {
-    $id = (int)post('id', '0');
-    $name = trim(post('name'));
-    $margin = normalize_margin_percent_value(post('default_margin_percent'));
-
-    if ($id <= 0) {
-      $error = 'Proveedor inválido.';
-    } elseif ($name === '') {
-      $error = 'Ingresá el nombre del proveedor.';
-    } elseif ($margin === null) {
-      $error = 'Base (%) inválida. Usá un valor entre 0 y 999.99.';
-    } else {
+    if ($error === '') {
       try {
-        $st = $pdo->prepare('SELECT id FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id <> ? LIMIT 1');
-        $st->execute([$name, $id]);
-        if ($st->fetch()) {
-          $error = 'Ese proveedor ya existe.';
+        if ($action === 'create_supplier') {
+          $st = $pdo->prepare('SELECT id FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1');
+          $st->execute([$name]);
+          if ($st->fetch()) {
+            $error = 'Ese proveedor ya existe.';
+          } else {
+            $st = $pdo->prepare('INSERT INTO suppliers(name, default_margin_percent, base_margin_percent, import_dedupe_mode, import_default_cost_type, import_default_units_per_pack, import_discount_default, is_active, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, 1, NOW())');
+            $st->execute([$name, $margin, $margin, $dedupeMode, $defaultCostType, $defaultUnits, $defaultDiscount]);
+            header('Location: suppliers.php?created=1');
+            exit;
+          }
         } else {
-          $st = $pdo->prepare('UPDATE suppliers SET name = ?, default_margin_percent = ?, updated_at = NOW() WHERE id = ?');
-          $st->execute([$name, $margin, $id]);
-          header('Location: suppliers.php?updated=1');
-          exit;
+          if ($id <= 0) {
+            $error = 'Proveedor inválido.';
+          } else {
+            $st = $pdo->prepare('SELECT id FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id <> ? LIMIT 1');
+            $st->execute([$name, $id]);
+            if ($st->fetch()) {
+              $error = 'Ese proveedor ya existe.';
+            } else {
+              $st = $pdo->prepare('UPDATE suppliers SET name = ?, default_margin_percent = ?, base_margin_percent = ?, import_dedupe_mode = ?, import_default_cost_type = ?, import_default_units_per_pack = ?, import_discount_default = ?, updated_at = NOW() WHERE id = ?');
+              $st->execute([$name, $margin, $margin, $dedupeMode, $defaultCostType, $defaultUnits, $defaultDiscount, $id]);
+              header('Location: suppliers.php?updated=1');
+              exit;
+            }
+          }
         }
       } catch (Throwable $t) {
-        $error = 'No se pudo modificar el proveedor.';
+        $error = 'No se pudo guardar el proveedor.';
       }
     }
   }
@@ -77,6 +90,9 @@ if (get('created') === '1') {
 }
 if (get('updated') === '1') {
   $message = 'Proveedor modificado.';
+}
+if (get('error') === 'pdf_manual') {
+  $error = 'PDF requiere conversión previa a texto/CSV.';
 }
 
 $where = '';
@@ -97,7 +113,7 @@ $totalPages = max(1, (int)ceil($total / $limit));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $limit;
 
-$listSql = "SELECT s.id, s.name, s.default_margin_percent, s.is_active
+$listSql = "SELECT s.id, s.name, s.base_margin_percent, s.import_dedupe_mode, s.import_default_cost_type, s.import_default_units_per_pack, s.import_discount_default, s.is_active
   FROM suppliers s
   $where
   ORDER BY s.name ASC
@@ -114,7 +130,7 @@ $suppliers = $listSt->fetchAll();
 $editId = (int)get('edit_id', '0');
 $editSupplier = null;
 if ($editId > 0) {
-  $st = $pdo->prepare('SELECT id, name, default_margin_percent FROM suppliers WHERE id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT id, name, base_margin_percent, import_dedupe_mode, import_default_cost_type, import_default_units_per_pack, import_discount_default FROM suppliers WHERE id = ? LIMIT 1');
   $st->execute([$editId]);
   $editSupplier = $st->fetch();
 }
@@ -139,7 +155,7 @@ $nextPage = min($totalPages, $page + 1);
     <div class="page-header">
       <div>
         <h2 class="page-title">Proveedores</h2>
-        <span class="muted">Administrá proveedores y su base (%).</span>
+        <span class="muted">Administrá proveedores y reglas de importación.</span>
       </div>
     </div>
 
@@ -178,7 +194,32 @@ $nextPage = min($totalPages, $page + 1);
           </label>
           <label class="form-field">
             <span class="form-label">Base (%)</span>
-            <input class="form-control" type="number" name="default_margin_percent" min="0" max="999.99" step="0.01" placeholder="0, 20, 30..." required value="<?= e($editSupplier ? number_format((float)$editSupplier['default_margin_percent'], 2, '.', '') : '0') ?>">
+            <input class="form-control" type="number" name="base_margin_percent" min="0" max="999.99" step="0.01" required value="<?= e($editSupplier ? number_format((float)$editSupplier['base_margin_percent'], 2, '.', '') : '0') ?>">
+          </label>
+          <label class="form-field">
+            <span class="form-label">Regla duplicados</span>
+            <?php $dedupeValue = $editSupplier ? (string)$editSupplier['import_dedupe_mode'] : 'LAST'; ?>
+            <select class="form-control" name="import_dedupe_mode">
+              <?php foreach (['LAST', 'FIRST', 'MIN', 'MAX', 'PREFER_PROMO'] as $mode): ?>
+                <option value="<?= e($mode) ?>" <?= $dedupeValue === $mode ? 'selected' : '' ?>><?= e($mode) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="form-field">
+            <span class="form-label">Cost type default</span>
+            <?php $costTypeValue = $editSupplier ? (string)$editSupplier['import_default_cost_type'] : 'UNIDAD'; ?>
+            <select class="form-control" name="import_default_cost_type">
+              <option value="UNIDAD" <?= $costTypeValue === 'UNIDAD' ? 'selected' : '' ?>>UNIDAD</option>
+              <option value="PACK" <?= $costTypeValue === 'PACK' ? 'selected' : '' ?>>PACK</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span class="form-label">Units por pack default</span>
+            <input class="form-control" type="number" min="1" step="1" name="import_default_units_per_pack" value="<?= e($editSupplier && $editSupplier['import_default_units_per_pack'] !== null ? (string)$editSupplier['import_default_units_per_pack'] : '') ?>">
+          </label>
+          <label class="form-field">
+            <span class="form-label">Descuento default (%)</span>
+            <input class="form-control" type="number" min="-100" max="100" step="0.01" name="import_discount_default" value="<?= e($editSupplier && $editSupplier['import_discount_default'] !== null ? number_format((float)$editSupplier['import_discount_default'], 2, '.', '') : '0') ?>">
           </label>
         </div>
         <div class="inline-actions">
@@ -192,6 +233,55 @@ $nextPage = min($totalPages, $page + 1);
       </form>
     </div>
 
+    <?php if ($editSupplier): ?>
+      <div class="card" id="importacion">
+        <div class="card-header">
+          <h3 class="card-title">Importación</h3>
+        </div>
+        <form method="post" action="supplier_import.php" enctype="multipart/form-data" class="stack">
+          <input type="hidden" name="supplier_id" value="<?= (int)$editSupplier['id'] ?>">
+          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4);">
+            <label class="form-field">
+              <span class="form-label">Tipo de fuente</span>
+              <select class="form-control" name="source_type" id="source-type-select" required>
+                <option value="CSV">CSV</option>
+                <option value="XLSX">XLSX</option>
+                <option value="TXT">TXT</option>
+                <option value="PASTE">PEGAR TEXTO</option>
+                <option value="PDF">PDF (manual)</option>
+              </select>
+            </label>
+            <label class="form-field" id="source-file-field">
+              <span class="form-label">Archivo</span>
+              <input class="form-control" type="file" name="source_file" accept=".csv,.xlsx,.txt,.pdf">
+            </label>
+            <label class="form-field">
+              <span class="form-label">Descuento extra (%)</span>
+              <input class="form-control" type="number" min="-100" max="100" step="0.01" name="extra_discount_percent" value="<?= e($editSupplier['import_discount_default'] !== null ? number_format((float)$editSupplier['import_discount_default'], 2, '.', '') : '0') ?>">
+            </label>
+            <label class="form-field">
+              <span class="form-label">Cost type default</span>
+              <select class="form-control" name="default_cost_type">
+                <option value="UNIDAD" <?= ((string)$editSupplier['import_default_cost_type'] === 'UNIDAD') ? 'selected' : '' ?>>UNIDAD</option>
+                <option value="PACK" <?= ((string)$editSupplier['import_default_cost_type'] === 'PACK') ? 'selected' : '' ?>>PACK</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span class="form-label">Units por pack default</span>
+              <input class="form-control" type="number" min="1" step="1" name="default_units_per_pack" value="<?= e($editSupplier['import_default_units_per_pack'] !== null ? (string)$editSupplier['import_default_units_per_pack'] : '') ?>">
+            </label>
+          </div>
+          <label class="form-field" id="paste-text-field" style="display:none;">
+            <span class="form-label">Pegar texto</span>
+            <textarea class="form-control" name="paste_text" rows="8" placeholder="SKU precio descripción"></textarea>
+          </label>
+          <div class="inline-actions">
+            <button class="btn" type="submit">Previsualizar importación</button>
+          </div>
+        </form>
+      </div>
+    <?php endif; ?>
+
     <div class="card">
       <div class="table-wrapper">
         <table class="table">
@@ -199,21 +289,26 @@ $nextPage = min($totalPages, $page + 1);
             <tr>
               <th>Nombre</th>
               <th>Base (%)</th>
+              <th>Duplicados</th>
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$suppliers): ?>
-              <tr><td colspan="4">Sin proveedores.</td></tr>
+              <tr><td colspan="5">Sin proveedores.</td></tr>
             <?php else: ?>
               <?php foreach ($suppliers as $supplier): ?>
                 <tr>
                   <td><?= e($supplier['name']) ?></td>
-                  <td><?= e(number_format((float)$supplier['default_margin_percent'], 2, '.', '')) ?></td>
+                  <td><?= e(number_format((float)$supplier['base_margin_percent'], 2, '.', '')) ?></td>
+                  <td><?= e((string)$supplier['import_dedupe_mode']) ?></td>
                   <td><?= (int)$supplier['is_active'] === 1 ? 'Activo' : 'No' ?></td>
                   <td>
-                    <a class="btn btn-ghost btn-sm" href="suppliers.php?<?= e(http_build_query(array_merge($queryBase, ['page' => $page, 'edit_id' => (int)$supplier['id']])) ) ?>">Modificar</a>
+                    <div class="inline-actions">
+                      <a class="btn btn-ghost btn-sm" href="suppliers.php?<?= e(http_build_query(array_merge($queryBase, ['page' => $page, 'edit_id' => (int)$supplier['id']])) ) ?>">Modificar</a>
+                      <a class="btn btn-ghost btn-sm" href="suppliers.php?<?= e(http_build_query(array_merge($queryBase, ['page' => $page, 'edit_id' => (int)$supplier['id']])) ) ?>#importacion">Importar lista</a>
+                    </div>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -244,5 +339,22 @@ $nextPage = min($totalPages, $page + 1);
     </div>
   </div>
 </main>
+<script>
+  const sourceType = document.getElementById('source-type-select');
+  const pasteField = document.getElementById('paste-text-field');
+  const fileField = document.getElementById('source-file-field');
+  if (sourceType && pasteField && fileField) {
+    const sync = () => {
+      const val = sourceType.value;
+      pasteField.style.display = val === 'PASTE' ? 'block' : 'none';
+      fileField.style.display = val === 'PASTE' ? 'none' : 'block';
+      if (val === 'PDF') {
+        alert('PDF requiere conversión previa a texto/CSV.');
+      }
+    };
+    sourceType.addEventListener('change', sync);
+    sync();
+  }
+</script>
 </body>
 </html>
