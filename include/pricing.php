@@ -17,10 +17,7 @@ if (!function_exists('get_effective_unit_cost')) {
       return null;
     }
 
-    $supplierDiscount = pricing_to_float($supplier_row['discount_percent'] ?? 0, 0.0);
-    $costWithDiscount = (float)$supplierCost * (1 - ($supplierDiscount / 100));
-
-    $effectiveCost = $costWithDiscount;
+    $effectiveCost = (float)$supplierCost;
 
     $costType = strtoupper((string)($ps_row['cost_type'] ?? 'UNIDAD'));
     if ($costType === 'PACK') {

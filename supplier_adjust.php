@@ -49,14 +49,14 @@ if (is_post() && post('action') === 'apply_supplier_adjust') {
         $update = $pdo->prepare("UPDATE product_suppliers ps
           LEFT JOIN suppliers s ON s.id = ps.supplier_id
           LEFT JOIN products p ON p.id = ps.product_id
-          SET ps.supplier_cost = ROUND(ps.supplier_cost * ?, 2),
+          SET ps.supplier_cost = ROUND(ps.supplier_cost * ?, 0),
               ps.cost_unitario = ROUND(
-                ROUND(ps.supplier_cost * ?, 2)
+                ROUND(ps.supplier_cost * ?, 0)
                 / CASE
                     WHEN ps.cost_type = 'PACK' THEN COALESCE(NULLIF(COALESCE(ps.units_per_pack, s.import_default_units_per_pack, p.sale_units_per_pack, 1), 0), 1)
                     ELSE 1
                   END,
-                4
+                0
               ),
               ps.updated_at = NOW()
           WHERE ps.supplier_id = ?

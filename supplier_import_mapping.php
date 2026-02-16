@@ -23,6 +23,8 @@ $analysis = $ctx['analysis'] ?? [];
 $headers = (array)($analysis['headers'] ?? []);
 $priceCandidates = (array)($analysis['price_candidates'] ?? []);
 $skuCandidates = (array)($analysis['sku_candidates'] ?? []);
+$costTypeCandidates = (array)($analysis['cost_type_candidates'] ?? []);
+$unitsCandidates = (array)($analysis['units_candidates'] ?? []);
 $sameHeaderAsMapping = !empty($supplier['import_mapping_header_hash']) && !empty($analysis['header_hash']) && (string)$supplier['import_mapping_header_hash'] === (string)$analysis['header_hash'];
 
 $defaultSku = (string)($supplier['import_sku_column'] ?? '');
@@ -37,11 +39,22 @@ if (count($priceCandidates) > 1) {
   $defaultPrice = '';
 }
 
+$defaultCostTypeColumn = (string)($supplier['import_cost_type_column'] ?? '');
+if ($defaultCostTypeColumn !== '' && !in_array($defaultCostTypeColumn, $headers, true)) {
+  $defaultCostTypeColumn = '';
+}
+$defaultUnitsColumn = (string)($supplier['import_units_per_pack_column'] ?? '');
+if ($defaultUnitsColumn !== '' && !in_array($defaultUnitsColumn, $headers, true)) {
+  $defaultUnitsColumn = '';
+}
+
 $error = '';
 if (is_post()) {
   $skuColumn = trim((string)post('sku_column', ''));
   $priceColumn = trim((string)post('price_column', ''));
   $extraDiscount = post('extra_discount_percent', '0');
+  $costTypeColumn = trim((string)post('cost_type_column', ''));
+  $unitsPerPackColumn = trim((string)post('units_per_pack_column', ''));
   $saveMapping = post('save_mapping', '0') === '1' ? 1 : 0;
 
   $mustSelectPrice = count($priceCandidates) > 1;
@@ -57,6 +70,8 @@ if (is_post()) {
         'sku_column' => $skuColumn,
         'price_column' => $priceColumn,
         'extra_discount_percent' => $extraDiscount,
+        'cost_type_column' => $costTypeColumn,
+        'units_per_pack_column' => $unitsPerPackColumn,
         'save_mapping' => $saveMapping,
       ]);
       unset($_SESSION['supplier_import_mapping'][$token]);
@@ -68,6 +83,8 @@ if (is_post()) {
 
   $defaultSku = $skuColumn;
   $defaultPrice = $priceColumn;
+  $defaultCostTypeColumn = $costTypeColumn;
+  $defaultUnitsColumn = $unitsPerPackColumn;
 }
 
 $mustSelectPrice = count($priceCandidates) > 1;
@@ -117,6 +134,26 @@ $mustSelectPrice = count($priceCandidates) > 1;
               <option value="">Seleccionar...</option>
               <?php foreach (($priceCandidates ?: $headers) as $header): ?>
                 <option value="<?= e($header) ?>" <?= $defaultPrice === $header ? 'selected' : '' ?>><?= e($header) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span class="form-label">Tipo de costo (opcional)</span>
+            <select class="form-control" name="cost_type_column">
+              <option value="">No actualizar</option>
+              <?php foreach (($costTypeCandidates ?: $headers) as $header): ?>
+                <option value="<?= e($header) ?>" <?= $defaultCostTypeColumn === $header ? 'selected' : '' ?>><?= e($header) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span class="form-label">Unidades por pack (opcional)</span>
+            <select class="form-control" name="units_per_pack_column">
+              <option value="">No actualizar</option>
+              <?php foreach (($unitsCandidates ?: $headers) as $header): ?>
+                <option value="<?= e($header) ?>" <?= $defaultUnitsColumn === $header ? 'selected' : '' ?>><?= e($header) ?></option>
               <?php endforeach; ?>
             </select>
           </label>

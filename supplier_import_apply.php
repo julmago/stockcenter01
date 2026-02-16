@@ -23,6 +23,9 @@ if (!empty($run['applied_at'])) {
   redirect('supplier_import_preview.php?run_id=' . $runId);
 }
 
+$selectedCostTypeColumn = trim((string)($run['selected_cost_type_column'] ?? ''));
+$selectedUnitsPerPackColumn = trim((string)($run['selected_units_per_pack_column'] ?? ''));
+
 $rowsSt = db()->prepare("SELECT * FROM supplier_import_rows WHERE run_id = ? AND status = 'MATCHED' AND chosen_by_rule = 1");
 $rowsSt->execute([$runId]);
 $rows = $rowsSt->fetchAll();
@@ -47,6 +50,8 @@ try {
     LIMIT 1");
   $stUpdate = db()->prepare("UPDATE product_suppliers
     SET supplier_cost = ?,
+        cost_type = ?,
+        units_per_pack = ?,
         cost_unitario = ?,
         updated_at = NOW()
     WHERE id = ?");
@@ -70,9 +75,9 @@ try {
 
     $extraDiscount = isset($run['extra_discount_percent']) ? (float)$run['extra_discount_percent'] : 0.0;
     $supplierDiscount = isset($run['supplier_discount_percent']) ? (float)$run['supplier_discount_percent'] : 0.0;
-    $priceAfterFileDiscount = (float)$row['raw_price'] * (1 - ($extraDiscount / 100));
-    $priceAfterSupplierDiscount = $priceAfterFileDiscount * (1 - ($supplierDiscount / 100));
-    $supplierCostToSave = (int)round($priceAfterSupplierDiscount, 0);
+    $priceAfterSupplierDiscount = (float)$row['raw_price'] * (1 - ($supplierDiscount / 100));
+    $priceAfterFileDiscount = $priceAfterSupplierDiscount * (1 - ($extraDiscount / 100));
+    $supplierCostToSave = (int)round($priceAfterFileDiscount, 0);
 
     foreach ($matches as $match) {
       $psId = (int)$match['id'];
@@ -84,26 +89,43 @@ try {
       $before = $stBefore->fetch();
 
       $costType = strtoupper((string)($before['cost_type'] ?? 'UNIDAD'));
+      if ($selectedCostTypeColumn !== '') {
+        $rawCostType = strtoupper(trim((string)($row['raw_cost_type'] ?? '')));
+        if (in_array($rawCostType, ['UNIDAD', 'PACK'], true)) {
+          $costType = $rawCostType;
+        }
+      }
       if (!in_array($costType, ['UNIDAD', 'PACK'], true)) {
         $costType = 'UNIDAD';
       }
+
       $unitsPerPack = isset($before['units_per_pack']) ? (int)$before['units_per_pack'] : 0;
-      if ($unitsPerPack <= 0) {
+      if ($selectedUnitsPerPackColumn !== '') {
+        $rawUnitsPerPack = (int)($row['raw_units_per_pack'] ?? 0);
+        if ($rawUnitsPerPack > 0) {
+          $unitsPerPack = $rawUnitsPerPack;
+        }
+      }
+      if ($costType === 'PACK' && $unitsPerPack <= 0) {
         $unitsPerPack = isset($before['supplier_default_units_per_pack']) ? (int)$before['supplier_default_units_per_pack'] : 0;
       }
-      if ($unitsPerPack <= 0) {
+      if ($costType === 'PACK' && $unitsPerPack <= 0) {
         $unitsPerPack = isset($before['product_units_pack']) ? (int)$before['product_units_pack'] : 0;
       }
-      if ($unitsPerPack <= 0) {
-        $unitsPerPack = 1;
+      if ($costType !== 'PACK') {
+        $unitsPerPack = null;
       }
 
       $costUnitarioToSave = $supplierCostToSave;
       if ($costType === 'PACK') {
-        $costUnitarioToSave = round($supplierCostToSave / $unitsPerPack, 4);
+        $divisor = (int)$unitsPerPack;
+        if ($divisor <= 0) {
+          $divisor = 1;
+        }
+        $costUnitarioToSave = (int)round($supplierCostToSave / $divisor, 0);
       }
 
-      $stUpdate->execute([$supplierCostToSave, $costUnitarioToSave, $psId]);
+      $stUpdate->execute([$supplierCostToSave, $costType, $unitsPerPack, $costUnitarioToSave, $psId]);
       $stHist->execute([$psId, $runId, $before['supplier_cost'] ?? null, $supplierCostToSave, $changedBy, 'supplier import apply']);
     }
   }
