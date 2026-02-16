@@ -131,13 +131,20 @@ function ensure_product_suppliers_schema(): void {
     $pdo->exec("ALTER TABLE suppliers ADD COLUMN import_mapping_header_hash VARCHAR(64) NULL AFTER import_units_per_pack_column");
   }
 
-  if (!isset($supplier_columns['global_adjust_percent'])) {
-    $pdo->exec("ALTER TABLE suppliers ADD COLUMN global_adjust_percent DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER import_mapping_header_hash");
-  }
 
-  if (!isset($supplier_columns['global_adjust_enabled'])) {
-    $pdo->exec("ALTER TABLE suppliers ADD COLUMN global_adjust_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER global_adjust_percent");
-  }
+
+  $pdo->exec("CREATE TABLE IF NOT EXISTS supplier_cost_adjustments (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    supplier_id INT UNSIGNED NOT NULL,
+    percent DECIMAL(10,2) NOT NULL,
+    note VARCHAR(255) NULL,
+    affected_rows INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by INT UNSIGNED NULL,
+    PRIMARY KEY (id),
+    KEY idx_supplier_cost_adjustments_supplier (supplier_id, created_at),
+    KEY idx_supplier_cost_adjustments_created_by (created_by)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS product_suppliers (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,

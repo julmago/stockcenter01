@@ -20,11 +20,7 @@ if (!function_exists('get_effective_unit_cost')) {
     $supplierDiscount = pricing_to_float($supplier_row['discount_percent'] ?? 0, 0.0);
     $costWithDiscount = (float)$supplierCost * (1 - ($supplierDiscount / 100));
 
-    $globalAdjustEnabled = (int)($supplier_row['global_adjust_enabled'] ?? 0) === 1;
-    $globalAdjustPercent = pricing_to_float($supplier_row['global_adjust_percent'] ?? 0, 0.0);
-    $effectiveCost = $globalAdjustEnabled
-      ? $costWithDiscount * (1 + ($globalAdjustPercent / 100))
-      : $costWithDiscount;
+    $effectiveCost = $costWithDiscount;
 
     $costType = strtoupper((string)($ps_row['cost_type'] ?? 'UNIDAD'));
     if ($costType === 'PACK') {

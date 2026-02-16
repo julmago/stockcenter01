@@ -139,8 +139,6 @@ try {
     . " COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,"
     . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
     . " {$supplierDiscountExpr} AS supplier_discount_percent,"
-    . " COALESCE(s.global_adjust_percent, 0) AS supplier_global_adjust_percent,"
-    . " COALESCE(s.global_adjust_enabled, 0) AS supplier_global_adjust_enabled,"
     . ($numeric
       ? " CASE WHEN EXISTS ("
         . "   SELECT 1 FROM product_codes pc_exact"
@@ -279,8 +277,6 @@ try {
                         $effectiveUnitCost = get_effective_unit_cost($p, [
                             'import_default_units_per_pack' => $p['supplier_default_units_per_pack'] ?? 0,
                             'discount_percent' => $p['supplier_discount_percent'] ?? 0,
-                            'global_adjust_percent' => $p['supplier_global_adjust_percent'] ?? 0,
-                            'global_adjust_enabled' => $p['supplier_global_adjust_enabled'] ?? 0,
                           ]);
                         $costForMode = get_cost_for_product_mode($effectiveUnitCost, $p);
                         $priceReason = get_price_unavailable_reason($p, $p);
