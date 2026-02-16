@@ -17,9 +17,14 @@ if (!function_exists('get_effective_unit_cost')) {
       return null;
     }
 
-    if (isset($ps_row['cost_unitario']) && $ps_row['cost_unitario'] !== null && $ps_row['cost_unitario'] !== '') {
-      return (float)$ps_row['cost_unitario'];
-    }
+    $supplierDiscount = pricing_to_float($supplier_row['discount_percent'] ?? 0, 0.0);
+    $costWithDiscount = (float)$supplierCost * (1 - ($supplierDiscount / 100));
+
+    $globalAdjustEnabled = (int)($supplier_row['global_adjust_enabled'] ?? 0) === 1;
+    $globalAdjustPercent = pricing_to_float($supplier_row['global_adjust_percent'] ?? 0, 0.0);
+    $effectiveCost = $globalAdjustEnabled
+      ? $costWithDiscount * (1 + ($globalAdjustPercent / 100))
+      : $costWithDiscount;
 
     $costType = strtoupper((string)($ps_row['cost_type'] ?? 'UNIDAD'));
     if ($costType === 'PACK') {
@@ -35,10 +40,10 @@ if (!function_exists('get_effective_unit_cost')) {
         return null;
       }
 
-      return (float)$supplierCost / $unitsPerPack;
+      return $effectiveCost / $unitsPerPack;
     }
 
-    return (float)$supplierCost;
+    return $effectiveCost;
   }
 }
 
@@ -68,8 +73,7 @@ if (!function_exists('get_final_site_price')) {
       return null;
     }
 
-    $supplierDiscount = pricing_to_float($supplier_row['discount_percent'] ?? 0, 0.0);
-    $rawCost = $cost_for_mode * (1 - (($supplierDiscount + $import_extra_discount) / 100));
+    $rawCost = $cost_for_mode * (1 - ($import_extra_discount / 100));
 
     $supplierBase = pricing_to_float(
       $supplier_row['base_percent']
