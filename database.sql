@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS product_suppliers (
   cost_type ENUM('UNIDAD','PACK') NOT NULL DEFAULT 'UNIDAD',
   units_per_pack INT UNSIGNED NULL,
   supplier_cost DECIMAL(10,2) NULL,
+  cost_unitario DECIMAL(10,4) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,

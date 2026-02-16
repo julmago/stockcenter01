@@ -26,14 +26,19 @@ if (!function_exists('get_effective_unit_cost')) {
     if ($costType === 'PACK') {
       $unitsPerPack = (int)($ps_row['units_per_pack'] ?? 0);
       if ($unitsPerPack <= 0) {
-        $supplierDefaultPack = (int)($supplier_row['import_default_units_per_pack'] ?? 0);
-        if ($supplierDefaultPack > 0) {
-          $unitsPerPack = $supplierDefaultPack;
-        }
+        $unitsPerPack = (int)($supplier_row['units_per_pack_default']
+          ?? $supplier_row['import_default_units_per_pack']
+          ?? 0);
       }
-
       if ($unitsPerPack <= 0) {
-        return null;
+        $unitsPerPack = (int)($ps_row['units_pack']
+          ?? $ps_row['sale_units_per_pack']
+          ?? $supplier_row['units_pack']
+          ?? $supplier_row['sale_units_per_pack']
+          ?? 0);
+      }
+      if ($unitsPerPack <= 0) {
+        $unitsPerPack = 1;
       }
 
       return $effectiveCost / $unitsPerPack;
@@ -93,17 +98,6 @@ if (!function_exists('get_price_unavailable_reason')) {
     $modeSale = strtoupper((string)($product_row['sale_mode'] ?? 'UNIDAD'));
     if ($modeSale === 'PACK' && (int)($product_row['sale_units_per_pack'] ?? 0) <= 0) {
       return 'Faltan unidades pack';
-    }
-
-    $costType = strtoupper((string)($ps_row['cost_type'] ?? 'UNIDAD'));
-    if ($costType === 'PACK') {
-      $unitsPerPack = (int)($ps_row['units_per_pack'] ?? 0);
-      if ($unitsPerPack <= 0) {
-        $unitsPerPack = (int)($ps_row['supplier_default_units_per_pack'] ?? 0);
-      }
-      if ($unitsPerPack <= 0) {
-        return 'Faltan unidades pack';
-      }
     }
 
     if (($ps_row['supplier_cost'] ?? null) === null || $ps_row['supplier_cost'] === '') {

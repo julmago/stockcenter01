@@ -37,7 +37,14 @@ if ($changedBy <= 0) {
 try {
   db()->beginTransaction();
 
-  $stBefore = db()->prepare('SELECT supplier_cost, cost_type, units_per_pack, cost_unitario FROM product_suppliers WHERE id = ? LIMIT 1');
+  $stBefore = db()->prepare("SELECT ps.supplier_cost, ps.cost_type, ps.units_per_pack, ps.cost_unitario,
+      COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,
+      COALESCE(p.sale_units_per_pack, 0) AS product_units_pack
+    FROM product_suppliers ps
+    LEFT JOIN suppliers s ON s.id = ps.supplier_id
+    LEFT JOIN products p ON p.id = ps.product_id
+    WHERE ps.id = ?
+    LIMIT 1");
   $stUpdate = db()->prepare("UPDATE product_suppliers
     SET supplier_cost = ?,
         cost_unitario = ?,
@@ -80,16 +87,20 @@ try {
       if (!in_array($costType, ['UNIDAD', 'PACK'], true)) {
         $costType = 'UNIDAD';
       }
-      $unitsPerPack = isset($before['units_per_pack']) ? (int)$before['units_per_pack'] : null;
-      if ($unitsPerPack !== null && $unitsPerPack <= 0) {
-        $unitsPerPack = null;
+      $unitsPerPack = isset($before['units_per_pack']) ? (int)$before['units_per_pack'] : 0;
+      if ($unitsPerPack <= 0) {
+        $unitsPerPack = isset($before['supplier_default_units_per_pack']) ? (int)$before['supplier_default_units_per_pack'] : 0;
+      }
+      if ($unitsPerPack <= 0) {
+        $unitsPerPack = isset($before['product_units_pack']) ? (int)$before['product_units_pack'] : 0;
+      }
+      if ($unitsPerPack <= 0) {
+        $unitsPerPack = 1;
       }
 
       $costUnitarioToSave = $supplierCostToSave;
       if ($costType === 'PACK') {
-        $costUnitarioToSave = ($unitsPerPack !== null && $unitsPerPack > 0)
-          ? (int)round($supplierCostToSave / $unitsPerPack, 0)
-          : null;
+        $costUnitarioToSave = round($supplierCostToSave / $unitsPerPack, 4);
       }
 
       $stUpdate->execute([$supplierCostToSave, $costUnitarioToSave, $psId]);
