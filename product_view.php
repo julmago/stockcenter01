@@ -140,6 +140,7 @@ if (is_post() && post('action') === 'add_supplier_link') {
     'supplier_cost' => $supplier_cost_value,
     'cost_type' => $cost_type,
     'units_per_pack' => $units_per_pack_value,
+    'units_pack' => (int)($product['sale_units_per_pack'] ?? 0),
   ], $supplier_for_cost);
   $cost_unitario_value = ($cost_unitario_value === null) ? null : (int)round($cost_unitario_value, 0);
 
@@ -202,6 +203,7 @@ if (is_post() && post('action') === 'update_supplier_link') {
     'supplier_cost' => $supplier_cost_value,
     'cost_type' => $cost_type,
     'units_per_pack' => $units_per_pack_value,
+    'units_pack' => (int)($product['sale_units_per_pack'] ?? 0),
   ], $supplier_for_cost);
   $cost_unitario_value = ($cost_unitario_value === null) ? null : (int)round($cost_unitario_value, 0);
 
@@ -331,24 +333,21 @@ $suppliers = $st->fetchAll();
 
 $st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type, ps.units_per_pack, ps.supplier_cost, ps.cost_unitario, ps.is_active, s.name AS supplier_name,
   CASE
-    WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
     WHEN ps.supplier_cost IS NULL THEN NULL
-    WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 0)
+    WHEN ps.cost_type = 'PACK' THEN ROUND(ps.supplier_cost / COALESCE(NULLIF(COALESCE(ps.units_per_pack, s.import_default_units_per_pack, p.sale_units_per_pack, 1), 0), 1), 4)
     ELSE ps.supplier_cost
   END AS normalized_unit_cost,
   CASE
     WHEN p.sale_mode = 'PACK' AND COALESCE(p.sale_units_per_pack, 0) > 0 THEN
       ROUND((CASE
-        WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
         WHEN ps.supplier_cost IS NULL THEN NULL
-        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 0)
+        WHEN ps.cost_type = 'PACK' THEN ps.supplier_cost / COALESCE(NULLIF(COALESCE(ps.units_per_pack, s.import_default_units_per_pack, p.sale_units_per_pack, 1), 0), 1)
         ELSE ps.supplier_cost
       END) * p.sale_units_per_pack, 0)
     ELSE
       ROUND((CASE
-        WHEN ps.cost_unitario IS NOT NULL THEN ps.cost_unitario
         WHEN ps.supplier_cost IS NULL THEN NULL
-        WHEN ps.cost_type = 'PACK' AND COALESCE(ps.units_per_pack, 0) > 0 THEN ROUND(ps.supplier_cost / ps.units_per_pack, 0)
+        WHEN ps.cost_type = 'PACK' THEN ps.supplier_cost / COALESCE(NULLIF(COALESCE(ps.units_per_pack, s.import_default_units_per_pack, p.sale_units_per_pack, 1), 0), 1)
         ELSE ps.supplier_cost
       END), 0)
   END AS normalized_product_cost
@@ -399,9 +398,11 @@ if ($supplier_discount_column !== null) {
 $st = db()->prepare("SELECT ps.id, ps.supplier_cost, ps.cost_unitario, ps.cost_type, ps.units_per_pack,
   {$supplier_margin_expr} AS supplier_base_percent,
   {$supplier_discount_expr} AS supplier_discount_percent,
-  COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack
+  COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,
+  COALESCE(p.sale_units_per_pack, 0) AS units_pack
   FROM product_suppliers ps
   INNER JOIN suppliers s ON s.id = ps.supplier_id
+  INNER JOIN products p ON p.id = ps.product_id
   WHERE ps.product_id = ? AND ps.is_active = 1
   ORDER BY ps.id ASC
   LIMIT 1");

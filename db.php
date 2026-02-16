@@ -180,13 +180,15 @@ function ensure_product_suppliers_schema(): void {
     $pdo->exec("ALTER TABLE product_suppliers ADD COLUMN cost_unitario DECIMAL(10,4) NULL AFTER supplier_cost");
   }
 
-  $pdo->exec("UPDATE product_suppliers
-    SET cost_unitario = CASE
-      WHEN supplier_cost IS NULL THEN NULL
-      WHEN cost_type = 'PACK' AND COALESCE(units_per_pack, 0) > 0 THEN ROUND(supplier_cost / units_per_pack, 4)
-      ELSE supplier_cost
+  $pdo->exec("UPDATE product_suppliers ps
+    LEFT JOIN suppliers s ON s.id = ps.supplier_id
+    LEFT JOIN products p ON p.id = ps.product_id
+    SET ps.cost_unitario = CASE
+      WHEN ps.supplier_cost IS NULL THEN NULL
+      WHEN ps.cost_type = 'PACK' THEN ROUND(ps.supplier_cost / COALESCE(NULLIF(COALESCE(ps.units_per_pack, s.import_default_units_per_pack, p.sale_units_per_pack, 1), 0), 1), 4)
+      ELSE ps.supplier_cost
     END
-    WHERE cost_unitario IS NULL");
+    WHERE ps.cost_unitario IS NULL");
 
   $productSupplierUniqueExists = false;
   $st = $pdo->query("SHOW INDEX FROM product_suppliers WHERE Key_name = 'uq_product_supplier_link'");

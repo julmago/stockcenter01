@@ -46,12 +46,22 @@ if (is_post() && post('action') === 'apply_supplier_adjust') {
       try {
         $pdo->beginTransaction();
 
-        $update = $pdo->prepare("UPDATE product_suppliers
-          SET supplier_cost = ROUND(supplier_cost * ?, 2),
-              updated_at = NOW()
-          WHERE supplier_id = ?
-            AND supplier_cost IS NOT NULL");
-        $update->execute([$factor, $id]);
+        $update = $pdo->prepare("UPDATE product_suppliers ps
+          LEFT JOIN suppliers s ON s.id = ps.supplier_id
+          LEFT JOIN products p ON p.id = ps.product_id
+          SET ps.supplier_cost = ROUND(ps.supplier_cost * ?, 2),
+              ps.cost_unitario = ROUND(
+                ROUND(ps.supplier_cost * ?, 2)
+                / CASE
+                    WHEN ps.cost_type = 'PACK' THEN COALESCE(NULLIF(COALESCE(ps.units_per_pack, s.import_default_units_per_pack, p.sale_units_per_pack, 1), 0), 1)
+                    ELSE 1
+                  END,
+                4
+              ),
+              ps.updated_at = NOW()
+          WHERE ps.supplier_id = ?
+            AND ps.supplier_cost IS NOT NULL");
+        $update->execute([$factor, $factor, $id]);
         $affectedRows = (int)$update->rowCount();
 
         $ins = $pdo->prepare('INSERT INTO supplier_cost_adjustments(supplier_id, percent, note, affected_rows, created_by) VALUES(?, ?, ?, ?, ?)');
