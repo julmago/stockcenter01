@@ -849,6 +849,16 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
     throw new RuntimeException('Seleccioná una columna de precio válida.');
   }
 
+  $costTypeColumn = trim((string)($payload['cost_type_column'] ?? ''));
+  if ($costTypeColumn !== '' && !in_array($costTypeColumn, $headers, true)) {
+    throw new RuntimeException('Seleccioná una columna de tipo de costo válida.');
+  }
+
+  $unitsPerPackColumn = trim((string)($payload['units_per_pack_column'] ?? ''));
+  if ($unitsPerPackColumn !== '' && !in_array($unitsPerPackColumn, $headers, true)) {
+    throw new RuntimeException('Seleccioná una columna de unidades por pack válida.');
+  }
+
   $extraDiscount = supplier_import_normalize_discount($payload['extra_discount_percent'] ?? '0');
   if ($extraDiscount === null) {
     throw new RuntimeException('Descuento extra inválido.');
@@ -875,7 +885,7 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
   $dedupeMode = (string)($supplier['import_dedupe_mode'] ?? 'LAST');
 
   $stRun = $pdo->prepare('INSERT INTO supplier_import_runs(supplier_id, filename, source_type, extra_discount_percent, supplier_discount_percent, total_discount_percent, selected_sku_column, selected_price_column, selected_cost_type_column, selected_units_per_pack_column, dedupe_mode, mapping_header_hash, created_by, notes) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  $stRun->execute([$supplierId, $filename, $sourceType, $extraDiscount, $supplierDiscount, $effectiveDiscountPercent, $skuColumn, $priceColumn, null, null, $dedupeMode, $analysis['header_hash'] ?? null, $createdBy, null]);
+  $stRun->execute([$supplierId, $filename, $sourceType, $extraDiscount, $supplierDiscount, $effectiveDiscountPercent, $skuColumn, $priceColumn, $costTypeColumn !== '' ? $costTypeColumn : null, $unitsPerPackColumn !== '' ? $unitsPerPackColumn : null, $dedupeMode, $analysis['header_hash'] ?? null, $createdBy, null]);
   $runId = (int)$pdo->lastInsertId();
 
   $stMatch = $pdo->prepare('SELECT id, product_id, cost_type, units_per_pack FROM product_suppliers WHERE supplier_id = ? AND supplier_sku = ? AND is_active = 1 ORDER BY id ASC');
@@ -898,7 +908,13 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
     $rawPrice = supplier_import_normalize_price($rawPriceInput);
 
     $rawCostTypeInput = null;
+    if ($costTypeColumn !== '') {
+      $rawCostTypeInput = trim((string)($row[$costTypeColumn] ?? ''));
+    }
     $rawUnitsPerPack = null;
+    if ($unitsPerPackColumn !== '') {
+      $rawUnitsPerPack = trim((string)($row[$unitsPerPackColumn] ?? ''));
+    }
 
     $status = 'UNMATCHED';
     $reason = null;
@@ -931,20 +947,33 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
           $dbUnitsPerPack = null;
         }
 
-        $rawCostTypeInput = $dbCostType;
-        $rawUnitsPerPack = $dbUnitsPerPack;
+        $effectiveCostType = $dbCostType;
+        if ($rawCostTypeInput !== null && $rawCostTypeInput !== '') {
+          $parsedCostType = strtoupper(trim((string)$rawCostTypeInput));
+          if (in_array($parsedCostType, ['UNIDAD', 'PACK'], true)) {
+            $effectiveCostType = $parsedCostType;
+          }
+        }
 
-        if ($dbCostType === 'PACK') {
-          if ($dbUnitsPerPack === null || $dbUnitsPerPack <= 0) {
+        $effectiveUnitsPerPack = $dbUnitsPerPack;
+        if ($rawUnitsPerPack !== null && $rawUnitsPerPack !== '') {
+          $parsedUnitsPerPack = (int)$rawUnitsPerPack;
+          if ($parsedUnitsPerPack > 0) {
+            $effectiveUnitsPerPack = $parsedUnitsPerPack;
+          }
+        }
+
+        if ($effectiveCostType === 'PACK') {
+          if ($effectiveUnitsPerPack === null || $effectiveUnitsPerPack <= 0) {
             $status = 'INVALID';
             $reason = 'Vínculo PACK sin units_per_pack válido';
           } else {
-            $normalizedUnitCost = (float)round($priceAfterSupplierDiscount / $dbUnitsPerPack, 0);
+            $normalizedUnitCost = (float)round($priceAfterSupplierDiscount / $effectiveUnitsPerPack, 0);
             $costCalcDetail = 'raw=' . number_format($rawPrice, 2, '.', '')
               . ' -> file=' . number_format($priceAfterFileDiscount, 2, '.', '')
               . ' -> supplier=' . number_format($priceAfterSupplierDiscount, 2, '.', '')
-              . ' -> unit=' . number_format($priceAfterSupplierDiscount / $dbUnitsPerPack, 2, '.', '')
-              . ' (PACK/' . $dbUnitsPerPack . ')';
+              . ' -> unit=' . number_format($priceAfterSupplierDiscount / $effectiveUnitsPerPack, 2, '.', '')
+              . ' (PACK/' . $effectiveUnitsPerPack . ')';
           }
         } else {
           $normalizedUnitCost = (float)round($priceAfterSupplierDiscount, 0);
@@ -1049,8 +1078,8 @@ function supplier_import_build_run_with_mapping(int $supplierId, array $supplier
   }
 
   if ((int)($payload['save_mapping'] ?? 0) === 1) {
-    $stSave = $pdo->prepare('UPDATE suppliers SET import_sku_column = ?, import_price_column = ?, import_mapping_header_hash = ?, updated_at = NOW() WHERE id = ?');
-    $stSave->execute([$skuColumn, $priceColumn, $analysis['header_hash'] ?? null, $supplierId]);
+    $stSave = $pdo->prepare('UPDATE suppliers SET import_sku_column = ?, import_price_column = ?, import_cost_type_column = ?, import_units_per_pack_column = ?, import_mapping_header_hash = ?, updated_at = NOW() WHERE id = ?');
+    $stSave->execute([$skuColumn, $priceColumn, $costTypeColumn !== '' ? $costTypeColumn : null, $unitsPerPackColumn !== '' ? $unitsPerPackColumn : null, $analysis['header_hash'] ?? null, $supplierId]);
   }
 
   return $runId;
