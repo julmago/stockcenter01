@@ -85,28 +85,38 @@ try {
   $visibleSites = $visibleSitesSt ? $visibleSitesSt->fetchAll() : [];
 
   $supplierMarginColumn = null;
+  $supplierDiscountColumn = null;
   $supplierColumnsSt = db()->query("SHOW COLUMNS FROM suppliers");
   if ($supplierColumnsSt) {
     foreach ($supplierColumnsSt->fetchAll() as $supplierColumn) {
       $field = (string)($supplierColumn['Field'] ?? '');
       if ($field === 'base_margin_percent') {
         $supplierMarginColumn = $field;
-        break;
       }
-      if ($field === 'default_margin_percent') {
+      if ($field === 'default_margin_percent' && $supplierMarginColumn === null) {
         $supplierMarginColumn = $field;
       } elseif ($supplierMarginColumn === null && stripos($field, 'margin') !== false) {
         $supplierMarginColumn = $field;
+      }
+      if ($field === 'discount_percent') {
+        $supplierDiscountColumn = $field;
+      }
+      if ($field === 'import_discount_default' && $supplierDiscountColumn === null) {
+        $supplierDiscountColumn = $field;
       }
     }
   }
 
   $supplierMarginExpr = '0';
-  $groupBySupplierMargin = '';
   if ($supplierMarginColumn !== null) {
     $safeSupplierMarginColumn = str_replace('`', '``', $supplierMarginColumn);
     $supplierMarginExpr = "COALESCE(s.`{$safeSupplierMarginColumn}`, 0)";
-    $groupBySupplierMargin = ", s.`{$safeSupplierMarginColumn}`";
+  }
+
+  $supplierDiscountExpr = '0';
+  if ($supplierDiscountColumn !== null) {
+    $safeSupplierDiscountColumn = str_replace('`', '``', $supplierDiscountColumn);
+    $supplierDiscountExpr = "COALESCE(s.`{$safeSupplierDiscountColumn}`, 0)";
   }
 
   $count_sql = "SELECT COUNT(DISTINCT p.id) AS total
@@ -128,6 +138,9 @@ try {
     . " ps1.supplier_cost, ps1.cost_unitario, ps1.cost_type, ps1.units_per_pack,"
     . " COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,"
     . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
+    . " {$supplierDiscountExpr} AS supplier_discount_percent,"
+    . " COALESCE(s.global_adjust_percent, 0) AS supplier_global_adjust_percent,"
+    . " COALESCE(s.global_adjust_enabled, 0) AS supplier_global_adjust_enabled,"
     . ($numeric
       ? " CASE WHEN EXISTS ("
         . "   SELECT 1 FROM product_codes pc_exact"
@@ -263,14 +276,18 @@ try {
                   <?php foreach ($visibleSites as $site): ?>
                     <td>
                       <?php
-                        $effectiveUnitCost = get_effective_unit_cost($p, ['import_default_units_per_pack' => $p['supplier_default_units_per_pack'] ?? 0]);
+                        $effectiveUnitCost = get_effective_unit_cost($p, [
+                            'import_default_units_per_pack' => $p['supplier_default_units_per_pack'] ?? 0,
+                            'discount_percent' => $p['supplier_discount_percent'] ?? 0,
+                            'global_adjust_percent' => $p['supplier_global_adjust_percent'] ?? 0,
+                            'global_adjust_enabled' => $p['supplier_global_adjust_enabled'] ?? 0,
+                          ]);
                         $costForMode = get_cost_for_product_mode($effectiveUnitCost, $p);
                         $priceReason = get_price_unavailable_reason($p, $p);
 
                         if ($p['supplier_name'] && $costForMode !== null) {
                           $finalPrice = get_final_site_price($costForMode, [
                             'base_percent' => $p['supplier_default_margin_percent'] ?? 0,
-                            'discount_percent' => 0,
                           ], $site, 0.0);
 
                           if ($finalPrice === null) {

@@ -119,6 +119,7 @@ $nextPage = min($totalPages, $page + 1);
                     <div class="inline-actions">
                       <a class="btn btn-ghost btn-sm" href="suppliers_edit.php?id=<?= (int)$supplier['id'] ?>">Modificar</a>
                       <a class="btn btn-ghost btn-sm" href="suppliers_import.php?supplier_id=<?= (int)$supplier['id'] ?>">Importar lista</a>
+                      <a class="btn btn-ghost btn-sm" href="supplier_adjust.php?id=<?= (int)$supplier['id'] ?>">Ajuste global</a>
                     </div>
                   </td>
                 </tr>

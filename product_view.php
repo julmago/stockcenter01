@@ -378,6 +378,9 @@ if ($supplier_columns_st) {
     if ($field === 'discount_percent') {
       $supplier_discount_column = $field;
     }
+    if ($field === 'import_discount_default' && $supplier_discount_column === null) {
+      $supplier_discount_column = $field;
+    }
   }
 }
 
@@ -396,7 +399,9 @@ if ($supplier_discount_column !== null) {
 $st = db()->prepare("SELECT ps.id, ps.supplier_cost, ps.cost_unitario, ps.cost_type, ps.units_per_pack,
   {$supplier_margin_expr} AS supplier_base_percent,
   {$supplier_discount_expr} AS supplier_discount_percent,
-  COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack
+  COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,
+  COALESCE(s.global_adjust_percent, 0) AS supplier_global_adjust_percent,
+  COALESCE(s.global_adjust_enabled, 0) AS supplier_global_adjust_enabled
   FROM product_suppliers ps
   INNER JOIN suppliers s ON s.id = ps.supplier_id
   WHERE ps.product_id = ? AND ps.is_active = 1
@@ -602,7 +607,7 @@ if ($st) {
           </form>
         <?php endif; ?>
 
-        <div class="table-wrapper product-table-wrapper">
+<div class="table-wrapper product-table-wrapper">
           <table class="table">
             <thead>
               <tr>
@@ -768,6 +773,10 @@ if ($st) {
         <span class="muted small"><?= count($site_prices) ?> visibles en producto</span>
       </div>
       <div class="card-body">
+        <?php if ($active_supplier_link && (int)($active_supplier_link['supplier_global_adjust_enabled'] ?? 0) === 1): ?>
+          <?php $adjustPercent = (float)($active_supplier_link['supplier_global_adjust_percent'] ?? 0); ?>
+          <p class="muted" style="margin:0 0 10px;">Ajuste global proveedor: <?= e(($adjustPercent >= 0 ? '+' : '') . number_format($adjustPercent, 2, '.', '')) ?>% (activo)</p>
+        <?php endif; ?>
         <div class="table-wrapper product-table-wrapper">
           <table class="table">
             <thead>
@@ -798,6 +807,9 @@ if ($st) {
                         } else {
                           $effective_unit_cost = get_effective_unit_cost($active_supplier_link, [
                             'import_default_units_per_pack' => $active_supplier_link['supplier_default_units_per_pack'] ?? 0,
+                            'discount_percent' => $active_supplier_link['supplier_discount_percent'] ?? 0,
+                            'global_adjust_percent' => $active_supplier_link['supplier_global_adjust_percent'] ?? 0,
+                            'global_adjust_enabled' => $active_supplier_link['supplier_global_adjust_enabled'] ?? 0,
                           ]);
                           $cost_for_mode = get_cost_for_product_mode($effective_unit_cost, $product);
                           $price_reason = get_price_unavailable_reason($active_supplier_link, $product);
@@ -808,7 +820,6 @@ if ($st) {
                           } else {
                             $final_price = get_final_site_price($cost_for_mode, [
                               'base_percent' => $active_supplier_link['supplier_base_percent'] ?? 0,
-                              'discount_percent' => $active_supplier_link['supplier_discount_percent'] ?? 0,
                             ], $site, 0.0);
 
                             if ($final_price === null) {
