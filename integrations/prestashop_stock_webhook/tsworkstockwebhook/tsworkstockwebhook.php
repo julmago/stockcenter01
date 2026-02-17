@@ -181,23 +181,16 @@ class TsWorkStockWebhook extends Module
     {
         $url = trim((string)Configuration::get('TSW_WEBHOOK_URL'));
         $siteId = trim((string)Configuration::get('TSW_WEBHOOK_SITE_ID'));
-        $secret = trim((string)Configuration::get('TSW_WEBHOOK_SECRET'));
-
-        if ($url === '' || $siteId === '' || $secret === '') {
-            PrestaShopLogger::addLog('[TsWorkStockWebhook] Faltan TSW_WEBHOOK_URL / SITE_ID / SECRET.', 2);
+        if ($url === '' || $siteId === '') {
+            PrestaShopLogger::addLog('[TsWorkStockWebhook] Faltan TSW_WEBHOOK_URL / SITE_ID.', 2);
             return;
         }
 
-        $payloadToSign = [
-            'site_id' => (int)$siteId,
+        $payload = [
+            'shop_id' => (int)$siteId,
             'sku' => (string)$sku,
-            'qty_new' => (int)$qty,
-            'event' => (string)$event,
-            'timestamp' => gmdate('c'),
+            'stock' => (int)$qty,
         ];
-        $signature = hash_hmac('sha256', json_encode($payloadToSign, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $secret);
-        $payload = $payloadToSign;
-        $payload['signature'] = $signature;
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_POST, true);
