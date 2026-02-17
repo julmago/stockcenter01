@@ -244,6 +244,7 @@ function stock_sync_request_prestashop(array $site, string $method, string $path
 
   $response = curl_exec($ch);
   $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $effectiveUrl = (string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
   $curlError = curl_error($ch);
   curl_close($ch);
 
@@ -251,10 +252,26 @@ function stock_sync_request_prestashop(array $site, string $method, string $path
     throw new RuntimeException('cURL error: ' . $curlError);
   }
 
+  if (!in_array($httpCode, [200, 201], true)) {
+    stock_sync_log('Prestashop HTTP error response', [
+      'method' => strtoupper($method),
+      'url' => $effectiveUrl !== '' ? $effectiveUrl : $url,
+      'http_code' => $httpCode,
+      'response_body' => (string)$response,
+      'request_xml' => $body,
+    ]);
+  }
+
   return [
     'http_code' => $httpCode,
     'body' => (string)$response,
+    'url' => $effectiveUrl !== '' ? $effectiveUrl : $url,
   ];
+}
+
+function stock_sync_resolve_shop_id(array $site): int {
+  $shopId = (int)($site['ps_shop_id'] ?? 0);
+  return $shopId > 0 ? $shopId : 1;
 }
 
 function sync_stock_to_prestashop_with_result(array $site, string $sku, int $newQty): array {
@@ -282,9 +299,13 @@ function sync_stock_to_prestashop_with_result(array $site, string $sku, int $new
       return ['ok' => false, 'error' => 'SKU no encontrado en PrestaShop.'];
     }
 
-    $stockPath = '/api/stock_availables?filter[id_product]=' . $productId . '&filter[id_product_attribute]=0&display=[id,quantity]';
+    $shopId = stock_sync_resolve_shop_id($site);
+    $stockPath = '/api/stock_availables?filter[id_product]=' . $productId
+      . '&filter[id_product_attribute]=0'
+      . '&filter[id_shop]=' . $shopId
+      . '&display=[id,id_product,id_product_attribute,id_shop,id_shop_group,quantity,depends_on_stock,out_of_stock]';
     $stockResponse = stock_sync_request_prestashop($site, 'GET', $stockPath);
-    stock_sync_log('Prestashop lookup stock_available', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'http_code' => $stockResponse['http_code'], 'body' => mb_substr($stockResponse['body'], 0, 500)]);
+    stock_sync_log('Prestashop lookup stock_available', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'shop_id' => $shopId, 'url' => $stockResponse['url'] ?? '', 'http_code' => $stockResponse['http_code'], 'body' => mb_substr($stockResponse['body'], 0, 500)]);
     if ($stockResponse['http_code'] < 200 || $stockResponse['http_code'] >= 300) {
       return ['ok' => false, 'error' => 'Error consultando stock_available (HTTP ' . $stockResponse['http_code'] . ').'];
     }
@@ -305,16 +326,58 @@ function sync_stock_to_prestashop_with_result(array $site, string $sku, int $new
       return ['ok' => false, 'error' => 'No se encontró stock_available para el producto.'];
     }
 
-    $payload = '<?xml version="1.0" encoding="UTF-8"?>'
-      . '<prestashop><stock_available>'
-      . '<id>' . $stockAvailableId . '</id>'
-      . '<id_product>' . $productId . '</id_product>'
-      . '<id_product_attribute>0</id_product_attribute>'
-      . '<quantity>' . $newQty . '</quantity>'
-      . '</stock_available></prestashop>';
+    $templateResponse = stock_sync_request_prestashop($site, 'GET', '/api/stock_availables/' . $stockAvailableId);
+    stock_sync_log('Prestashop get stock_available template', [
+      'site_id' => $siteId,
+      'sku' => $sku,
+      'id_stock_available' => $stockAvailableId,
+      'url' => $templateResponse['url'] ?? '',
+      'http_code' => $templateResponse['http_code'],
+      'body' => mb_substr($templateResponse['body'], 0, 500),
+    ]);
+    if ($templateResponse['http_code'] < 200 || $templateResponse['http_code'] >= 300) {
+      return ['ok' => false, 'error' => 'Error leyendo stock_available #' . $stockAvailableId . ' (HTTP ' . $templateResponse['http_code'] . ').'];
+    }
+
+    $templateXml = @simplexml_load_string($templateResponse['body']);
+    if (!$templateXml || !isset($templateXml->stock_available)) {
+      return ['ok' => false, 'error' => 'Respuesta XML inválida al leer stock_available #' . $stockAvailableId . '.'];
+    }
+
+    $dependsOnStock = (int)($templateXml->stock_available->depends_on_stock ?? 0);
+    if ($dependsOnStock === 1) {
+      stock_sync_log('Prestashop stock depends_on_stock active', [
+        'site_id' => $siteId,
+        'sku' => $sku,
+        'id_stock_available' => $stockAvailableId,
+        'depends_on_stock' => $dependsOnStock,
+      ]);
+      return ['ok' => false, 'error' => 'No se puede actualizar porque depende de stock/stock avanzado.'];
+    }
+
+    $templateXml->stock_available->quantity = (string)$newQty;
+    $payload = $templateXml->asXML();
+    if ($payload === false) {
+      return ['ok' => false, 'error' => 'No se pudo generar XML para actualizar stock_available #' . $stockAvailableId . '.'];
+    }
+
+    stock_sync_log('Prestashop update payload', [
+      'site_id' => $siteId,
+      'sku' => $sku,
+      'id_stock_available' => $stockAvailableId,
+      'request_xml' => $payload,
+    ]);
 
     $updateResponse = stock_sync_request_prestashop($site, 'PUT', '/api/stock_availables/' . $stockAvailableId, $payload);
-    stock_sync_log('Prestashop update stock', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'http_code' => $updateResponse['http_code'], 'body' => mb_substr($updateResponse['body'], 0, 500)]);
+    stock_sync_log('Prestashop update stock', [
+      'site_id' => $siteId,
+      'sku' => $sku,
+      'qty' => $newQty,
+      'id_stock_available' => $stockAvailableId,
+      'url' => $updateResponse['url'] ?? '',
+      'http_code' => $updateResponse['http_code'],
+      'body' => mb_substr($updateResponse['body'], 0, 500),
+    ]);
 
     if ($updateResponse['http_code'] >= 200 && $updateResponse['http_code'] < 300) {
       return ['ok' => true, 'error' => null];
