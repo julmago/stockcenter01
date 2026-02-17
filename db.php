@@ -390,10 +390,33 @@ function ensure_sites_schema(): void {
     ps_shop_id INT NULL,
     ml_client_id VARCHAR(100) NULL,
     ml_client_secret VARCHAR(255) NULL,
+    ml_redirect_uri VARCHAR(255) NULL,
+    ml_access_token TEXT NULL,
     ml_refresh_token VARCHAR(255) NULL,
+    ml_user_id VARCHAR(40) NULL,
+    updated_at DATETIME NULL,
     PRIMARY KEY (site_id),
     CONSTRAINT fk_site_connections_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $connColumns = [];
+  $st = $pdo->query("SHOW COLUMNS FROM site_connections");
+  foreach ($st->fetchAll() as $row) {
+    $connColumns[(string)$row['Field']] = true;
+  }
+
+  if (!isset($connColumns['ml_redirect_uri'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_redirect_uri VARCHAR(255) NULL AFTER ml_client_secret");
+  }
+  if (!isset($connColumns['ml_access_token'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_access_token TEXT NULL AFTER ml_redirect_uri");
+  }
+  if (!isset($connColumns['ml_user_id'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_user_id VARCHAR(40) NULL AFTER ml_refresh_token");
+  }
+  if (!isset($connColumns['updated_at'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN updated_at DATETIME NULL AFTER ml_user_id");
+  }
 
   $ready = true;
 }
