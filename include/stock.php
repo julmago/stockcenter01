@@ -94,7 +94,7 @@ function get_stock(int $product_id): array {
   ];
 }
 
-function set_stock(int $product_id, int $qty, ?string $note, int $user_id, string $origin = 'tswork', ?int $source_site_id = null, ?string $event_id = null): array {
+function set_stock(int $product_id, int $qty, ?string $note, int $user_id, string $origin = 'tswork', ?int $source_site_id = null, ?string $event_id = null, ?string $reason = 'carga_manual'): array {
   ensure_stock_schema();
 
   $origin = normalize_stock_origin($origin);
@@ -116,7 +116,7 @@ function set_stock(int $product_id, int $qty, ?string $note, int $user_id, strin
     }
 
     $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, origin, event_id, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, ?, ?, NOW(), ?)');
-    $st->execute([$product_id, $delta, $qty, 'carga_manual', $origin, normalize_stock_event_id($event_id), normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
+    $st->execute([$product_id, $delta, $qty, normalize_stock_reason($reason, 'carga_manual'), $origin, normalize_stock_event_id($event_id), normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
 
     $pdo->commit();
   } catch (Throwable $e) {
@@ -214,4 +214,12 @@ function normalize_stock_event_id(?string $eventId): ?string {
     return null;
   }
   return mb_substr($value, 0, 120);
+}
+
+function normalize_stock_reason(?string $reason, string $fallback = 'ajuste'): string {
+  $value = trim((string)$reason);
+  if ($value === '') {
+    $value = $fallback;
+  }
+  return mb_substr($value, 0, 50);
 }

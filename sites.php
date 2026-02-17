@@ -48,6 +48,7 @@ if (is_post()) {
     $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
+    $webhookSecret = trim(post('webhook_secret'));
     $psShopIdRaw = trim(post('ps_shop_id'));
     $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
     $mlClientId = trim(post('ml_client_id'));
@@ -75,13 +76,14 @@ if (is_post()) {
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct]);
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
               ps_base_url = VALUES(ps_base_url),
               ps_api_key = VALUES(ps_api_key),
+              webhook_secret = VALUES(webhook_secret),
               ps_shop_id = VALUES(ps_shop_id),
               ml_client_id = VALUES(ml_client_id),
               ml_client_secret = VALUES(ml_client_secret),
@@ -123,6 +125,7 @@ if (is_post()) {
             $connectionEnabled,
             $psBaseUrl !== '' ? $psBaseUrl : null,
             $psApiKey !== '' ? $psApiKey : null,
+            $webhookSecret !== '' ? $webhookSecret : null,
             $psShopId,
             $mlClientId !== '' ? $mlClientId : null,
             $mlClientSecret !== '' ? $mlClientSecret : null,
@@ -149,6 +152,7 @@ if (is_post()) {
     $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
+    $webhookSecret = trim(post('webhook_secret'));
     $psShopIdRaw = trim(post('ps_shop_id'));
     $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
     $mlClientId = trim(post('ml_client_id'));
@@ -177,13 +181,14 @@ if (is_post()) {
           $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
               ps_base_url = VALUES(ps_base_url),
               ps_api_key = VALUES(ps_api_key),
+              webhook_secret = VALUES(webhook_secret),
               ps_shop_id = VALUES(ps_shop_id),
               ml_client_id = VALUES(ml_client_id),
               ml_client_secret = VALUES(ml_client_secret),
@@ -225,6 +230,7 @@ if (is_post()) {
             $connectionEnabled,
             $psBaseUrl !== '' ? $psBaseUrl : null,
             $psApiKey !== '' ? $psApiKey : null,
+            $webhookSecret !== '' ? $webhookSecret : null,
             $psShopId,
             $mlClientId !== '' ? $mlClientId : null,
             $mlClientSecret !== '' ? $mlClientSecret : null,
@@ -316,6 +322,7 @@ $editConnection = [
   'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 0),
   'ps_base_url' => '',
   'ps_api_key' => '',
+  'webhook_secret' => '',
   'ps_shop_id' => '',
   'ml_client_id' => '',
   'ml_client_secret' => '',
@@ -328,7 +335,7 @@ $editConnection = [
   'ml_status' => 'DISCONNECTED',
 ];
 if ($editSite) {
-  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
   $st->execute([(int)$editSite['id']]);
   $row = $st->fetch();
   if ($row) {
@@ -338,6 +345,7 @@ if ($editSite) {
       'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 0),
       'ps_base_url' => (string)($row['ps_base_url'] ?? ''),
       'ps_api_key' => (string)($row['ps_api_key'] ?? ''),
+      'webhook_secret' => (string)($row['webhook_secret'] ?? ''),
       'ps_shop_id' => isset($row['ps_shop_id']) ? (string)$row['ps_shop_id'] : '',
       'ml_client_id' => (string)($row['ml_client_id'] ?? ''),
       'ml_client_secret' => (string)($row['ml_client_secret'] ?? ''),
@@ -363,6 +371,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
     'sync_stock_enabled' => post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '1' ? 1 : 0,
     'ps_base_url' => trim(post('ps_base_url', $editConnection['ps_base_url'])),
     'ps_api_key' => trim(post('ps_api_key', $editConnection['ps_api_key'])),
+    'webhook_secret' => trim(post('webhook_secret', $editConnection['webhook_secret'])),
     'ps_shop_id' => trim(post('ps_shop_id', $editConnection['ps_shop_id'])),
     'ml_client_id' => trim(post('ml_client_id', $editConnection['ml_client_id'])),
     'ml_client_secret' => trim(post('ml_client_secret', $editConnection['ml_client_secret'])),
@@ -513,6 +522,10 @@ $nextPage = min($totalPages, $page + 1);
               <label class="form-field">
                 <span class="form-label">API Key / Token</span>
                 <input class="form-control" type="text" name="ps_api_key" maxlength="255" value="<?= e($formConnection['ps_api_key']) ?>">
+              </label>
+              <label class="form-field">
+                <span class="form-label">Webhook secret (HMAC)</span>
+                <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>">
               </label>
               <label class="form-field">
                 <span class="form-label">Shop ID (opcional)</span>
