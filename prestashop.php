@@ -89,6 +89,15 @@ function ps_request_with_credentials(string $method, string $path, string $base,
 
   if ($headers) curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
+  $responseHeaders = [];
+  curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function($curl, $headerLine) use (&$responseHeaders) {
+    $trimmed = trim($headerLine);
+    if ($trimmed !== '') {
+      $responseHeaders[] = $trimmed;
+    }
+    return strlen($headerLine);
+  });
+
   error_log("[PrestaShop] Request: {$method} {$url}");
 
   $resp = curl_exec($ch);
@@ -105,7 +114,13 @@ function ps_request_with_credentials(string $method, string $path, string $base,
   error_log("[PrestaShop] Response: HTTP {$code} | Content-Type: " . ($contentType ?: 'n/a'));
   error_log("[PrestaShop] Body (first 1000 chars): " . $snippet);
 
-  return ['code' => $code, 'body' => $resp, 'content_type' => $contentType, 'url' => $url];
+  return [
+    'code' => $code,
+    'body' => $resp,
+    'content_type' => $contentType,
+    'url' => $url,
+    'headers' => $responseHeaders,
+  ];
 }
 
 function ps_xml_load(string $xml): SimpleXMLElement {
@@ -288,7 +303,14 @@ function ps_update_stock_available_quantity(int $id_stock_available, int $new_qt
   }
 
   $r = ps_request("PUT", "/api/stock_availables/" . $id_stock_available, $xml);
-  if (!($r['code'] >= 200 && $r['code'] < 300)) {
+  if (!in_array((int)$r['code'], [200, 201], true)) {
+    $responseHeadersText = isset($r['headers']) && is_array($r['headers'])
+      ? implode("\n", $r['headers'])
+      : '';
+    error_log("[PrestaShop] PUT stock_available falló | URL final: " . ($r['url'] ?? 'n/a') . " | id_stock_available: {$id_stock_available} | HTTP " . (int)$r['code']);
+    error_log("[PrestaShop] PUT request XML body:\n" . $xml);
+    error_log("[PrestaShop] PUT response headers:\n" . ($responseHeadersText !== '' ? $responseHeadersText : '(sin headers)'));
+    error_log("[PrestaShop] PUT response body completo:\n" . (string)($r['body'] ?? ''));
     throw new RuntimeException("Falló actualización stock_available #{$id_stock_available} (HTTP {$r['code']}).");
   }
 }
