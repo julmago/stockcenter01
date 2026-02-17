@@ -16,4 +16,5 @@ return [
   ),
   'session_lifetime_days' => (int)env('SESSION_LIFETIME_DAYS', '365'),
   'gateway_cookie_lifetime_days' => (int)env('GATEWAY_COOKIE_LIFETIME_DAYS', '365'),
+  'ml_oauth_state_secret' => env('ML_OAUTH_STATE_SECRET', env('GATEWAY_PASSWORD_HASH', 'change-me-ml-oauth-secret')),
 ];

@@ -393,7 +393,10 @@ function ensure_sites_schema(): void {
     ml_redirect_uri VARCHAR(255) NULL,
     ml_access_token TEXT NULL,
     ml_refresh_token VARCHAR(255) NULL,
+    ml_token_expires_at DATETIME NULL,
+    ml_connected_at DATETIME NULL,
     ml_user_id VARCHAR(40) NULL,
+    ml_status VARCHAR(20) NOT NULL DEFAULT 'DISCONNECTED',
     updated_at DATETIME NULL,
     PRIMARY KEY (site_id),
     CONSTRAINT fk_site_connections_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
@@ -414,8 +417,17 @@ function ensure_sites_schema(): void {
   if (!isset($connColumns['ml_user_id'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_user_id VARCHAR(40) NULL AFTER ml_refresh_token");
   }
+  if (!isset($connColumns['ml_token_expires_at'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_token_expires_at DATETIME NULL AFTER ml_refresh_token");
+  }
+  if (!isset($connColumns['ml_connected_at'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_connected_at DATETIME NULL AFTER ml_token_expires_at");
+  }
+  if (!isset($connColumns['ml_status'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_status VARCHAR(20) NOT NULL DEFAULT 'DISCONNECTED' AFTER ml_user_id");
+  }
   if (!isset($connColumns['updated_at'])) {
-    $pdo->exec("ALTER TABLE site_connections ADD COLUMN updated_at DATETIME NULL AFTER ml_user_id");
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN updated_at DATETIME NULL AFTER ml_status");
   }
 
   $ready = true;
