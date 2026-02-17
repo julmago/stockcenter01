@@ -13,15 +13,32 @@ $offset = ($page - 1) * $limit;
 $error = '';
 $message = '';
 
+function normalize_channel_type($value): string {
+  $channel = strtoupper(trim((string)$value));
+  if ($channel !== 'MERCADOLIBRE') {
+    return 'PRESTASHOP';
+  }
+  return $channel;
+}
+
 if (is_post()) {
   $action = post('action');
 
   if ($action === 'create_site') {
     $name = trim(post('name'));
+    $channelType = normalize_channel_type(post('channel_type', 'PRESTASHOP'));
     $margin = normalize_site_margin_percent_value(post('margin_percent'));
     $isActive = post('is_active') === '1' ? 1 : 0;
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
+    $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
+    $psBaseUrl = trim(post('ps_base_url'));
+    $psApiKey = trim(post('ps_api_key'));
+    $psShopIdRaw = trim(post('ps_shop_id'));
+    $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
+    $mlClientId = trim(post('ml_client_id'));
+    $mlClientSecret = trim(post('ml_client_secret'));
+    $mlRefreshToken = trim(post('ml_refresh_token'));
 
     if ($name === '') {
       $error = 'Ingresá el nombre del sitio.';
@@ -36,8 +53,31 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('INSERT INTO sites(name, margin_percent, is_active, is_visible, show_in_product, updated_at) VALUES(?, ?, ?, ?, ?, NOW())');
-          $st->execute([$name, $margin, $isActive, $showInList, $showInProduct]);
+          $st = $pdo->prepare('INSERT INTO sites(name, channel_type, margin_percent, is_active, is_visible, show_in_product, updated_at) VALUES(?, ?, ?, ?, ?, ?, NOW())');
+          $st->execute([$name, $channelType, $margin, $isActive, $showInList, $showInProduct]);
+          $siteId = (int)$pdo->lastInsertId();
+          $st = $pdo->prepare('INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_refresh_token)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              channel_type = VALUES(channel_type),
+              enabled = VALUES(enabled),
+              ps_base_url = VALUES(ps_base_url),
+              ps_api_key = VALUES(ps_api_key),
+              ps_shop_id = VALUES(ps_shop_id),
+              ml_client_id = VALUES(ml_client_id),
+              ml_client_secret = VALUES(ml_client_secret),
+              ml_refresh_token = VALUES(ml_refresh_token)');
+          $st->execute([
+            $siteId,
+            $channelType,
+            $connectionEnabled,
+            $psBaseUrl !== '' ? $psBaseUrl : null,
+            $psApiKey !== '' ? $psApiKey : null,
+            $psShopId,
+            $mlClientId !== '' ? $mlClientId : null,
+            $mlClientSecret !== '' ? $mlClientSecret : null,
+            $mlRefreshToken !== '' ? $mlRefreshToken : null,
+          ]);
           header('Location: sites.php?created=1');
           exit;
         }
@@ -50,10 +90,19 @@ if (is_post()) {
   if ($action === 'update_site') {
     $id = (int)post('id', '0');
     $name = trim(post('name'));
+    $channelType = normalize_channel_type(post('channel_type', 'PRESTASHOP'));
     $margin = normalize_site_margin_percent_value(post('margin_percent'));
     $isActive = post('is_active') === '1' ? 1 : 0;
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
+    $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
+    $psBaseUrl = trim(post('ps_base_url'));
+    $psApiKey = trim(post('ps_api_key'));
+    $psShopIdRaw = trim(post('ps_shop_id'));
+    $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
+    $mlClientId = trim(post('ml_client_id'));
+    $mlClientSecret = trim(post('ml_client_secret'));
+    $mlRefreshToken = trim(post('ml_refresh_token'));
 
     if ($id <= 0) {
       $error = 'Sitio inválido.';
@@ -70,8 +119,30 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('UPDATE sites SET name = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
-          $st->execute([$name, $margin, $isActive, $showInList, $showInProduct, $id]);
+          $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
+          $st->execute([$name, $channelType, $margin, $isActive, $showInList, $showInProduct, $id]);
+          $st = $pdo->prepare('INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_refresh_token)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              channel_type = VALUES(channel_type),
+              enabled = VALUES(enabled),
+              ps_base_url = VALUES(ps_base_url),
+              ps_api_key = VALUES(ps_api_key),
+              ps_shop_id = VALUES(ps_shop_id),
+              ml_client_id = VALUES(ml_client_id),
+              ml_client_secret = VALUES(ml_client_secret),
+              ml_refresh_token = VALUES(ml_refresh_token)');
+          $st->execute([
+            $id,
+            $channelType,
+            $connectionEnabled,
+            $psBaseUrl !== '' ? $psBaseUrl : null,
+            $psApiKey !== '' ? $psApiKey : null,
+            $psShopId,
+            $mlClientId !== '' ? $mlClientId : null,
+            $mlClientSecret !== '' ? $mlClientSecret : null,
+            $mlRefreshToken !== '' ? $mlRefreshToken : null,
+          ]);
           header('Location: sites.php?updated=1');
           exit;
         }
@@ -141,9 +212,51 @@ $sites = $listSt->fetchAll();
 $editId = (int)get('edit_id', '0');
 $editSite = null;
 if ($editId > 0) {
-  $st = $pdo->prepare('SELECT id, name, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT id, name, channel_type, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
   $st->execute([$editId]);
   $editSite = $st->fetch();
+}
+
+$editConnection = [
+  'channel_type' => $editSite ? normalize_channel_type($editSite['channel_type'] ?? 'PRESTASHOP') : 'PRESTASHOP',
+  'enabled' => 0,
+  'ps_base_url' => '',
+  'ps_api_key' => '',
+  'ps_shop_id' => '',
+  'ml_client_id' => '',
+  'ml_client_secret' => '',
+  'ml_refresh_token' => '',
+];
+if ($editSite) {
+  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_refresh_token FROM site_connections WHERE site_id = ? LIMIT 1');
+  $st->execute([(int)$editSite['id']]);
+  $row = $st->fetch();
+  if ($row) {
+    $editConnection = [
+      'channel_type' => normalize_channel_type($row['channel_type'] ?? $editConnection['channel_type']),
+      'enabled' => (int)($row['enabled'] ?? 0),
+      'ps_base_url' => (string)($row['ps_base_url'] ?? ''),
+      'ps_api_key' => (string)($row['ps_api_key'] ?? ''),
+      'ps_shop_id' => isset($row['ps_shop_id']) ? (string)$row['ps_shop_id'] : '',
+      'ml_client_id' => (string)($row['ml_client_id'] ?? ''),
+      'ml_client_secret' => (string)($row['ml_client_secret'] ?? ''),
+      'ml_refresh_token' => (string)($row['ml_refresh_token'] ?? ''),
+    ];
+  }
+}
+
+$formConnection = $editConnection;
+if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'update_site'], true)) {
+  $formConnection = [
+    'channel_type' => normalize_channel_type(post('channel_type', $editConnection['channel_type'])),
+    'enabled' => post('connection_enabled', (string)$editConnection['enabled']) === '1' ? 1 : 0,
+    'ps_base_url' => trim(post('ps_base_url', $editConnection['ps_base_url'])),
+    'ps_api_key' => trim(post('ps_api_key', $editConnection['ps_api_key'])),
+    'ps_shop_id' => trim(post('ps_shop_id', $editConnection['ps_shop_id'])),
+    'ml_client_id' => trim(post('ml_client_id', $editConnection['ml_client_id'])),
+    'ml_client_secret' => trim(post('ml_client_secret', $editConnection['ml_client_secret'])),
+    'ml_refresh_token' => trim(post('ml_refresh_token', $editConnection['ml_refresh_token'])),
+  ];
 }
 
 $showNewForm = get('new') === '1' || $editSite !== null;
@@ -246,6 +359,60 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
           </div>
+          <div class="card" style="margin: 0;">
+            <div class="card-header">
+              <h4 class="card-title" style="margin:0;">Conexión</h4>
+            </div>
+            <div class="stack" style="padding: var(--space-4);">
+              <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
+                <label class="form-field">
+                  <span class="form-label">Tipo de canal</span>
+                  <select class="form-control" name="channel_type" id="channel_type">
+                    <?php $channelTypeValue = $formConnection['channel_type']; ?>
+                    <option value="PRESTASHOP" <?= $channelTypeValue === 'PRESTASHOP' ? 'selected' : '' ?>>PrestaShop</option>
+                    <option value="MERCADOLIBRE" <?= $channelTypeValue === 'MERCADOLIBRE' ? 'selected' : '' ?>>MercadoLibre</option>
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Habilitado</span>
+                  <select class="form-control" name="connection_enabled">
+                    <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
+                    <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="connection-fields-prestashop" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+                <label class="form-field">
+                  <span class="form-label">URL base</span>
+                  <input class="form-control" type="text" name="ps_base_url" maxlength="255" value="<?= e($formConnection['ps_base_url']) ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">API Key / Token</span>
+                  <input class="form-control" type="text" name="ps_api_key" maxlength="255" value="<?= e($formConnection['ps_api_key']) ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Shop ID (opcional)</span>
+                  <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>">
+                </label>
+              </div>
+
+              <div id="connection-fields-mercadolibre" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+                <label class="form-field">
+                  <span class="form-label">Client ID</span>
+                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Client Secret</span>
+                  <input class="form-control" type="text" name="ml_client_secret" maxlength="255" value="<?= e($formConnection['ml_client_secret']) ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Refresh Token</span>
+                  <input class="form-control" type="text" name="ml_refresh_token" maxlength="255" value="<?= e($formConnection['ml_refresh_token']) ?>">
+                </label>
+              </div>
+            </div>
+          </div>
           <div class="inline-actions">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
             <button class="btn" type="submit"><?= $editSite ? 'Guardar' : 'Agregar' ?></button>
@@ -317,5 +484,28 @@ $nextPage = min($totalPages, $page + 1);
     </div>
   </div>
 </main>
+<?php if ($showNewForm): ?>
+  <script>
+    (function () {
+      var channelType = document.getElementById('channel_type');
+      var prestashopFields = document.getElementById('connection-fields-prestashop');
+      var mercadolibreFields = document.getElementById('connection-fields-mercadolibre');
+
+      function toggleConnectionFields() {
+        if (!channelType || !prestashopFields || !mercadolibreFields) {
+          return;
+        }
+        var value = channelType.value;
+        prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
+        mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
+      }
+
+      if (channelType) {
+        channelType.addEventListener('change', toggleConnectionFields);
+      }
+      toggleConnectionFields();
+    })();
+  </script>
+<?php endif; ?>
 </body>
 </html>
