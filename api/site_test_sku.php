@@ -183,7 +183,7 @@ if ($sku === '') {
 }
 
 $pdo = db();
-$st = $pdo->prepare('SELECT s.id, s.channel_type AS site_channel_type, sc.channel_type, sc.enabled, sc.ps_base_url, sc.ps_api_key, sc.ml_access_token, sc.ml_user_id, sc.ml_status
+$st = $pdo->prepare('SELECT s.id, s.channel_type AS site_channel_type, sc.channel_type, sc.enabled, sc.ps_base_url, sc.ps_api_key, sc.ml_client_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token, sc.ml_user_id, sc.ml_status
   FROM sites s
   LEFT JOIN site_connections sc ON sc.site_id = s.id
   WHERE s.id = ?
@@ -195,8 +195,7 @@ if (!$row) {
 }
 
 $channel = channel_norm((string)($row['channel_type'] ?? $row['site_channel_type'] ?? 'NONE'));
-$enabled = (int)($row['enabled'] ?? 0) === 1;
-if ($channel === 'NONE' || !$enabled) {
+if ($channel === 'NONE') {
   respond(['ok' => false, 'rows' => [], 'error' => 'Sitio sin conexión configurada.'], 400);
 }
 
@@ -230,16 +229,37 @@ try {
   }
 
   if ($channel === 'MERCADOLIBRE') {
+    $clientId = trim((string)($row['ml_client_id'] ?? ''));
+    $clientSecret = trim((string)($row['ml_client_secret'] ?? ''));
     $accessToken = trim((string)($row['ml_access_token'] ?? ''));
+    $refreshToken = trim((string)($row['ml_refresh_token'] ?? ''));
     $mlStatus = strtoupper(trim((string)($row['ml_status'] ?? '')));
     $mlUserId = trim((string)($row['ml_user_id'] ?? ''));
-    if ($accessToken === '' || $mlStatus !== 'CONNECTED') {
+    if ($clientId === '' || $clientSecret === '') {
       respond(['ok' => false, 'rows' => [], 'error' => 'Sitio sin conexión configurada.'], 400);
     }
+    if ($refreshToken === '' && $mlStatus !== 'CONNECTED') {
+      respond(['ok' => false, 'rows' => [], 'error' => 'MercadoLibre: falta conectar y obtener token (refresh_token vacío).'], 400);
+    }
+    if ($accessToken === '') {
+      respond(['ok' => false, 'rows' => [], 'error' => 'MercadoLibre: falta token de acceso para probar SKU. Reconectá la cuenta.'], 400);
+    }
 
-    $owner = $mlUserId !== '' ? $mlUserId : 'me';
+    if ($mlUserId === '') {
+      $me = ml_http_get('https://api.mercadolibre.com/users/me', $accessToken);
+      if ($me['code'] < 200 || $me['code'] >= 300) {
+        throw new RuntimeException('No se pudo consultar usuario de MercadoLibre (HTTP ' . $me['code'] . ').');
+      }
+      $mlUserId = trim((string)($me['json']['id'] ?? ''));
+      if ($mlUserId === '') {
+        throw new RuntimeException('MercadoLibre no devolvió user_id en /users/me.');
+      }
+      $up = $pdo->prepare('UPDATE site_connections SET ml_user_id = ?, updated_at = NOW() WHERE site_id = ?');
+      $up->execute([$mlUserId, $siteId]);
+    }
+
     $query = http_build_query(['seller_sku' => $sku], '', '&', PHP_QUERY_RFC3986);
-    $search = ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($owner) . '/items/search?' . $query, $accessToken);
+    $search = ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $query, $accessToken);
     if ($search['code'] < 200 || $search['code'] >= 300) {
       throw new RuntimeException('No se pudo buscar SKU en MercadoLibre (HTTP ' . $search['code'] . ').');
     }
@@ -249,9 +269,42 @@ try {
       $itemIds = [];
     }
 
+    if (count($itemIds) === 0) {
+      $fallbackQuery = http_build_query(['q' => $sku], '', '&', PHP_QUERY_RFC3986);
+      $fallbackSearch = ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $fallbackQuery, $accessToken);
+      if ($fallbackSearch['code'] < 200 || $fallbackSearch['code'] >= 300) {
+        throw new RuntimeException('No se pudo buscar SKU en MercadoLibre por texto (HTTP ' . $fallbackSearch['code'] . ').');
+      }
+
+      $fallbackIds = $fallbackSearch['json']['results'] ?? [];
+      if (!is_array($fallbackIds)) {
+        $fallbackIds = [];
+      }
+      $matchedFallback = [];
+      foreach ($fallbackIds as $fallbackItemId) {
+        $fallbackItemId = trim((string)$fallbackItemId);
+        if ($fallbackItemId === '') {
+          continue;
+        }
+        $item = ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($fallbackItemId), $accessToken);
+        if ($item['code'] < 200 || $item['code'] >= 300) {
+          continue;
+        }
+        $itemJson = $item['json'];
+        $sellerCustomField = trim((string)($itemJson['seller_custom_field'] ?? ''));
+        if ($sellerCustomField === $sku) {
+          $matchedFallback[] = $fallbackItemId;
+        }
+      }
+      $itemIds = $matchedFallback;
+    }
+
+    $itemIds = array_values(array_unique(array_map(static function ($itemId): string {
+      return trim((string)$itemId);
+    }, $itemIds)));
+
     $rows = [];
     foreach ($itemIds as $itemId) {
-      $itemId = trim((string)$itemId);
       if ($itemId === '') {
         continue;
       }
@@ -260,12 +313,28 @@ try {
         continue;
       }
       $itemJson = $item['json'];
-      $rows[] = [
-        'sku' => ml_extract_sku($itemJson, $sku),
-        'title' => trim((string)($itemJson['title'] ?? '')),
-        'price' => to_int_number($itemJson['price'] ?? 0),
-        'stock' => to_int_number($itemJson['available_quantity'] ?? 0),
-      ];
+      $baseSku = ml_extract_sku($itemJson, $sku);
+      $baseTitle = trim((string)($itemJson['title'] ?? ''));
+      $basePrice = to_int_number($itemJson['price'] ?? 0);
+      $baseStock = to_int_number($itemJson['available_quantity'] ?? 0);
+
+      $rows[] = ['sku' => $baseSku, 'title' => $baseTitle, 'price' => $basePrice, 'stock' => $baseStock];
+
+      $variations = $itemJson['variations'] ?? [];
+      if (is_array($variations)) {
+        foreach ($variations as $variation) {
+          if (!is_array($variation)) {
+            continue;
+          }
+          $variationId = trim((string)($variation['id'] ?? ''));
+          $rows[] = [
+            'sku' => $sku . ($variationId !== '' ? ' (var ' . $variationId . ')' : ' (var)'),
+            'title' => $baseTitle . ' (variante)',
+            'price' => array_key_exists('price', $variation) ? to_int_number($variation['price']) : $basePrice,
+            'stock' => array_key_exists('available_quantity', $variation) ? to_int_number($variation['available_quantity']) : $baseStock,
+          ];
+        }
+      }
     }
 
     respond(['ok' => true, 'rows' => $rows]);
