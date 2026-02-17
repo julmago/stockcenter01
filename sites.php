@@ -15,8 +15,8 @@ $message = '';
 
 function normalize_channel_type($value): string {
   $channel = strtoupper(trim((string)$value));
-  if ($channel !== 'MERCADOLIBRE') {
-    return 'PRESTASHOP';
+  if (!in_array($channel, ['NONE', 'PRESTASHOP', 'MERCADOLIBRE'], true)) {
+    return 'NONE';
   }
   return $channel;
 }
@@ -26,7 +26,7 @@ if (is_post()) {
 
   if ($action === 'create_site') {
     $name = trim(post('name'));
-    $channelType = normalize_channel_type(post('channel_type', 'PRESTASHOP'));
+    $channelType = normalize_channel_type(post('channel_type', 'NONE'));
     $margin = normalize_site_margin_percent_value(post('margin_percent'));
     $isActive = post('is_active') === '1' ? 1 : 0;
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
@@ -39,6 +39,10 @@ if (is_post()) {
     $mlClientId = trim(post('ml_client_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRefreshToken = trim(post('ml_refresh_token'));
+
+    if ($channelType === 'NONE') {
+      $connectionEnabled = 0;
+    }
 
     if ($name === '') {
       $error = 'Ingresá el nombre del sitio.';
@@ -90,7 +94,7 @@ if (is_post()) {
   if ($action === 'update_site') {
     $id = (int)post('id', '0');
     $name = trim(post('name'));
-    $channelType = normalize_channel_type(post('channel_type', 'PRESTASHOP'));
+    $channelType = normalize_channel_type(post('channel_type', 'NONE'));
     $margin = normalize_site_margin_percent_value(post('margin_percent'));
     $isActive = post('is_active') === '1' ? 1 : 0;
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
@@ -103,6 +107,10 @@ if (is_post()) {
     $mlClientId = trim(post('ml_client_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRefreshToken = trim(post('ml_refresh_token'));
+
+    if ($channelType === 'NONE') {
+      $connectionEnabled = 0;
+    }
 
     if ($id <= 0) {
       $error = 'Sitio inválido.';
@@ -218,7 +226,7 @@ if ($editId > 0) {
 }
 
 $editConnection = [
-  'channel_type' => $editSite ? normalize_channel_type($editSite['channel_type'] ?? 'PRESTASHOP') : 'PRESTASHOP',
+  'channel_type' => $editSite ? normalize_channel_type($editSite['channel_type'] ?? 'NONE') : 'NONE',
   'enabled' => 0,
   'ps_base_url' => '',
   'ps_api_key' => '',
@@ -359,60 +367,56 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
           </div>
-          <div class="card" style="margin: 0;">
-            <div class="card-header">
-              <h4 class="card-title" style="margin:0;">Conexión</h4>
+          <label class="form-field" style="max-width: 360px;">
+            <span class="form-label">Tipo de conexión</span>
+            <select class="form-control" name="channel_type" id="channel_type">
+              <?php $channelTypeValue = $formConnection['channel_type']; ?>
+              <option value="NONE" <?= $channelTypeValue === 'NONE' ? 'selected' : '' ?>>Sin conexión</option>
+              <option value="PRESTASHOP" <?= $channelTypeValue === 'PRESTASHOP' ? 'selected' : '' ?>>PrestaShop</option>
+              <option value="MERCADOLIBRE" <?= $channelTypeValue === 'MERCADOLIBRE' ? 'selected' : '' ?>>MercadoLibre</option>
+            </select>
+          </label>
+
+          <div id="connFields" class="stack">
+            <label class="form-field" style="max-width: 220px;">
+              <span class="form-label">Habilitado</span>
+              <select class="form-control" name="connection_enabled">
+                <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
+                <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
+              </select>
+            </label>
+
+            <div id="psFields" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+              <label class="form-field">
+                <span class="form-label">URL base</span>
+                <input class="form-control" type="text" name="ps_base_url" maxlength="255" value="<?= e($formConnection['ps_base_url']) ?>">
+              </label>
+              <label class="form-field">
+                <span class="form-label">API Key / Token</span>
+                <input class="form-control" type="text" name="ps_api_key" maxlength="255" value="<?= e($formConnection['ps_api_key']) ?>">
+              </label>
+              <label class="form-field">
+                <span class="form-label">Shop ID (opcional)</span>
+                <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>">
+              </label>
             </div>
-            <div class="stack" style="padding: var(--space-4);">
-              <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
-                <label class="form-field">
-                  <span class="form-label">Tipo de canal</span>
-                  <select class="form-control" name="channel_type" id="channel_type">
-                    <?php $channelTypeValue = $formConnection['channel_type']; ?>
-                    <option value="PRESTASHOP" <?= $channelTypeValue === 'PRESTASHOP' ? 'selected' : '' ?>>PrestaShop</option>
-                    <option value="MERCADOLIBRE" <?= $channelTypeValue === 'MERCADOLIBRE' ? 'selected' : '' ?>>MercadoLibre</option>
-                  </select>
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Habilitado</span>
-                  <select class="form-control" name="connection_enabled">
-                    <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
-                    <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
-                  </select>
-                </label>
-              </div>
 
-              <div id="connection-fields-prestashop" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
-                <label class="form-field">
-                  <span class="form-label">URL base</span>
-                  <input class="form-control" type="text" name="ps_base_url" maxlength="255" value="<?= e($formConnection['ps_base_url']) ?>">
-                </label>
-                <label class="form-field">
-                  <span class="form-label">API Key / Token</span>
-                  <input class="form-control" type="text" name="ps_api_key" maxlength="255" value="<?= e($formConnection['ps_api_key']) ?>">
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Shop ID (opcional)</span>
-                  <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>">
-                </label>
-              </div>
-
-              <div id="connection-fields-mercadolibre" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
-                <label class="form-field">
-                  <span class="form-label">Client ID</span>
-                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Client Secret</span>
-                  <input class="form-control" type="text" name="ml_client_secret" maxlength="255" value="<?= e($formConnection['ml_client_secret']) ?>">
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Refresh Token</span>
-                  <input class="form-control" type="text" name="ml_refresh_token" maxlength="255" value="<?= e($formConnection['ml_refresh_token']) ?>">
-                </label>
-              </div>
+            <div id="mlFields" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+              <label class="form-field">
+                <span class="form-label">Client ID</span>
+                <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
+              </label>
+              <label class="form-field">
+                <span class="form-label">Client Secret</span>
+                <input class="form-control" type="text" name="ml_client_secret" maxlength="255" value="<?= e($formConnection['ml_client_secret']) ?>">
+              </label>
+              <label class="form-field">
+                <span class="form-label">Refresh Token</span>
+                <input class="form-control" type="text" name="ml_refresh_token" maxlength="255" value="<?= e($formConnection['ml_refresh_token']) ?>">
+              </label>
             </div>
           </div>
+
           <div class="inline-actions">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
             <button class="btn" type="submit"><?= $editSite ? 'Guardar' : 'Agregar' ?></button>
@@ -488,14 +492,22 @@ $nextPage = min($totalPages, $page + 1);
   <script>
     (function () {
       var channelType = document.getElementById('channel_type');
-      var prestashopFields = document.getElementById('connection-fields-prestashop');
-      var mercadolibreFields = document.getElementById('connection-fields-mercadolibre');
+      var connFields = document.getElementById('connFields');
+      var prestashopFields = document.getElementById('psFields');
+      var mercadolibreFields = document.getElementById('mlFields');
 
       function toggleConnectionFields() {
-        if (!channelType || !prestashopFields || !mercadolibreFields) {
+        if (!channelType || !connFields || !prestashopFields || !mercadolibreFields) {
           return;
         }
         var value = channelType.value;
+        if (value === 'NONE') {
+          connFields.style.display = 'none';
+          prestashopFields.style.display = 'none';
+          mercadolibreFields.style.display = 'none';
+          return;
+        }
+        connFields.style.display = '';
         prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
         mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
       }
