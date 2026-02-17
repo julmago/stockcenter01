@@ -328,10 +328,37 @@ if (is_post() && post('action') === 'stock_set') {
     try {
       $stockResult = set_stock($id, (int)$qty_raw, $note, (int)(current_user()['id'] ?? 0));
       $sites = get_prestashop_sync_sites();
+      $pushStatus = [];
       foreach ($sites as $site) {
-        sync_stock_to_prestashop($site, (string)$product['sku'], (int)$stockResult['qty']);
+        $pushResult = sync_stock_to_prestashop_with_result($site, (string)$product['sku'], (int)$stockResult['qty']);
+        $pushStatus[] = [
+          'site_id' => (int)($site['id'] ?? 0),
+          'ok' => (bool)($pushResult['ok'] ?? false),
+          'error' => (string)($pushResult['error'] ?? ''),
+        ];
       }
-      $message = 'Stock actualizado.';
+
+      $okPushCount = 0;
+      $errorPushes = [];
+      foreach ($pushStatus as $status) {
+        if ($status['ok']) {
+          $okPushCount++;
+        } else {
+          $errorPushes[] = 'sitio ' . (int)$status['site_id'] . ': ' . ($status['error'] !== '' ? $status['error'] : 'error desconocido');
+        }
+      }
+
+      if ($errorPushes) {
+        $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+        $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $id]);
+        $error = 'Error enviando a PrestaShop: ' . implode(' ; ', $errorPushes);
+      } elseif ($okPushCount > 0) {
+        $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+        $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . (string)$product['sku'], $id]);
+        $message = 'Stock actualizado. Stock enviado a PrestaShop OK.';
+      } else {
+        $message = 'Stock actualizado.';
+      }
     } catch (InvalidArgumentException $e) {
       $error = $e->getMessage();
     } catch (Throwable $e) {
@@ -351,10 +378,37 @@ if (is_post() && post('action') === 'stock_add') {
     try {
       $stockResult = add_stock($id, (int)$delta_raw, $note, (int)(current_user()['id'] ?? 0));
       $sites = get_prestashop_sync_sites();
+      $pushStatus = [];
       foreach ($sites as $site) {
-        sync_stock_to_prestashop($site, (string)$product['sku'], (int)$stockResult['qty']);
+        $pushResult = sync_stock_to_prestashop_with_result($site, (string)$product['sku'], (int)$stockResult['qty']);
+        $pushStatus[] = [
+          'site_id' => (int)($site['id'] ?? 0),
+          'ok' => (bool)($pushResult['ok'] ?? false),
+          'error' => (string)($pushResult['error'] ?? ''),
+        ];
       }
-      $message = 'Stock ajustado.';
+
+      $okPushCount = 0;
+      $errorPushes = [];
+      foreach ($pushStatus as $status) {
+        if ($status['ok']) {
+          $okPushCount++;
+        } else {
+          $errorPushes[] = 'sitio ' . (int)$status['site_id'] . ': ' . ($status['error'] !== '' ? $status['error'] : 'error desconocido');
+        }
+      }
+
+      if ($errorPushes) {
+        $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+        $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $id]);
+        $error = 'Error enviando a PrestaShop: ' . implode(' ; ', $errorPushes);
+      } elseif ($okPushCount > 0) {
+        $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+        $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . (string)$product['sku'], $id]);
+        $message = 'Stock ajustado. Stock enviado a PrestaShop OK.';
+      } else {
+        $message = 'Stock ajustado.';
+      }
     } catch (InvalidArgumentException $e) {
       $error = $e->getMessage();
     } catch (Throwable $e) {
