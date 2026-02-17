@@ -407,6 +407,7 @@ function ensure_sites_schema(): void {
     enabled TINYINT(1) NOT NULL DEFAULT 0,
     ps_base_url VARCHAR(255) NULL,
     ps_api_key VARCHAR(255) NULL,
+    webhook_secret VARCHAR(255) NULL,
     ps_shop_id INT NULL,
     ml_client_id VARCHAR(100) NULL,
     ml_client_secret VARCHAR(255) NULL,
@@ -430,6 +431,9 @@ function ensure_sites_schema(): void {
 
   if (!isset($connColumns['ml_redirect_uri'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_redirect_uri VARCHAR(255) NULL AFTER ml_client_secret");
+  }
+  if (!isset($connColumns['webhook_secret'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN webhook_secret VARCHAR(255) NULL AFTER ps_api_key");
   }
   if (!isset($connColumns['ml_access_token'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_access_token TEXT NULL AFTER ml_redirect_uri");
