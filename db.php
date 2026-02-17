@@ -352,6 +352,7 @@ function ensure_sites_schema(): void {
   $pdo->exec("CREATE TABLE IF NOT EXISTS sites (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(80) NOT NULL,
+    channel_type VARCHAR(20) NOT NULL DEFAULT 'PRESTASHOP',
     margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     is_visible TINYINT(1) NOT NULL DEFAULT 1,
@@ -375,6 +376,24 @@ function ensure_sites_schema(): void {
   if (!isset($site_columns['show_in_product'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN show_in_product TINYINT(1) NOT NULL DEFAULT 1 AFTER is_visible");
   }
+
+  if (!isset($site_columns['channel_type'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN channel_type VARCHAR(20) NOT NULL DEFAULT 'PRESTASHOP' AFTER name");
+  }
+
+  $pdo->exec("CREATE TABLE IF NOT EXISTS site_connections (
+    site_id INT UNSIGNED NOT NULL,
+    channel_type VARCHAR(20) NOT NULL DEFAULT 'PRESTASHOP',
+    enabled TINYINT(1) NOT NULL DEFAULT 0,
+    ps_base_url VARCHAR(255) NULL,
+    ps_api_key VARCHAR(255) NULL,
+    ps_shop_id INT NULL,
+    ml_client_id VARCHAR(100) NULL,
+    ml_client_secret VARCHAR(255) NULL,
+    ml_refresh_token VARCHAR(255) NULL,
+    PRIMARY KEY (site_id),
+    CONSTRAINT fk_site_connections_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
   $ready = true;
 }
