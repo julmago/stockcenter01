@@ -13,6 +13,22 @@ function stock_webhook_json(array $payload, int $status = 200): void {
   exit;
 }
 
+
+function stock_webhook_log_invalid_payload(string $reason, string $rawBody, $decoded = null): void {
+  $preview = trim($rawBody);
+  if (strlen($preview) > 2000) {
+    $preview = substr($preview, 0, 2000) . '...(truncated)';
+  }
+
+  $safeDecoded = null;
+  if (is_array($decoded)) {
+    $safeDecoded = $decoded;
+    unset($safeDecoded['signature'], $safeDecoded['secret'], $safeDecoded['webhook_secret'], $safeDecoded['token'], $safeDecoded['api_key']);
+  }
+
+  error_log('[stock_webhook] Payload inválido: ' . $reason . ' raw=' . $preview . ' decoded=' . json_encode($safeDecoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
   stock_webhook_json(['ok' => false, 'error' => 'Método inválido.'], 405);
 }
@@ -22,55 +38,40 @@ ensure_stock_schema();
 
 $rawBody = file_get_contents('php://input');
 if (!is_string($rawBody) || trim($rawBody) === '') {
+  stock_webhook_log_invalid_payload('body vacío', is_string($rawBody) ? $rawBody : '');
   stock_webhook_json(['ok' => false, 'error' => 'Body vacío.'], 422);
 }
 
 $data = json_decode($rawBody, true);
 if (!is_array($data)) {
+  stock_webhook_log_invalid_payload('json inválido', $rawBody);
   stock_webhook_json(['ok' => false, 'error' => 'JSON inválido.'], 422);
 }
 
-$siteId = (int)($data['site_id'] ?? 0);
+$siteId = (int)($data['shop_id'] ?? $data['site_id'] ?? 0);
 $sku = trim((string)($data['sku'] ?? ''));
-$qtyRaw = $data['qty_new'] ?? null;
-$event = trim((string)($data['event'] ?? ''));
+$qtyRaw = $data['stock'] ?? $data['qty_new'] ?? null;
+$event = trim((string)($data['event'] ?? 'webhook_stock'));
 $timestamp = trim((string)($data['timestamp'] ?? ''));
-$signature = strtolower(trim((string)($data['signature'] ?? '')));
+if ($timestamp === '') {
+  $timestamp = gmdate('c');
+}
 
-if ($siteId <= 0 || $sku === '' || !is_numeric($qtyRaw) || $timestamp === '' || $signature === '') {
+if ($sku === '' || !is_numeric($qtyRaw)) {
+  stock_webhook_log_invalid_payload('faltan sku/stock válidos', $rawBody, $data);
   stock_webhook_json(['ok' => false, 'error' => 'Payload inválido.'], 422);
 }
 
-if (!preg_match('/^[a-f0-9]{64}$/', $signature)) {
-  stock_webhook_json(['ok' => false, 'error' => 'signature inválida.'], 422);
-}
-
-$pdo = db();
-$siteSt = $pdo->prepare('SELECT s.id, s.name, sc.webhook_secret FROM sites s LEFT JOIN site_connections sc ON sc.site_id = s.id WHERE s.id = ? LIMIT 1');
-$siteSt->execute([$siteId]);
-$site = $siteSt->fetch();
-if (!$site) {
-  stock_webhook_json(['ok' => false, 'error' => 'Site no encontrado.'], 404);
-}
-
-$secret = trim((string)($site['webhook_secret'] ?? ''));
-if ($secret === '') {
-  stock_webhook_json(['ok' => false, 'error' => 'Site sin webhook_secret configurado.'], 422);
-}
-
-$signedPayload = [
-  'site_id' => $siteId,
-  'sku' => $sku,
-  'qty_new' => (int)$qtyRaw,
-  'event' => $event,
-  'timestamp' => $timestamp,
-];
-$expectedSignature = hash_hmac('sha256', json_encode($signedPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $secret);
-if (!hash_equals($expectedSignature, $signature)) {
-  stock_webhook_json(['ok' => false, 'error' => 'signature inválida.'], 403);
-}
-
 $qtyNew = (int)$qtyRaw;
+$pdo = db();
+if ($siteId > 0) {
+  $siteSt = $pdo->prepare('SELECT s.id, s.name FROM sites s WHERE s.id = ? LIMIT 1');
+  $siteSt->execute([$siteId]);
+  $site = $siteSt->fetch();
+  if (!$site) {
+    stock_webhook_json(['ok' => false, 'error' => 'Site no encontrado.'], 404);
+  }
+}
 
 $st = $pdo->prepare('SELECT id, sku FROM products WHERE sku = ? ORDER BY id ASC');
 $st->execute([$sku]);
