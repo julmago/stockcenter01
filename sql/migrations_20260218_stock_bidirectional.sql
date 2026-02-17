@@ -1,7 +1,7 @@
 ALTER TABLE sites
   ADD COLUMN conn_type ENUM('none','prestashop','mercadolibre') NOT NULL DEFAULT 'none' AFTER channel_type,
   ADD COLUMN conn_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER conn_type,
-  ADD COLUMN sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER conn_enabled,
+  ADD COLUMN sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER conn_enabled,
   ADD COLUMN last_sync_at DATETIME NULL AFTER sync_stock_enabled;
 
 ALTER TABLE ts_stock_moves

@@ -29,7 +29,7 @@ function ensure_stock_sync_schema(): void {
     $pdo->exec("ALTER TABLE sites ADD COLUMN conn_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER conn_type");
   }
   if (!isset($siteColumns['sync_stock_enabled'])) {
-    $pdo->exec("ALTER TABLE sites ADD COLUMN sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER conn_enabled");
+    $pdo->exec("ALTER TABLE sites ADD COLUMN sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER conn_enabled");
   }
   if (!isset($siteColumns['last_sync_at'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN last_sync_at DATETIME NULL AFTER sync_stock_enabled");
@@ -135,7 +135,7 @@ function stock_sync_site_has_credentials(array $site): bool {
 function stock_sync_active_sites(): array {
   ensure_stock_sync_schema();
 
-  $sql = "SELECT s.id, s.is_active, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.last_sync_at,
+  $sql = "SELECT s.id, s.name, s.is_active, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.last_sync_at,
       sc.channel_type, sc.enabled AS connection_enabled, sc.ps_base_url, sc.ps_api_key, sc.ps_shop_id,
       sc.ml_client_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token
     FROM sites s
@@ -149,6 +149,9 @@ function enqueue_stock_push_jobs(int $productId, int $qty, string $origin, ?int 
   ensure_stock_sync_schema();
 
   $origin = stock_sync_normalize_origin($origin);
+  if ($origin !== 'tswork') {
+    return 0;
+  }
   $sites = stock_sync_active_sites();
   $pdo = db();
   $created = 0;
@@ -156,7 +159,7 @@ function enqueue_stock_push_jobs(int $productId, int $qty, string $origin, ?int 
   foreach ($sites as $site) {
     $siteId = (int)$site['id'];
     $connEnabled = (int)($site['conn_enabled'] ?? 0) === 1 || (int)($site['connection_enabled'] ?? 0) === 1;
-    $syncEnabled = (int)($site['sync_stock_enabled'] ?? 1) === 1;
+    $syncEnabled = (int)($site['sync_stock_enabled'] ?? 0) === 1;
     if (!$connEnabled || !$syncEnabled || !stock_sync_site_has_credentials($site)) {
       continue;
     }
@@ -203,4 +206,174 @@ function stock_sync_register_lock(int $siteId, int $productId, string $origin, s
   } catch (Throwable $e) {
     return false;
   }
+}
+
+function stock_sync_log(string $message, array $context = []): void {
+  $chunks = [];
+  foreach ($context as $key => $value) {
+    if (is_scalar($value) || $value === null) {
+      $chunks[] = $key . '=' . (string)$value;
+    } else {
+      $chunks[] = $key . '=' . json_encode($value, JSON_UNESCAPED_UNICODE);
+    }
+  }
+  error_log('[stock_sync] ' . $message . (count($chunks) ? ' | ' . implode(' ', $chunks) : ''));
+}
+
+function stock_sync_request_prestashop(array $site, string $method, string $path, ?string $body = null): array {
+  $baseUrl = rtrim((string)($site['ps_base_url'] ?? ''), '/');
+  $apiKey = trim((string)($site['ps_api_key'] ?? ''));
+  if ($baseUrl === '' || $apiKey === '') {
+    throw new RuntimeException('Configuración incompleta de PrestaShop.');
+  }
+
+  $url = $baseUrl . $path;
+  $ch = curl_init($url);
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+  curl_setopt($ch, CURLOPT_USERPWD, $apiKey . ':');
+  curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+  $headers = ['Accept: application/xml'];
+  if ($body !== null) {
+    $headers[] = 'Content-Type: application/xml; charset=utf-8';
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+  }
+  curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+  $response = curl_exec($ch);
+  $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $curlError = curl_error($ch);
+  curl_close($ch);
+
+  if ($response === false) {
+    throw new RuntimeException('cURL error: ' . $curlError);
+  }
+
+  return [
+    'http_code' => $httpCode,
+    'body' => (string)$response,
+  ];
+}
+
+function sync_stock_to_prestashop(array $site, string $sku, int $newQty): bool {
+  $siteId = (int)($site['id'] ?? 0);
+  try {
+    $skuEncoded = rawurlencode($sku);
+    $productResponse = stock_sync_request_prestashop($site, 'GET', '/api/products?filter[reference]=' . $skuEncoded . '&display=[id]');
+    stock_sync_log('Prestashop lookup product', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'http_code' => $productResponse['http_code'], 'body' => mb_substr($productResponse['body'], 0, 500)]);
+    if ($productResponse['http_code'] < 200 || $productResponse['http_code'] >= 300) {
+      return false;
+    }
+
+    $xml = @simplexml_load_string($productResponse['body']);
+    $productId = 0;
+    if ($xml && isset($xml->products->product)) {
+      foreach ($xml->products->product as $productNode) {
+        $productId = (int)($productNode->id ?? 0);
+        if ($productId > 0) {
+          break;
+        }
+      }
+    }
+    if ($productId <= 0) {
+      stock_sync_log('Prestashop SKU not found', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty]);
+      return false;
+    }
+
+    $stockPath = '/api/stock_availables?filter[id_product]=' . $productId . '&filter[id_product_attribute]=0&display=[id,quantity]';
+    $stockResponse = stock_sync_request_prestashop($site, 'GET', $stockPath);
+    stock_sync_log('Prestashop lookup stock_available', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'http_code' => $stockResponse['http_code'], 'body' => mb_substr($stockResponse['body'], 0, 500)]);
+    if ($stockResponse['http_code'] < 200 || $stockResponse['http_code'] >= 300) {
+      return false;
+    }
+
+    $stockXml = @simplexml_load_string($stockResponse['body']);
+    $stockAvailableId = 0;
+    if ($stockXml && isset($stockXml->stock_availables->stock_available)) {
+      foreach ($stockXml->stock_availables->stock_available as $stockNode) {
+        $stockAvailableId = (int)($stockNode->id ?? 0);
+        if ($stockAvailableId > 0) {
+          break;
+        }
+      }
+    }
+
+    if ($stockAvailableId <= 0) {
+      stock_sync_log('Prestashop stock_available not found', ['site_id' => $siteId, 'sku' => $sku, 'product_id' => $productId]);
+      return false;
+    }
+
+    $payload = '<?xml version="1.0" encoding="UTF-8"?>'
+      . '<prestashop><stock_available>'
+      . '<id>' . $stockAvailableId . '</id>'
+      . '<id_product>' . $productId . '</id_product>'
+      . '<id_product_attribute>0</id_product_attribute>'
+      . '<quantity>' . $newQty . '</quantity>'
+      . '</stock_available></prestashop>';
+
+    $updateResponse = stock_sync_request_prestashop($site, 'PUT', '/api/stock_availables/' . $stockAvailableId, $payload);
+    stock_sync_log('Prestashop update stock', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'http_code' => $updateResponse['http_code'], 'body' => mb_substr($updateResponse['body'], 0, 500)]);
+
+    return $updateResponse['http_code'] >= 200 && $updateResponse['http_code'] < 300;
+  } catch (Throwable $e) {
+    stock_sync_log('Prestashop update error', ['site_id' => $siteId, 'sku' => $sku, 'qty' => $newQty, 'error' => $e->getMessage()]);
+    return false;
+  }
+}
+
+function pull_stock_from_prestashop(array $site, string $sku): ?int {
+  $siteId = (int)($site['id'] ?? 0);
+  try {
+    $skuEncoded = rawurlencode($sku);
+    $productResponse = stock_sync_request_prestashop($site, 'GET', '/api/products?filter[reference]=' . $skuEncoded . '&display=[id]');
+    stock_sync_log('Prestashop pull lookup product', ['site_id' => $siteId, 'sku' => $sku, 'http_code' => $productResponse['http_code'], 'body' => mb_substr($productResponse['body'], 0, 500)]);
+    if ($productResponse['http_code'] < 200 || $productResponse['http_code'] >= 300) {
+      return null;
+    }
+
+    $xml = @simplexml_load_string($productResponse['body']);
+    $productId = 0;
+    if ($xml && isset($xml->products->product)) {
+      foreach ($xml->products->product as $productNode) {
+        $productId = (int)($productNode->id ?? 0);
+        if ($productId > 0) {
+          break;
+        }
+      }
+    }
+    if ($productId <= 0) {
+      return null;
+    }
+
+    $stockPath = '/api/stock_availables?filter[id_product]=' . $productId . '&filter[id_product_attribute]=0&display=[id,quantity]';
+    $stockResponse = stock_sync_request_prestashop($site, 'GET', $stockPath);
+    stock_sync_log('Prestashop pull lookup stock_available', ['site_id' => $siteId, 'sku' => $sku, 'http_code' => $stockResponse['http_code'], 'body' => mb_substr($stockResponse['body'], 0, 500)]);
+    if ($stockResponse['http_code'] < 200 || $stockResponse['http_code'] >= 300) {
+      return null;
+    }
+
+    $stockXml = @simplexml_load_string($stockResponse['body']);
+    if ($stockXml && isset($stockXml->stock_availables->stock_available)) {
+      foreach ($stockXml->stock_availables->stock_available as $stockNode) {
+        return (int)($stockNode->quantity ?? 0);
+      }
+    }
+  } catch (Throwable $e) {
+    stock_sync_log('Prestashop pull error', ['site_id' => $siteId, 'sku' => $sku, 'error' => $e->getMessage()]);
+  }
+
+  return null;
+}
+
+function get_prestashop_sync_sites(): array {
+  $sites = stock_sync_active_sites();
+  return array_values(array_filter($sites, static function (array $site): bool {
+    $connEnabled = (int)($site['conn_enabled'] ?? 0) === 1 || (int)($site['connection_enabled'] ?? 0) === 1;
+    return stock_sync_conn_type($site) === 'prestashop'
+      && $connEnabled
+      && (int)($site['sync_stock_enabled'] ?? 0) === 1
+      && stock_sync_site_has_credentials($site);
+  }));
 }

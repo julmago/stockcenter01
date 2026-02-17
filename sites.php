@@ -45,7 +45,7 @@ if (is_post()) {
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
-    $syncStockEnabled = post('sync_stock_enabled', '1') === '0' ? 0 : 1;
+    $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
     $psShopIdRaw = trim(post('ps_shop_id'));
@@ -146,7 +146,7 @@ if (is_post()) {
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
-    $syncStockEnabled = post('sync_stock_enabled', '1') === '0' ? 0 : 1;
+    $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
     $psShopIdRaw = trim(post('ps_shop_id'));
@@ -313,7 +313,7 @@ if ($editId > 0) {
 $editConnection = [
   'channel_type' => $editSite ? normalize_channel_type($editSite['channel_type'] ?? 'NONE') : 'NONE',
   'enabled' => (int)($editSite['conn_enabled'] ?? 0),
-  'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 1),
+  'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 0),
   'ps_base_url' => '',
   'ps_api_key' => '',
   'ps_shop_id' => '',
@@ -335,7 +335,7 @@ if ($editSite) {
     $editConnection = [
       'channel_type' => normalize_channel_type($row['channel_type'] ?? $editConnection['channel_type']),
       'enabled' => (int)($row['enabled'] ?? 0),
-      'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 1),
+      'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 0),
       'ps_base_url' => (string)($row['ps_base_url'] ?? ''),
       'ps_api_key' => (string)($row['ps_api_key'] ?? ''),
       'ps_shop_id' => isset($row['ps_shop_id']) ? (string)$row['ps_shop_id'] : '',
@@ -360,7 +360,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
   $formConnection = [
     'channel_type' => normalize_channel_type(post('channel_type', $editConnection['channel_type'])),
     'enabled' => post('connection_enabled', (string)$editConnection['enabled']) === '1' ? 1 : 0,
-    'sync_stock_enabled' => post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '0' ? 0 : 1,
+    'sync_stock_enabled' => post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '1' ? 1 : 0,
     'ps_base_url' => trim(post('ps_base_url', $editConnection['ps_base_url'])),
     'ps_api_key' => trim(post('ps_api_key', $editConnection['ps_api_key'])),
     'ps_shop_id' => trim(post('ps_shop_id', $editConnection['ps_shop_id'])),
@@ -498,7 +498,7 @@ $nextPage = min($totalPages, $page + 1);
               <label class="form-field">
                 <span class="form-label">Sincronizar stock</span>
                 <select class="form-control" name="sync_stock_enabled">
-                  <?php $syncStockValue = isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 1; ?>
+                  <?php $syncStockValue = isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 0; ?>
                   <option value="1" <?= $syncStockValue === 1 ? 'selected' : '' ?>>Sí</option>
                   <option value="0" <?= $syncStockValue === 0 ? 'selected' : '' ?>>No</option>
                 </select>

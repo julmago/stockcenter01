@@ -3,11 +3,13 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/include/pricing.php';
 require_once __DIR__ . '/include/stock.php';
+require_once __DIR__ . '/include/stock_sync.php';
 require_login();
 ensure_product_suppliers_schema();
 ensure_brands_schema();
 ensure_sites_schema();
 ensure_stock_schema();
+ensure_stock_sync_schema();
 
 $id = (int)get('id','0');
 if ($id <= 0) abort(400, 'Falta id.');
@@ -324,7 +326,11 @@ if (is_post() && post('action') === 'stock_set') {
     $error = 'El stock debe ser un entero.';
   } else {
     try {
-      set_stock($id, (int)$qty_raw, $note, (int)(current_user()['id'] ?? 0));
+      $stockResult = set_stock($id, (int)$qty_raw, $note, (int)(current_user()['id'] ?? 0));
+      $sites = get_prestashop_sync_sites();
+      foreach ($sites as $site) {
+        sync_stock_to_prestashop($site, (string)$product['sku'], (int)$stockResult['qty']);
+      }
       $message = 'Stock actualizado.';
     } catch (InvalidArgumentException $e) {
       $error = $e->getMessage();
@@ -343,12 +349,57 @@ if (is_post() && post('action') === 'stock_add') {
     $error = 'El ajuste debe ser un entero.';
   } else {
     try {
-      add_stock($id, (int)$delta_raw, $note, (int)(current_user()['id'] ?? 0));
+      $stockResult = add_stock($id, (int)$delta_raw, $note, (int)(current_user()['id'] ?? 0));
+      $sites = get_prestashop_sync_sites();
+      foreach ($sites as $site) {
+        sync_stock_to_prestashop($site, (string)$product['sku'], (int)$stockResult['qty']);
+      }
       $message = 'Stock ajustado.';
     } catch (InvalidArgumentException $e) {
       $error = $e->getMessage();
     } catch (Throwable $e) {
       $error = 'No se pudo ajustar el stock.';
+    }
+  }
+}
+
+if (is_post() && post('action') === 'pull_stock_prestashop') {
+  require_permission($can_edit);
+  $siteId = (int)post('site_id', '0');
+  $syncSites = get_prestashop_sync_sites();
+  $targetSite = null;
+  foreach ($syncSites as $syncSite) {
+    if ((int)$syncSite['id'] === $siteId) {
+      $targetSite = $syncSite;
+      break;
+    }
+  }
+
+  if ($targetSite === null) {
+    $error = 'Sitio PrestaShop inválido para traer stock.';
+  } else {
+    $pulledQty = pull_stock_from_prestashop($targetSite, (string)$product['sku']);
+    if ($pulledQty === null) {
+      $error = 'No se pudo traer stock desde PrestaShop.';
+    } else {
+      try {
+        $previousQty = (int)get_stock($id)['qty'];
+        set_stock(
+          $id,
+          $pulledQty,
+          'sync_pull: sitio ' . (string)$targetSite['id'] . ' / sku ' . (string)$product['sku'],
+          (int)(current_user()['id'] ?? 0),
+          'prestashop',
+          (int)$targetSite['id'],
+          'sync_pull_' . (string)$targetSite['id'] . '_' . (string)$id . '_' . time()
+        );
+        $pdo = db();
+        $st = $pdo->prepare("UPDATE ts_stock_moves SET reason = 'sync_pull', note = ? WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+        $st->execute(['sync_pull: sitio ' . (string)$targetSite['id'] . ' / sku ' . (string)$product['sku'] . ' / prev=' . $previousQty . ' new=' . $pulledQty, $id]);
+        $message = 'Stock traído desde PrestaShop: ' . $pulledQty;
+      } catch (Throwable $e) {
+        $error = 'No se pudo actualizar stock local con el valor de PrestaShop.';
+      }
     }
   }
 }
@@ -401,6 +452,7 @@ $supplier_links = $st->fetchAll();
 
 $ts_stock = get_stock($id);
 $ts_stock_moves = get_stock_moves($id, 20);
+$prestashop_sync_sites = get_prestashop_sync_sites();
 $running_qty = (int)$ts_stock['qty'];
 foreach ($ts_stock_moves as $index => $move) {
   $stock_resultante = $move['stock_resultante'] ?? null;
@@ -675,6 +727,25 @@ if ($st) {
               <button class="btn" type="submit">Guardar</button>
             </div>
           </form>
+
+          <?php if ($prestashop_sync_sites): ?>
+            <form method="post" class="stack">
+              <input type="hidden" name="action" value="pull_stock_prestashop">
+              <div class="form-row" style="grid-template-columns:2fr 1fr; align-items:end;">
+                <div class="form-group">
+                  <label class="form-label">Sitio PrestaShop</label>
+                  <select class="form-control" name="site_id" required>
+                    <?php foreach ($prestashop_sync_sites as $syncSite): ?>
+                      <option value="<?= (int)$syncSite['id'] ?>">#<?= (int)$syncSite['id'] ?> - <?= e((string)($syncSite['name'] ?? 'Sitio')) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div class="form-actions" style="margin:0;">
+                  <button class="btn btn-ghost" type="submit">Traer stock desde PrestaShop</button>
+                </div>
+              </div>
+            </form>
+          <?php endif; ?>
         <?php endif; ?>
 
         <div class="table-wrapper product-table-wrapper">
