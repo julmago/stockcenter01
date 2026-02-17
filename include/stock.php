@@ -28,6 +28,7 @@ function ensure_stock_schema(): void {
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     product_id INT UNSIGNED NOT NULL,
     delta INT NOT NULL,
+    stock_resultante INT NOT NULL DEFAULT 0,
     reason VARCHAR(50) NOT NULL DEFAULT 'ajuste',
     note TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -38,6 +39,15 @@ function ensure_stock_schema(): void {
     CONSTRAINT fk_ts_stock_moves_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     CONSTRAINT fk_ts_stock_moves_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $has_stock_resultante = false;
+  $st = $pdo->query("SHOW COLUMNS FROM ts_stock_moves LIKE 'stock_resultante'");
+  if ($st) {
+    $has_stock_resultante = (bool)$st->fetch();
+  }
+  if (!$has_stock_resultante) {
+    $pdo->exec("ALTER TABLE ts_stock_moves ADD COLUMN stock_resultante INT NOT NULL DEFAULT 0 AFTER delta");
+  }
 
   $ready = true;
 }
@@ -69,10 +79,6 @@ function get_stock(int $product_id): array {
 function set_stock(int $product_id, int $qty, ?string $note, int $user_id): array {
   ensure_stock_schema();
 
-  if ($qty < 0) {
-    throw new InvalidArgumentException('El stock no puede ser negativo.');
-  }
-
   $pdo = db();
   $pdo->beginTransaction();
   try {
@@ -90,8 +96,8 @@ function set_stock(int $product_id, int $qty, ?string $note, int $user_id): arra
       $st->execute([$product_id, $qty, $user_id > 0 ? $user_id : null]);
     }
 
-    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, reason, note, created_at, created_by) VALUES(?, ?, ?, ?, NOW(), ?)');
-    $st->execute([$product_id, $delta, 'carga_manual', normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
+    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, NOW(), ?)');
+    $st->execute([$product_id, $delta, $qty, 'carga_manual', normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
 
     $pdo->commit();
   } catch (Throwable $e) {
@@ -116,9 +122,6 @@ function add_stock(int $product_id, int $delta, ?string $note, int $user_id): ar
     $current_qty = $current ? (int)$current['qty'] : 0;
 
     $new_qty = $current_qty + $delta;
-    if ($new_qty < 0) {
-      throw new InvalidArgumentException('El stock no puede quedar negativo.');
-    }
 
     if ($current) {
       $st = $pdo->prepare('UPDATE ts_product_stock SET qty = ?, updated_at = NOW(), updated_by = ? WHERE product_id = ?');
@@ -129,8 +132,8 @@ function add_stock(int $product_id, int $delta, ?string $note, int $user_id): ar
     }
 
     $reason = $delta === 0 ? 'inventario' : 'ajuste';
-    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, reason, note, created_at, created_by) VALUES(?, ?, ?, ?, NOW(), ?)');
-    $st->execute([$product_id, $delta, $reason, normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
+    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, NOW(), ?)');
+    $st->execute([$product_id, $delta, $new_qty, $reason, normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
 
     $pdo->commit();
   } catch (Throwable $e) {
@@ -147,7 +150,7 @@ function get_stock_moves(int $product_id, int $limit = 20): array {
   ensure_stock_schema();
   $limit = max(1, min(100, $limit));
 
-  $st = db()->prepare("SELECT m.id, m.delta, m.reason, m.note, m.created_at, m.created_by,
+  $st = db()->prepare("SELECT m.id, m.delta, m.stock_resultante, m.reason, m.note, m.created_at, m.created_by,
       CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS user_name,
       u.email AS user_email
     FROM ts_stock_moves m
