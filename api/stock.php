@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../include/stock.php';
+require_once __DIR__ . '/../include/stock_sync.php';
 
 header('Content-Type: application/json; charset=utf-8');
 require_login();

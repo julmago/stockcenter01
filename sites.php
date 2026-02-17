@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/stock_sync.php';
 require_login();
 ensure_sites_schema();
+ensure_stock_sync_schema();
 
 $pdo = db();
 $q = trim(get('q', ''));
@@ -43,6 +45,7 @@ if (is_post()) {
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
+    $syncStockEnabled = post('sync_stock_enabled', '1') === '0' ? 0 : 1;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
     $psShopIdRaw = trim(post('ps_shop_id'));
@@ -68,8 +71,8 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('INSERT INTO sites(name, channel_type, margin_percent, is_active, is_visible, show_in_product, updated_at) VALUES(?, ?, ?, ?, ?, ?, NOW())');
-          $st->execute([$name, $channelType, $margin, $isActive, $showInList, $showInProduct]);
+          $st = $pdo->prepare('INSERT INTO sites(name, channel_type, conn_type, conn_enabled, sync_stock_enabled, margin_percent, is_active, is_visible, show_in_product, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+          $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct]);
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
@@ -143,6 +146,7 @@ if (is_post()) {
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
+    $syncStockEnabled = post('sync_stock_enabled', '1') === '0' ? 0 : 1;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
     $psShopIdRaw = trim(post('ps_shop_id'));
@@ -170,8 +174,8 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
-          $st->execute([$name, $channelType, $margin, $isActive, $showInList, $showInProduct, $id]);
+          $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
+          $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
@@ -284,7 +288,7 @@ $totalPages = max(1, (int)ceil($total / $limit));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $limit;
 
-$listSql = "SELECT s.id, s.name, s.margin_percent, s.is_active, s.is_visible, s.show_in_product
+$listSql = "SELECT s.id, s.name, s.margin_percent, s.is_active, s.is_visible, s.show_in_product, s.sync_stock_enabled
   FROM sites s
   $where
   ORDER BY s.name ASC
@@ -301,14 +305,15 @@ $sites = $listSt->fetchAll();
 $editId = (int)get('edit_id', '0');
 $editSite = null;
 if ($editId > 0) {
-  $st = $pdo->prepare('SELECT id, name, channel_type, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT id, name, channel_type, conn_type, conn_enabled, sync_stock_enabled, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
   $st->execute([$editId]);
   $editSite = $st->fetch();
 }
 
 $editConnection = [
   'channel_type' => $editSite ? normalize_channel_type($editSite['channel_type'] ?? 'NONE') : 'NONE',
-  'enabled' => 0,
+  'enabled' => (int)($editSite['conn_enabled'] ?? 0),
+  'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 1),
   'ps_base_url' => '',
   'ps_api_key' => '',
   'ps_shop_id' => '',
@@ -354,6 +359,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
   $formConnection = [
     'channel_type' => normalize_channel_type(post('channel_type', $editConnection['channel_type'])),
     'enabled' => post('connection_enabled', (string)$editConnection['enabled']) === '1' ? 1 : 0,
+    'sync_stock_enabled' => post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '0' ? 0 : 1,
     'ps_base_url' => trim(post('ps_base_url', $editConnection['ps_base_url'])),
     'ps_api_key' => trim(post('ps_api_key', $editConnection['ps_api_key'])),
     'ps_shop_id' => trim(post('ps_shop_id', $editConnection['ps_shop_id'])),
@@ -480,13 +486,22 @@ $nextPage = min($totalPages, $page + 1);
           </label>
 
           <div id="connFields" class="stack">
-            <label class="form-field" style="max-width: 220px;">
-              <span class="form-label">Habilitado</span>
-              <select class="form-control" name="connection_enabled">
-                <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
-                <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
-              </select>
-            </label>
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px;">
+              <label class="form-field">
+                <span class="form-label">Habilitado</span>
+                <select class="form-control" name="connection_enabled">
+                  <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
+                  <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span class="form-label">Sincronizar stock</span>
+                <select class="form-control" name="sync_stock_enabled">
+                  <option value="1" <?= (int)$formConnection['sync_stock_enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
+                  <option value="0" <?= (int)$formConnection['sync_stock_enabled'] === 0 ? 'selected' : '' ?>>No</option>
+                </select>
+              </label>
+            </div>
 
             <div id="psFields" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
               <label class="form-field">

@@ -40,13 +40,31 @@ function ensure_stock_schema(): void {
     CONSTRAINT fk_ts_stock_moves_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-  $has_stock_resultante = false;
+  $hasStockResultante = false;
   $st = $pdo->query("SHOW COLUMNS FROM ts_stock_moves LIKE 'stock_resultante'");
   if ($st) {
-    $has_stock_resultante = (bool)$st->fetch();
+    $hasStockResultante = (bool)$st->fetch();
   }
-  if (!$has_stock_resultante) {
-    $pdo->exec("ALTER TABLE ts_stock_moves ADD COLUMN stock_resultante INT NOT NULL DEFAULT 0 AFTER delta");
+  if (!$hasStockResultante) {
+    $pdo->exec('ALTER TABLE ts_stock_moves ADD COLUMN stock_resultante INT NOT NULL DEFAULT 0 AFTER delta');
+  }
+
+  $hasOrigin = false;
+  $st = $pdo->query("SHOW COLUMNS FROM ts_stock_moves LIKE 'origin'");
+  if ($st) {
+    $hasOrigin = (bool)$st->fetch();
+  }
+  if (!$hasOrigin) {
+    $pdo->exec("ALTER TABLE ts_stock_moves ADD COLUMN origin ENUM('tswork','prestashop','mercadolibre') NOT NULL DEFAULT 'tswork' AFTER reason");
+  }
+
+  $hasEventId = false;
+  $st = $pdo->query("SHOW COLUMNS FROM ts_stock_moves LIKE 'event_id'");
+  if ($st) {
+    $hasEventId = (bool)$st->fetch();
+  }
+  if (!$hasEventId) {
+    $pdo->exec("ALTER TABLE ts_stock_moves ADD COLUMN event_id VARCHAR(120) NULL AFTER origin");
   }
 
   $ready = true;
@@ -76,9 +94,10 @@ function get_stock(int $product_id): array {
   ];
 }
 
-function set_stock(int $product_id, int $qty, ?string $note, int $user_id): array {
+function set_stock(int $product_id, int $qty, ?string $note, int $user_id, string $origin = 'tswork', ?int $source_site_id = null, ?string $event_id = null): array {
   ensure_stock_schema();
 
+  $origin = normalize_stock_origin($origin);
   $pdo = db();
   $pdo->beginTransaction();
   try {
@@ -96,8 +115,8 @@ function set_stock(int $product_id, int $qty, ?string $note, int $user_id): arra
       $st->execute([$product_id, $qty, $user_id > 0 ? $user_id : null]);
     }
 
-    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, NOW(), ?)');
-    $st->execute([$product_id, $delta, $qty, 'carga_manual', normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
+    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, origin, event_id, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, ?, ?, NOW(), ?)');
+    $st->execute([$product_id, $delta, $qty, 'carga_manual', $origin, normalize_stock_event_id($event_id), normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
 
     $pdo->commit();
   } catch (Throwable $e) {
@@ -107,12 +126,14 @@ function set_stock(int $product_id, int $qty, ?string $note, int $user_id): arra
     throw $e;
   }
 
+  stock_sync_after_local_change($product_id, $qty, $origin, $source_site_id, $event_id);
   return get_stock($product_id);
 }
 
-function add_stock(int $product_id, int $delta, ?string $note, int $user_id): array {
+function add_stock(int $product_id, int $delta, ?string $note, int $user_id, string $origin = 'tswork', ?int $source_site_id = null, ?string $event_id = null): array {
   ensure_stock_schema();
 
+  $origin = normalize_stock_origin($origin);
   $pdo = db();
   $pdo->beginTransaction();
   try {
@@ -132,8 +153,8 @@ function add_stock(int $product_id, int $delta, ?string $note, int $user_id): ar
     }
 
     $reason = $delta === 0 ? 'inventario' : 'ajuste';
-    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, NOW(), ?)');
-    $st->execute([$product_id, $delta, $new_qty, $reason, normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
+    $st = $pdo->prepare('INSERT INTO ts_stock_moves(product_id, delta, stock_resultante, reason, origin, event_id, note, created_at, created_by) VALUES(?, ?, ?, ?, ?, ?, ?, NOW(), ?)');
+    $st->execute([$product_id, $delta, $new_qty, $reason, $origin, normalize_stock_event_id($event_id), normalize_stock_note($note), $user_id > 0 ? $user_id : null]);
 
     $pdo->commit();
   } catch (Throwable $e) {
@@ -143,14 +164,22 @@ function add_stock(int $product_id, int $delta, ?string $note, int $user_id): ar
     throw $e;
   }
 
+  stock_sync_after_local_change($product_id, $new_qty, $origin, $source_site_id, $event_id);
   return get_stock($product_id);
+}
+
+function stock_sync_after_local_change(int $productId, int $qty, string $origin, ?int $sourceSiteId, ?string $eventId): void {
+  if (!function_exists('enqueue_stock_push_jobs')) {
+    require_once __DIR__ . '/stock_sync.php';
+  }
+  enqueue_stock_push_jobs($productId, $qty, $origin, $sourceSiteId, $eventId);
 }
 
 function get_stock_moves(int $product_id, int $limit = 20): array {
   ensure_stock_schema();
   $limit = max(1, min(100, $limit));
 
-  $st = db()->prepare("SELECT m.id, m.delta, m.stock_resultante, m.reason, m.note, m.created_at, m.created_by,
+  $st = db()->prepare("SELECT m.id, m.delta, m.stock_resultante, m.reason, m.origin, m.event_id, m.note, m.created_at, m.created_by,
       CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS user_name,
       u.email AS user_email
     FROM ts_stock_moves m
@@ -169,4 +198,20 @@ function normalize_stock_note(?string $note): ?string {
     return null;
   }
   return mb_substr($value, 0, 1000);
+}
+
+function normalize_stock_origin(string $origin): string {
+  $value = strtolower(trim($origin));
+  if (!in_array($value, ['tswork', 'prestashop', 'mercadolibre'], true)) {
+    return 'tswork';
+  }
+  return $value;
+}
+
+function normalize_stock_event_id(?string $eventId): ?string {
+  $value = trim((string)$eventId);
+  if ($value === '') {
+    return null;
+  }
+  return mb_substr($value, 0, 120);
 }
