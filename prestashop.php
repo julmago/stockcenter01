@@ -50,7 +50,24 @@ function ps_request(string $method, string $path, ?string $body = null, array $h
     throw new RuntimeException("Falta configurar PrestaShop (URL / API Key).");
   }
 
-  $url = ps_build_url($path);
+  return ps_request_with_credentials($method, $path, $base, $key, $body, $headers);
+}
+
+function ps_request_with_credentials(string $method, string $path, string $base, string $key, ?string $body = null, array $headers = []): array {
+  $base = rtrim(trim($base), '/');
+  $key = trim($key);
+  if ($base === '' || $key === '') {
+    throw new RuntimeException("Falta configurar PrestaShop (URL / API Key).");
+  }
+
+  $normalized = $path;
+  if (!str_starts_with($normalized, '/api')) {
+    if (!str_starts_with($normalized, '/')) {
+      $normalized = '/' . $normalized;
+    }
+    $normalized = '/api' . $normalized;
+  }
+  $url = $base . $normalized;
 
   $ch = curl_init($url);
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -143,6 +160,54 @@ function ps_find_first_product_id(SimpleXMLElement $sx): ?int {
   return null;
 }
 
+function ps_find_by_reference_all(string $sku, ?string $baseUrl = null, ?string $apiKey = null): array {
+  $sku = trim($sku);
+  if ($sku === '') return [];
+  $base = $baseUrl !== null ? rtrim(trim($baseUrl), '/') : ps_base_url();
+  $key = $apiKey !== null ? trim($apiKey) : ps_api_key();
+  if ($base === '' || $key === '') {
+    throw new RuntimeException("Falta configurar PrestaShop (URL / API Key).");
+  }
+
+  $encoded_sku = rawurlencode($sku);
+  $results = [];
+
+  $q = "/api/combinations?display=[id,id_product,reference]&filter[reference]=[" . $encoded_sku . "]";
+  error_log("[PrestaShop] Lookup combinations by reference URL: " . $base . $q);
+  $r = ps_request_with_credentials("GET", $q, $base, $key);
+  if ($r['code'] >= 200 && $r['code'] < 300) {
+    $sx = ps_xml_load($r['body']);
+    if (isset($sx->combinations->combination)) {
+      foreach ($sx->combinations->combination as $comb) {
+        $id_attr = (int)$comb->attributes()->id;
+        $id_prod = (int)trim((string)$comb->id_product);
+        if ($id_attr > 0 && $id_prod > 0) {
+          $results[] = ['type' => 'combination', 'id_product' => $id_prod, 'id_product_attribute' => $id_attr, 'sku' => $sku];
+        }
+      }
+    }
+  }
+
+  $q = "/api/products?display=[id,reference]&filter[reference]=[" . $encoded_sku . "]";
+  error_log("[PrestaShop] Lookup products by reference URL: " . $base . $q);
+  $r = ps_request_with_credentials("GET", $q, $base, $key);
+  $snippet = substr($r['body'], 0, 500);
+  error_log("[PrestaShop] products HTTP {$r['code']} | Body (first 500 chars): " . $snippet);
+  if ($r['code'] >= 200 && $r['code'] < 300) {
+    $sx = ps_xml_load($r['body']);
+    if (isset($sx->products->product)) {
+      foreach ($sx->products->product as $product) {
+        $id_prod = ps_extract_product_id($product);
+        if ($id_prod > 0) {
+          $results[] = ['type' => 'product', 'id_product' => $id_prod, 'id_product_attribute' => 0, 'sku' => $sku];
+        }
+      }
+    }
+  }
+
+  return $results;
+}
+
 /**
  * Busca un producto o combinación por SKU (reference).
  * Retorna:
@@ -150,42 +215,16 @@ function ps_find_first_product_id(SimpleXMLElement $sx): ?int {
  *  - ['type'=>'product','id_product'=>int,'id_product_attribute'=>0]
  */
 function ps_find_by_reference(string $sku): ?array {
-  $sku = trim($sku);
-  if ($sku === '') return null;
-  $encoded_sku = rawurlencode($sku);
-
-  // 1) probar combinaciones por reference (si existen)
-  // display=[id,id_product,reference]
-  $q = "/api/combinations?display=[id,id_product,reference]&filter[reference]=[" . $encoded_sku . "]";
-  error_log("[PrestaShop] Lookup combinations by reference URL: " . ps_build_url($q));
-  $r = ps_request("GET", $q);
-  if ($r['code'] >= 200 && $r['code'] < 300) {
-    $sx = ps_xml_load($r['body']);
-    if (isset($sx->combinations->combination)) {
-      $comb = $sx->combinations->combination[0];
-      $id_attr = (int)$comb->attributes()->id;
-      $id_prod = (int)trim((string)$comb->id_product);
-      if ($id_attr > 0 && $id_prod > 0) {
-        return ['type' => 'combination', 'id_product' => $id_prod, 'id_product_attribute' => $id_attr];
-      }
-    }
+  $results = ps_find_by_reference_all($sku);
+  if (!$results) {
+    return null;
   }
-
-  // 2) producto simple por reference
-  $q = "/api/products?display=[id,reference]&filter[reference]=[" . $encoded_sku . "]";
-  error_log("[PrestaShop] Lookup products by reference URL: " . ps_build_url($q));
-  $r = ps_request("GET", $q);
-  $snippet = substr($r['body'], 0, 500);
-  error_log("[PrestaShop] products HTTP {$r['code']} | Body (first 500 chars): " . $snippet);
-  if ($r['code'] >= 200 && $r['code'] < 300) {
-    $sx = ps_xml_load($r['body']);
-    $id_prod = ps_find_first_product_id($sx);
-    if ($id_prod !== null && $id_prod > 0) {
-      return ['type' => 'product', 'id_product' => $id_prod, 'id_product_attribute' => 0];
-    }
-  }
-
-  return null;
+  $first = $results[0];
+  return [
+    'type' => $first['type'],
+    'id_product' => (int)$first['id_product'],
+    'id_product_attribute' => (int)$first['id_product_attribute'],
+  ];
 }
 
 function ps_find_stock_available_id(int $id_product, int $id_product_attribute): ?int {
