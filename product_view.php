@@ -403,8 +403,12 @@ $ts_stock = get_stock($id);
 $ts_stock_moves = get_stock_moves($id, 20);
 $running_qty = (int)$ts_stock['qty'];
 foreach ($ts_stock_moves as $index => $move) {
-  $ts_stock_moves[$index]['result_qty'] = $running_qty;
-  $running_qty -= (int)$move['delta'];
+  $stock_resultante = $move['stock_resultante'] ?? null;
+  if ($stock_resultante === null) {
+    $stock_resultante = $running_qty;
+    $running_qty -= (int)$move['delta'];
+  }
+  $ts_stock_moves[$index]['result_qty'] = (int)$stock_resultante;
 }
 
 $supplier_margin_column = 'default_margin_percent';
