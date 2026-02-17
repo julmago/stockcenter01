@@ -335,6 +335,7 @@ if ($editSite) {
     $editConnection = [
       'channel_type' => normalize_channel_type($row['channel_type'] ?? $editConnection['channel_type']),
       'enabled' => (int)($row['enabled'] ?? 0),
+      'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 1),
       'ps_base_url' => (string)($row['ps_base_url'] ?? ''),
       'ps_api_key' => (string)($row['ps_api_key'] ?? ''),
       'ps_shop_id' => isset($row['ps_shop_id']) ? (string)$row['ps_shop_id'] : '',
@@ -497,8 +498,9 @@ $nextPage = min($totalPages, $page + 1);
               <label class="form-field">
                 <span class="form-label">Sincronizar stock</span>
                 <select class="form-control" name="sync_stock_enabled">
-                  <option value="1" <?= (int)$formConnection['sync_stock_enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
-                  <option value="0" <?= (int)$formConnection['sync_stock_enabled'] === 0 ? 'selected' : '' ?>>No</option>
+                  <?php $syncStockValue = isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 1; ?>
+                  <option value="1" <?= $syncStockValue === 1 ? 'selected' : '' ?>>Sí</option>
+                  <option value="0" <?= $syncStockValue === 0 ? 'selected' : '' ?>>No</option>
                 </select>
               </label>
             </div>
