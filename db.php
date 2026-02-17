@@ -353,6 +353,10 @@ function ensure_sites_schema(): void {
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(80) NOT NULL,
     channel_type VARCHAR(20) NOT NULL DEFAULT 'PRESTASHOP',
+    conn_type ENUM('none','prestashop','mercadolibre') NOT NULL DEFAULT 'none',
+    conn_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    last_sync_at DATETIME NULL,
     margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     is_visible TINYINT(1) NOT NULL DEFAULT 1,
@@ -379,6 +383,22 @@ function ensure_sites_schema(): void {
 
   if (!isset($site_columns['channel_type'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN channel_type VARCHAR(20) NOT NULL DEFAULT 'PRESTASHOP' AFTER name");
+  }
+
+  if (!isset($site_columns['conn_type'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN conn_type ENUM('none','prestashop','mercadolibre') NOT NULL DEFAULT 'none' AFTER channel_type");
+  }
+
+  if (!isset($site_columns['conn_enabled'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN conn_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER conn_type");
+  }
+
+  if (!isset($site_columns['sync_stock_enabled'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER conn_enabled");
+  }
+
+  if (!isset($site_columns['last_sync_at'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN last_sync_at DATETIME NULL AFTER sync_stock_enabled");
   }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS site_connections (
