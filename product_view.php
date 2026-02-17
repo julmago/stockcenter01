@@ -2,10 +2,12 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/include/pricing.php';
+require_once __DIR__ . '/include/stock.php';
 require_login();
 ensure_product_suppliers_schema();
 ensure_brands_schema();
 ensure_sites_schema();
+ensure_stock_schema();
 
 $id = (int)get('id','0');
 if ($id <= 0) abort(400, 'Falta id.');
@@ -313,6 +315,44 @@ if (is_post() && post('action') === 'create_supplier_inline') {
   }
 }
 
+if (is_post() && post('action') === 'stock_set') {
+  require_permission($can_edit);
+  $qty_raw = trim(post('stock_set_qty'));
+  $note = post('stock_note');
+
+  if ($qty_raw === '' || !preg_match('/^-?\d+$/', $qty_raw)) {
+    $error = 'El stock debe ser un entero.';
+  } else {
+    try {
+      set_stock($id, (int)$qty_raw, $note, (int)(current_user()['id'] ?? 0));
+      $message = 'Stock actualizado.';
+    } catch (InvalidArgumentException $e) {
+      $error = $e->getMessage();
+    } catch (Throwable $e) {
+      $error = 'No se pudo actualizar el stock.';
+    }
+  }
+}
+
+if (is_post() && post('action') === 'stock_add') {
+  require_permission($can_edit);
+  $delta_raw = trim(post('stock_delta'));
+  $note = post('stock_note');
+
+  if ($delta_raw === '' || !preg_match('/^-?\d+$/', $delta_raw)) {
+    $error = 'El ajuste debe ser un entero.';
+  } else {
+    try {
+      add_stock($id, (int)$delta_raw, $note, (int)(current_user()['id'] ?? 0));
+      $message = 'Stock ajustado.';
+    } catch (InvalidArgumentException $e) {
+      $error = $e->getMessage();
+    } catch (Throwable $e) {
+      $error = 'No se pudo ajustar el stock.';
+    }
+  }
+}
+
 $brands = fetch_brands();
 
 // recargar
@@ -358,6 +398,14 @@ $st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type
   ORDER BY ps.is_active DESC, ps.id DESC");
 $st->execute([$id]);
 $supplier_links = $st->fetchAll();
+
+$ts_stock = get_stock($id);
+$ts_stock_moves = get_stock_moves($id, 20);
+$running_qty = (int)$ts_stock['qty'];
+foreach ($ts_stock_moves as $index => $move) {
+  $ts_stock_moves[$index]['result_qty'] = $running_qty;
+  $running_qty -= (int)$move['delta'];
+}
 
 $supplier_margin_column = 'default_margin_percent';
 $supplier_discount_column = null;
@@ -579,6 +627,90 @@ if ($st) {
           </div>
         </div>
       <?php endif; ?>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Stock (TS Work)</h3>
+        <span class="muted small">Actual: <?= (int)$ts_stock['qty'] ?></span>
+      </div>
+      <div class="card-body stack">
+        <div><strong>Stock actual:</strong> <?= (int)$ts_stock['qty'] ?></div>
+
+        <?php if ($can_edit): ?>
+          <form method="post" class="stack">
+            <input type="hidden" name="action" value="stock_set">
+            <div class="form-row" style="grid-template-columns:repeat(2, minmax(0, 1fr));">
+              <div class="form-group">
+                <label class="form-label">Setear stock</label>
+                <input class="form-control" type="number" step="1" name="stock_set_qty" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Nota (opcional)</label>
+                <input class="form-control" type="text" name="stock_note" maxlength="1000" placeholder="Motivo o comentario">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn" type="submit">Guardar</button>
+            </div>
+          </form>
+
+          <form method="post" class="stack">
+            <input type="hidden" name="action" value="stock_add">
+            <div class="form-row" style="grid-template-columns:repeat(2, minmax(0, 1fr));">
+              <div class="form-group">
+                <label class="form-label">Sumar / Restar</label>
+                <input class="form-control" type="number" step="1" name="stock_delta" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Nota (opcional)</label>
+                <input class="form-control" type="text" name="stock_note" maxlength="1000" placeholder="Motivo o comentario">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn" type="submit">Guardar</button>
+            </div>
+          </form>
+        <?php endif; ?>
+
+        <div class="table-wrapper product-table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>fecha</th>
+                <th>delta</th>
+                <th>stock resultante</th>
+                <th>motivo</th>
+                <th>usuario</th>
+                <th>nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!$ts_stock_moves): ?>
+                <tr><td colspan="6">Sin movimientos todavía.</td></tr>
+              <?php else: ?>
+                <?php foreach ($ts_stock_moves as $move): ?>
+                  <?php
+                    $delta = (int)$move['delta'];
+                    $user_name = trim((string)($move['user_name'] ?? ''));
+                    if ($user_name === '') {
+                      $user_name = (string)($move['user_email'] ?? 'Sistema');
+                    }
+                  ?>
+                  <tr>
+                    <td><?= e((string)$move['created_at']) ?></td>
+                    <td><?= $delta > 0 ? '+' . $delta : (string)$delta ?></td>
+                    <td><?= (int)$move['result_qty'] ?></td>
+                    <td><?= e((string)$move['reason']) ?></td>
+                    <td><?= e($user_name) ?></td>
+                    <td><?= e((string)($move['note'] ?? '')) ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 <div class="card">
       <div class="card-header">
