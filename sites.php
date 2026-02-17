@@ -550,6 +550,40 @@ $nextPage = min($totalPages, $page + 1);
           </div>
         </form>
       </div>
+
+          <?php if ($editSite): ?>
+            <div class="card" id="siteSkuTestCard">
+              <div class="card-header">
+                <h3 class="card-title">Probar conexión / Probar SKU</h3>
+              </div>
+              <p class="muted small">Se usa la misma búsqueda que la sincronización según el tipo de conexión del sitio.</p>
+              <form id="siteSkuTestForm" class="form-row" style="align-items:end;">
+                <input type="hidden" id="siteSkuTestSiteId" value="<?= (int)$editSite['id'] ?>">
+                <div class="form-group">
+                  <label class="form-label" for="siteSkuTestInput">SKU</label>
+                  <input class="form-control" type="text" id="siteSkuTestInput" placeholder="SKU" required>
+                </div>
+                <div class="form-group">
+                  <button class="btn" type="submit" id="siteSkuTestSubmit">Probar</button>
+                </div>
+              </form>
+              <div id="siteSkuTestMessage" class="muted small" style="margin-top: var(--space-3);"></div>
+              <div class="table-wrapper" style="margin-top: var(--space-3); display:none;" id="siteSkuTestTableWrap">
+                <table class="table" id="siteSkuTestTable">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Titulo</th>
+                      <th>Precio</th>
+                      <th>Stock</th>
+                    </tr>
+                  </thead>
+                  <tbody id="siteSkuTestTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          <?php endif; ?>
+
     <?php endif; ?>
 
     <div class="card">
@@ -643,6 +677,103 @@ $nextPage = min($totalPages, $page + 1);
         channelType.addEventListener('change', toggleConnectionFields);
       }
       toggleConnectionFields();
+
+      var siteSkuTestForm = document.getElementById('siteSkuTestForm');
+      var siteSkuTestInput = document.getElementById('siteSkuTestInput');
+      var siteSkuTestSiteId = document.getElementById('siteSkuTestSiteId');
+      var siteSkuTestMessage = document.getElementById('siteSkuTestMessage');
+      var siteSkuTestTableWrap = document.getElementById('siteSkuTestTableWrap');
+      var siteSkuTestTbody = document.getElementById('siteSkuTestTbody');
+      var siteSkuTestSubmit = document.getElementById('siteSkuTestSubmit');
+
+      function siteSkuTestClearTable() {
+        if (siteSkuTestTbody) {
+          siteSkuTestTbody.innerHTML = '';
+        }
+      }
+
+      function siteSkuTestSetMessage(text, type) {
+        if (!siteSkuTestMessage) return;
+        siteSkuTestMessage.className = 'muted small';
+        if (type === 'error') {
+          siteSkuTestMessage.className = 'alert alert-danger';
+        } else if (type === 'info') {
+          siteSkuTestMessage.className = 'alert alert-warning';
+        }
+        siteSkuTestMessage.textContent = text;
+      }
+
+      function siteSkuTestRenderRows(rows) {
+        if (!siteSkuTestTableWrap || !siteSkuTestTbody) {
+          return;
+        }
+        siteSkuTestClearTable();
+        siteSkuTestTableWrap.style.display = '';
+        rows.forEach(function (row) {
+          var tr = document.createElement('tr');
+          var tdSku = document.createElement('td');
+          tdSku.textContent = row.sku || '';
+          var tdTitle = document.createElement('td');
+          tdTitle.textContent = row.title || '';
+          var tdPrice = document.createElement('td');
+          tdPrice.textContent = Number.isFinite(Number(row.price)) ? String(parseInt(row.price, 10)) : '0';
+          var tdStock = document.createElement('td');
+          tdStock.textContent = Number.isFinite(Number(row.stock)) ? String(parseInt(row.stock, 10)) : '0';
+          tr.appendChild(tdSku);
+          tr.appendChild(tdTitle);
+          tr.appendChild(tdPrice);
+          tr.appendChild(tdStock);
+          siteSkuTestTbody.appendChild(tr);
+        });
+      }
+
+      if (siteSkuTestForm && siteSkuTestInput && siteSkuTestSiteId) {
+        siteSkuTestForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var sku = siteSkuTestInput.value.trim();
+          var siteId = siteSkuTestSiteId.value;
+          if (!sku) {
+            siteSkuTestSetMessage('Ingresá un SKU para probar.', 'error');
+            if (siteSkuTestTableWrap) siteSkuTestTableWrap.style.display = 'none';
+            return;
+          }
+          if (siteSkuTestSubmit) {
+            siteSkuTestSubmit.disabled = true;
+          }
+          siteSkuTestSetMessage('Consultando...', '');
+          if (siteSkuTestTableWrap) siteSkuTestTableWrap.style.display = 'none';
+
+          var url = 'api/site_test_sku.php?site_id=' + encodeURIComponent(siteId) + '&sku=' + encodeURIComponent(sku);
+          fetch(url, { credentials: 'same-origin' })
+            .then(function (response) { return response.json(); })
+            .then(function (payload) {
+              if (!payload || payload.ok !== true) {
+                var errorText = payload && payload.error ? payload.error : 'No se pudo probar el SKU.';
+                siteSkuTestSetMessage(errorText, 'error');
+                if (siteSkuTestTableWrap) siteSkuTestTableWrap.style.display = 'none';
+                return;
+              }
+              var rows = Array.isArray(payload.rows) ? payload.rows : [];
+              if (rows.length === 0) {
+                siteSkuTestSetMessage('Sin resultados para ese SKU.', 'info');
+                if (siteSkuTestTableWrap) siteSkuTestTableWrap.style.display = 'none';
+                return;
+              }
+              siteSkuTestSetMessage('Resultados encontrados: ' + rows.length + '.', '');
+              siteSkuTestRenderRows(rows);
+            })
+            .catch(function () {
+              siteSkuTestSetMessage('No se pudo probar el SKU.', 'error');
+              if (siteSkuTestTableWrap) siteSkuTestTableWrap.style.display = 'none';
+            })
+            .finally(function () {
+              if (siteSkuTestSubmit) {
+                siteSkuTestSubmit.disabled = false;
+              }
+            });
+        });
+      }
+
     })();
   </script>
 <?php endif; ?>
