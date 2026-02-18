@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../include/stock.php';
+require_once __DIR__ . '/../include/stock_sync.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -33,8 +34,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
   stock_webhook_json(['ok' => false, 'error' => 'Método inválido.'], 405);
 }
 
+$sourceHeader = strtolower(trim((string)($_SERVER['HTTP_X_TSWORK_SOURCE'] ?? '')));
+if ($sourceHeader === 'tswork') {
+  stock_webhook_json(['ok' => true, 'ignored' => true, 'reason' => 'Evento originado por TSWork.']);
+}
+
 ensure_sites_schema();
 ensure_stock_schema();
+ensure_stock_sync_schema();
 
 $rawBody = file_get_contents('php://input');
 if (!is_string($rawBody) || trim($rawBody) === '') {
@@ -103,6 +110,25 @@ $note = sprintf(
 );
 $eventId = 'ps-webhook-' . sha1($siteId . '|' . $sku . '|' . $timestamp . '|' . $event);
 $stock = set_stock($productId, $qtyNew, $note, 0, 'prestashop', $siteId, $eventId, 'sync_pull_webhook');
+$pushStatus = sync_push_stock_to_sites($sku, (int)$stock['qty'], $siteId > 0 ? $siteId : null);
+
+$okPushCount = 0;
+$errorPushes = [];
+foreach ($pushStatus as $status) {
+  if ((bool)($status['ok'] ?? false)) {
+    $okPushCount++;
+  } else {
+    $errorPushes[] = 'sitio ' . (int)($status['site_id'] ?? 0) . ': ' . ((string)($status['error'] ?? '') !== '' ? (string)$status['error'] : 'error desconocido');
+  }
+}
+
+if ($errorPushes) {
+  $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+  $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $productId]);
+} elseif ($okPushCount > 0) {
+  $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
+  $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . $sku, $productId]);
+}
 
 stock_webhook_json([
   'ok' => true,
@@ -111,4 +137,6 @@ stock_webhook_json([
   'product_id' => $productId,
   'prev_qty' => (int)$prev['qty'],
   'new_qty' => (int)$stock['qty'],
+  'push_ok' => $okPushCount,
+  'push_errors' => $errorPushes,
 ]);

@@ -220,7 +220,7 @@ function stock_sync_log(string $message, array $context = []): void {
   error_log('[stock_sync] ' . $message . (count($chunks) ? ' | ' . implode(' ', $chunks) : ''));
 }
 
-function stock_sync_request_prestashop(array $site, string $method, string $path, ?string $body = null): array {
+function stock_sync_request_prestashop(array $site, string $method, string $path, ?string $body = null, array $extraHeaders = []): array {
   $baseUrl = rtrim((string)($site['ps_base_url'] ?? ''), '/');
   $apiKey = trim((string)($site['ps_api_key'] ?? ''));
   if ($baseUrl === '' || $apiKey === '') {
@@ -239,6 +239,11 @@ function stock_sync_request_prestashop(array $site, string $method, string $path
   if ($body !== null) {
     $headers[] = 'Content-Type: application/xml; charset=utf-8';
     curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+  }
+  foreach ($extraHeaders as $header) {
+    if (is_string($header) && trim($header) !== '') {
+      $headers[] = $header;
+    }
   }
   curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -267,6 +272,27 @@ function stock_sync_request_prestashop(array $site, string $method, string $path
     'body' => (string)$response,
     'url' => $effectiveUrl !== '' ? $effectiveUrl : $url,
   ];
+}
+
+function sync_push_stock_to_sites(string $sku, int $newQty, ?int $excludeSiteId = null): array {
+  $sites = get_prestashop_sync_sites();
+  $pushStatus = [];
+
+  foreach ($sites as $site) {
+    $siteId = (int)($site['id'] ?? 0);
+    if ($excludeSiteId !== null && $siteId === $excludeSiteId) {
+      continue;
+    }
+
+    $pushResult = sync_stock_to_prestashop_with_result($site, $sku, $newQty);
+    $pushStatus[] = [
+      'site_id' => $siteId,
+      'ok' => (bool)($pushResult['ok'] ?? false),
+      'error' => (string)($pushResult['error'] ?? ''),
+    ];
+  }
+
+  return $pushStatus;
 }
 
 function stock_sync_resolve_shop_id(array $site): int {
@@ -368,7 +394,16 @@ function sync_stock_to_prestashop_with_result(array $site, string $sku, int $new
       'request_xml' => $payload,
     ]);
 
-    $updateResponse = stock_sync_request_prestashop($site, 'PUT', '/api/stock_availables/' . $stockAvailableId, $payload);
+    $updateResponse = stock_sync_request_prestashop(
+      $site,
+      'PUT',
+      '/api/stock_availables/' . $stockAvailableId,
+      $payload,
+      [
+        'X-TSWORK-SOURCE: tswork',
+        'X-TSWORK-EVENT: tswork-' . sha1($siteId . '|' . $sku . '|' . $newQty . '|' . microtime(true)),
+      ]
+    );
     stock_sync_log('Prestashop update stock', [
       'site_id' => $siteId,
       'sku' => $sku,

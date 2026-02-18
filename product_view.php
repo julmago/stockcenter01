@@ -327,16 +327,7 @@ if (is_post() && post('action') === 'stock_set') {
   } else {
     try {
       $stockResult = set_stock($id, (int)$qty_raw, $note, (int)(current_user()['id'] ?? 0));
-      $sites = get_prestashop_sync_sites();
-      $pushStatus = [];
-      foreach ($sites as $site) {
-        $pushResult = sync_stock_to_prestashop_with_result($site, (string)$product['sku'], (int)$stockResult['qty']);
-        $pushStatus[] = [
-          'site_id' => (int)($site['id'] ?? 0),
-          'ok' => (bool)($pushResult['ok'] ?? false),
-          'error' => (string)($pushResult['error'] ?? ''),
-        ];
-      }
+      $pushStatus = sync_push_stock_to_sites((string)$product['sku'], (int)$stockResult['qty']);
 
       $okPushCount = 0;
       $errorPushes = [];
@@ -377,16 +368,7 @@ if (is_post() && post('action') === 'stock_add') {
   } else {
     try {
       $stockResult = add_stock($id, (int)$delta_raw, $note, (int)(current_user()['id'] ?? 0));
-      $sites = get_prestashop_sync_sites();
-      $pushStatus = [];
-      foreach ($sites as $site) {
-        $pushResult = sync_stock_to_prestashop_with_result($site, (string)$product['sku'], (int)$stockResult['qty']);
-        $pushStatus[] = [
-          'site_id' => (int)($site['id'] ?? 0),
-          'ok' => (bool)($pushResult['ok'] ?? false),
-          'error' => (string)($pushResult['error'] ?? ''),
-        ];
-      }
+      $pushStatus = sync_push_stock_to_sites((string)$product['sku'], (int)$stockResult['qty']);
 
       $okPushCount = 0;
       $errorPushes = [];

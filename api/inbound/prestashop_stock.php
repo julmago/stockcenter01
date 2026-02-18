@@ -18,6 +18,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   inbound_json(['ok' => false, 'error' => 'Método inválido.'], 405);
 }
 
+
+$sourceHeader = strtolower(trim((string)($_SERVER['HTTP_X_TSWORK_SOURCE'] ?? '')));
+if ($sourceHeader === 'tswork') {
+  inbound_json(['ok' => true, 'ignored' => true, 'reason' => 'Evento originado por TSWork.']);
+}
+
 ensure_stock_sync_schema();
 
 $siteId = (int)($_POST['site_id'] ?? 0);
@@ -62,5 +68,11 @@ if (!stock_sync_register_lock($siteId, $productId, 'prestashop', $eventId, hash(
 $qty = (int)$newQtyRaw;
 $note = 'Inbound PrestaShop event_id=' . $eventId;
 $stock = set_stock($productId, $qty, $note, 0, 'prestashop', $siteId, $eventId);
+$skuSt = $pdo->prepare('SELECT sku FROM products WHERE id = ? LIMIT 1');
+$skuSt->execute([$productId]);
+$skuRow = $skuSt->fetch();
+$sku = trim((string)($skuRow['sku'] ?? ''));
 
-inbound_json(['ok' => true, 'stock' => $stock]);
+$pushStatus = $sku !== '' ? sync_push_stock_to_sites($sku, (int)$stock['qty'], $siteId) : [];
+
+inbound_json(['ok' => true, 'stock' => $stock, 'push_status' => $pushStatus]);
