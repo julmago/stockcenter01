@@ -571,13 +571,18 @@ $nextPage = min($totalPages, $page + 1);
           </div>
           <label class="form-field" style="max-width: 360px;">
             <span class="form-label">Tipo de conexión</span>
-            <select class="form-control" name="channel_type" id="channel_type">
+            <select class="form-control" name="channel_type" id="channel_type" onchange="if (window.siteToggleConnectionFields) { window.siteToggleConnectionFields(this.value); }">
               <?php $channelTypeValue = $formConnection['channel_type']; ?>
               <option value="NONE" <?= $channelTypeValue === 'NONE' ? 'selected' : '' ?>>Sin conexión</option>
               <option value="PRESTASHOP" <?= $channelTypeValue === 'PRESTASHOP' ? 'selected' : '' ?>>PrestaShop</option>
               <option value="MERCADOLIBRE" <?= $channelTypeValue === 'MERCADOLIBRE' ? 'selected' : '' ?>>MercadoLibre</option>
             </select>
           </label>
+
+          <div class="inline-actions" id="siteFormActionsTop" style="display:flex;">
+            <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
+            <button class="btn" type="submit">Guardar</button>
+          </div>
 
           <?php
             $connFieldsStyle = $channelTypeValue === 'NONE' ? 'none' : '';
@@ -776,61 +781,61 @@ $nextPage = min($totalPages, $page + 1);
   </div>
 </main>
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var siteForm = document.getElementById('siteForm');
-      var channelType = document.getElementById('channel_type');
-      var connFields = document.getElementById('connFields');
-      var commonFields = document.getElementById('connectionCommonFields');
-      var prestashopFields = document.getElementById('psFields');
-      var mercadolibreFields = document.getElementById('mlFields');
+    (function () {
+      function initSiteFormBehavior() {
+        var siteForm = document.getElementById('siteForm');
+        var channelType = document.getElementById('channel_type');
+        var connFields = document.getElementById('connFields');
+        var commonFields = document.getElementById('connectionCommonFields');
+        var prestashopFields = document.getElementById('psFields');
+        var mercadolibreFields = document.getElementById('mlFields');
 
-      [
-        ['siteForm', siteForm],
-        ['channel_type', channelType],
-        ['connFields', connFields],
-        ['connectionCommonFields', commonFields],
-        ['psFields', prestashopFields],
-        ['mlFields', mercadolibreFields],
-      ].forEach(function (entry) {
-        if (!entry[1]) {
-          console.warn('[sites.php] Missing expected element:', entry[0]);
+        function updateDynamicRequired(channelValue) {
+          if (!siteForm) {
+            return;
+          }
+          var requiredInputs = siteForm.querySelectorAll('[data-required-when]');
+          for (var i = 0; i < requiredInputs.length; i += 1) {
+            requiredInputs[i].required = requiredInputs[i].getAttribute('data-required-when') === channelValue;
+          }
         }
-      });
 
-      function updateDynamicRequired(channelValue) {
-        if (!siteForm) {
-          return;
+        function toggleConnectionFields(forcedValue) {
+          if (!channelType) {
+            return;
+          }
+          var value = (forcedValue || channelType.value || 'NONE').toUpperCase();
+          channelType.value = value;
+          updateDynamicRequired(value);
+          if (connFields) {
+            connFields.style.display = value === 'NONE' ? 'none' : '';
+          }
+          if (commonFields) {
+            commonFields.style.display = value === 'NONE' ? 'none' : '';
+          }
+          if (prestashopFields) {
+            prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
+          }
+          if (mercadolibreFields) {
+            mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
+          }
         }
-        var requiredInputs = siteForm.querySelectorAll('[data-required-when]');
-        requiredInputs.forEach(function (input) {
-          input.required = input.getAttribute('data-required-when') === channelValue;
-        });
+
+        window.siteToggleConnectionFields = toggleConnectionFields;
+        if (channelType && !channelType.dataset.boundToggle) {
+          channelType.addEventListener('change', function () {
+            toggleConnectionFields(channelType.value);
+          });
+          channelType.dataset.boundToggle = '1';
+        }
+        toggleConnectionFields(channelType ? channelType.value : 'NONE');
       }
 
-      function toggleConnectionFields() {
-        if (!channelType) {
-          return;
-        }
-        var value = channelType.value;
-        updateDynamicRequired(value);
-        if (connFields) {
-          connFields.style.display = value === 'NONE' ? 'none' : '';
-        }
-        if (commonFields) {
-          commonFields.style.display = value === 'NONE' ? 'none' : '';
-        }
-        if (prestashopFields) {
-          prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
-        }
-        if (mercadolibreFields) {
-          mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
-        }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSiteFormBehavior);
+      } else {
+        initSiteFormBehavior();
       }
-
-      if (channelType) {
-        channelType.addEventListener('change', toggleConnectionFields);
-      }
-      toggleConnectionFields();
 
       var siteSkuTestForm = document.getElementById('siteSkuTestForm');
       var siteSkuTestInput = document.getElementById('siteSkuTestInput');
@@ -980,7 +985,7 @@ $nextPage = min($totalPages, $page + 1);
         });
       }
 
-    });
+    })();
   </script>
 </body>
 </html>
