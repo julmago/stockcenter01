@@ -38,7 +38,7 @@ foreach ($jobs as $job) {
       throw new RuntimeException('Sitio inexistente.');
     }
 
-    $mapSt = $pdo->prepare('SELECT remote_id, remote_variant_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
+    $mapSt = $pdo->prepare('SELECT remote_id, remote_variant_id, ml_item_id, ml_variation_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
     $mapSt->execute([$siteId, $productId]);
     $map = $mapSt->fetch();
     if (!$map) {
@@ -50,7 +50,18 @@ foreach ($jobs as $job) {
     if ($connType === 'prestashop') {
       PrestashopAdapter::updateStock((string)$site['ps_base_url'], (string)$site['ps_api_key'], (string)$map['remote_id'], $map['remote_variant_id'] !== null ? (string)$map['remote_variant_id'] : null, $qty);
     } elseif ($connType === 'mercadolibre') {
-      MercadoLibreAdapter::updateStock((string)$site['ml_access_token'], (string)$map['remote_id'], $map['remote_variant_id'] !== null ? (string)$map['remote_variant_id'] : null, $qty);
+      $itemId = trim((string)($map['ml_item_id'] ?? ''));
+      if ($itemId === '') {
+        $itemId = trim((string)($map['remote_id'] ?? ''));
+      }
+      $variationId = trim((string)($map['ml_variation_id'] ?? ''));
+      if ($variationId === '') {
+        $variationId = trim((string)($map['remote_variant_id'] ?? ''));
+      }
+      if ($itemId === '') {
+        throw new RuntimeException('No se puede sincronizar a MercadoLibre: falta vincular Item ID/Variante para este producto.');
+      }
+      MercadoLibreAdapter::updateStock((string)$site['ml_access_token'], $itemId, $variationId !== '' ? $variationId : null, $qty);
     } else {
       throw new RuntimeException('Tipo de conexión no soportado para sync de stock.');
     }

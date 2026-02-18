@@ -318,7 +318,7 @@ try {
       $basePrice = to_int_number($itemJson['price'] ?? 0);
       $baseStock = to_int_number($itemJson['available_quantity'] ?? 0);
 
-      $rows[] = ['sku' => $baseSku, 'title' => $baseTitle, 'price' => $basePrice, 'stock' => $baseStock];
+      $rows[] = ['sku' => $baseSku, 'title' => $baseTitle, 'price' => $basePrice, 'stock' => $baseStock, 'item_id' => $itemId, 'variation_id' => ''];
 
       $variations = $itemJson['variations'] ?? [];
       if (is_array($variations)) {
@@ -332,6 +332,8 @@ try {
             'title' => $baseTitle . ' (variante)',
             'price' => array_key_exists('price', $variation) ? to_int_number($variation['price']) : $basePrice,
             'stock' => array_key_exists('available_quantity', $variation) ? to_int_number($variation['available_quantity']) : $baseStock,
+            'item_id' => $itemId,
+            'variation_id' => $variationId,
           ];
         }
       }
