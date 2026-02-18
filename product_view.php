@@ -296,14 +296,15 @@ if (is_post() && post('action') === 'save_ml_link') {
 
   if ($error === '') {
     try {
-      $up = db()->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, NOW())
+      $up = db()->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, ml_seller_id, ml_last_bind_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
         ON DUPLICATE KEY UPDATE
           remote_id = VALUES(remote_id),
           remote_variant_id = VALUES(remote_variant_id),
           remote_sku = VALUES(remote_sku),
           ml_item_id = VALUES(ml_item_id),
           ml_variation_id = VALUES(ml_variation_id),
+          ml_last_bind_at = NOW(),
           updated_at = NOW()");
       $up->execute([$mlSiteId, $id, $mlItemId, $mlVariationId, (string)$product['sku'], $mlItemId, $mlVariationId]);
       $message = 'Vinculación de MercadoLibre guardada.';
@@ -581,7 +582,7 @@ $ml_sites = $st->fetchAll();
 
 $ml_links_by_site = [];
 if ($ml_sites) {
-  $st = db()->prepare("SELECT spm.site_id, spm.ml_item_id, spm.ml_variation_id, spm.remote_id, spm.remote_variant_id
+  $st = db()->prepare("SELECT spm.site_id, spm.ml_item_id, spm.ml_variation_id, spm.ml_seller_id, spm.ml_last_bind_at, spm.remote_id, spm.remote_variant_id
     FROM site_product_map spm
     WHERE spm.product_id = ?
     ORDER BY spm.site_id ASC");
@@ -602,6 +603,8 @@ if ($ml_sites) {
     $ml_links_by_site[$siteId] = [
       'item_id' => $itemId,
       'variation_id' => $variationId,
+      'seller_id' => trim((string)($mapRow['ml_seller_id'] ?? '')),
+      'last_bind_at' => trim((string)($mapRow['ml_last_bind_at'] ?? '')),
     ];
   }
 }
@@ -947,7 +950,7 @@ if ($st) {
     <?php if ($ml_sites): ?>
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Vincular MercadoLibre</h3>
+          <h3 class="card-title">MercadoLibre (vínculo)</h3>
           <span class="muted small">Item/variante para sincronización</span>
         </div>
         <div class="card-body stack">
@@ -960,7 +963,7 @@ if ($st) {
                   <select class="form-control" name="ml_site_id" id="ml-site-select" required>
                     <option value="">Seleccionar</option>
                     <?php foreach ($ml_sites as $mlSite): ?>
-                      <?php $siteLink = $ml_links_by_site[(int)$mlSite['id']] ?? ['item_id' => '', 'variation_id' => '']; ?>
+                      <?php $siteLink = $ml_links_by_site[(int)$mlSite['id']] ?? ['item_id' => '', 'variation_id' => '', 'seller_id' => '', 'last_bind_at' => '']; ?>
                       <option
                         value="<?= (int)$mlSite['id'] ?>"
                         data-item-id="<?= e((string)$siteLink['item_id']) ?>"
@@ -980,19 +983,30 @@ if ($st) {
               </div>
               <div class="form-actions">
                 <button class="btn" type="submit">Guardar vínculo</button>
+                <button class="btn btn-ghost" type="button" id="ml-search-btn">Buscar por SKU en ML</button>
               </div>
+              <p class="muted small" id="ml-bind-status"></p>
             </form>
+
+            <div class="table-wrapper" id="ml-search-results-wrap" style="display:none;">
+              <table class="table">
+                <thead><tr><th>Seleccionar</th><th>Item ID</th><th>Título</th><th>Status</th><th>Tiene variantes</th><th>Stock</th><th>Variantes</th></tr></thead>
+                <tbody id="ml-search-results-body"></tbody>
+              </table>
+            </div>
           <?php else: ?>
             <div class="table-wrapper">
               <table class="table">
-                <thead><tr><th>Sitio</th><th>Item ID</th><th>Variation ID</th></tr></thead>
+                <thead><tr><th>Sitio</th><th>Item ID</th><th>Variation ID</th><th>Seller ID</th><th>Último vínculo</th></tr></thead>
                 <tbody>
                   <?php foreach ($ml_sites as $mlSite): ?>
-                    <?php $siteLink = $ml_links_by_site[(int)$mlSite['id']] ?? ['item_id' => '', 'variation_id' => '']; ?>
+                    <?php $siteLink = $ml_links_by_site[(int)$mlSite['id']] ?? ['item_id' => '', 'variation_id' => '', 'seller_id' => '', 'last_bind_at' => '']; ?>
                     <tr>
                       <td><?= e($mlSite['name']) ?></td>
                       <td><?= (string)$siteLink['item_id'] !== '' ? e((string)$siteLink['item_id']) : '—' ?></td>
                       <td><?= (string)$siteLink['variation_id'] !== '' ? e((string)$siteLink['variation_id']) : '—' ?></td>
+                      <td><?= (string)$siteLink['seller_id'] !== '' ? e((string)$siteLink['seller_id']) : '—' ?></td>
+                      <td><?= (string)$siteLink['last_bind_at'] !== '' ? e((string)$siteLink['last_bind_at']) : '—' ?></td>
                     </tr>
                   <?php endforeach; ?>
                 </tbody>
@@ -1341,6 +1355,83 @@ if ($st) {
   if (mlSiteSelect) {
     mlSiteSelect.addEventListener('change', fillMlLinkFromSite);
     fillMlLinkFromSite();
+  }
+
+  const mlSearchBtn = document.getElementById('ml-search-btn');
+  const mlBindStatus = document.getElementById('ml-bind-status');
+  const mlSearchWrap = document.getElementById('ml-search-results-wrap');
+  const mlSearchBody = document.getElementById('ml-search-results-body');
+
+  const renderVariationText = (variations) => {
+    if (!Array.isArray(variations) || variations.length === 0) {
+      return '—';
+    }
+    return variations.map((variation) => {
+      const vid = variation && variation.variation_id ? variation.variation_id : '—';
+      const attrs = Array.isArray(variation.attributes) ? variation.attributes.join(', ') : '';
+      return attrs ? `${vid} (${attrs})` : String(vid);
+    }).join(' | ');
+  };
+
+  if (mlSearchBtn) {
+    mlSearchBtn.addEventListener('click', async () => {
+      if (!mlSiteSelect || !mlBindStatus || !mlSearchWrap || !mlSearchBody) {
+        return;
+      }
+      const siteId = mlSiteSelect.value;
+      if (!siteId) {
+        mlBindStatus.textContent = 'Seleccioná un sitio de MercadoLibre para buscar.';
+        return;
+      }
+
+      mlBindStatus.textContent = 'Buscando en MercadoLibre...';
+      mlSearchBody.innerHTML = '';
+      mlSearchWrap.style.display = 'none';
+
+      const url = `api/ml_search_by_sku.php?site_id=${encodeURIComponent(siteId)}&sku=${encodeURIComponent(<?= json_encode((string)$product['sku']) ?>)}`;
+      try {
+        const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          mlBindStatus.textContent = data && data.error ? data.error : 'No se pudo buscar en MercadoLibre.';
+          return;
+        }
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        if (rows.length === 0) {
+          mlBindStatus.textContent = 'No se encontraron publicaciones para este SKU.';
+          return;
+        }
+
+        rows.forEach((row, idx) => {
+          const tr = document.createElement('tr');
+          const checked = idx === 0 ? 'checked' : '';
+          tr.innerHTML = `
+            <td><input type="radio" name="ml-row" value="${idx}" ${checked}></td>
+            <td>${row.item_id || ''}</td>
+            <td>${row.title || ''}</td>
+            <td>${row.status || ''}</td>
+            <td>${row.has_variations ? 'Sí' : 'No'}</td>
+            <td>${row.available_quantity ?? ''}</td>
+            <td>${renderVariationText(row.variations)}</td>
+          `;
+          tr.addEventListener('click', () => {
+            const selectedVariation = row.selected_variation_id || '';
+            if (mlItemInput) mlItemInput.value = row.item_id || '';
+            if (mlVariationInput) mlVariationInput.value = selectedVariation;
+            mlBindStatus.textContent = selectedVariation
+              ? `Seleccionado ${row.item_id} / variante ${selectedVariation}. Guardá el vínculo para aplicar.`
+              : `Seleccionado ${row.item_id}. Guardá el vínculo para aplicar.`;
+          });
+          mlSearchBody.appendChild(tr);
+        });
+
+        mlSearchWrap.style.display = '';
+        mlBindStatus.textContent = 'Seleccioná una fila para cargar Item/Variante y luego guardá el vínculo.';
+      } catch (err) {
+        mlBindStatus.textContent = 'Error de red al buscar en MercadoLibre.';
+      }
+    });
   }
 
   const supplierSelect = document.getElementById('supplier-id-select');

@@ -24,8 +24,12 @@ $siteId = (int)post('site_id', '0');
 $sku = trim(post('sku'));
 $itemId = strtoupper(trim(post('item_id')));
 $variationId = trim(post('variation_id'));
+$sellerId = trim(post('seller_id'));
 if ($variationId === '') {
   $variationId = null;
+}
+if ($sellerId === '') {
+  $sellerId = null;
 }
 
 if ($siteId <= 0 || $sku === '' || $itemId === '') {
@@ -58,16 +62,18 @@ try {
 
   $productId = (int)$product['id'];
 
-  $up = $pdo->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, updated_at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, NOW())
+  $up = $pdo->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, ml_seller_id, ml_last_bind_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     ON DUPLICATE KEY UPDATE
       remote_id = VALUES(remote_id),
       remote_variant_id = VALUES(remote_variant_id),
       remote_sku = VALUES(remote_sku),
       ml_item_id = VALUES(ml_item_id),
       ml_variation_id = VALUES(ml_variation_id),
+      ml_seller_id = VALUES(ml_seller_id),
+      ml_last_bind_at = NOW(),
       updated_at = NOW()");
-  $up->execute([$siteId, $productId, $itemId, $variationId, (string)$product['sku'], $itemId, $variationId]);
+  $up->execute([$siteId, $productId, $itemId, $variationId, (string)$product['sku'], $itemId, $variationId, $sellerId]);
 
   ml_link_respond([
     'ok' => true,

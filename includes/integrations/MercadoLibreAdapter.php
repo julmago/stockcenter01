@@ -11,18 +11,27 @@ class MercadoLibreAdapter {
   }
 
   public static function updateStockWithResponse(string $accessToken, string $itemId, ?string $variationId, int $qty): array {
-    $body = [];
-    if ($variationId !== null && trim($variationId) !== '') {
-      $body['variations'] = [[
-        'id' => (int)$variationId,
-        'available_quantity' => $qty,
-      ]];
-    } else {
-      $body['available_quantity'] = $qty;
+    $trimmedVariationId = $variationId !== null ? trim($variationId) : '';
+    if ($trimmedVariationId !== '') {
+      $response = self::request(
+        'PUT',
+        'https://api.mercadolibre.com/items/' . rawurlencode($itemId) . '/variations/' . rawurlencode($trimmedVariationId),
+        $accessToken,
+        ['available_quantity' => $qty]
+      );
+      return $response;
     }
 
-    $response = self::request('PUT', 'https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken, $body);
+    $response = self::request('PUT', 'https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken, ['available_quantity' => $qty]);
     return $response;
+  }
+
+  public static function getUserMe(string $accessToken): array {
+    return self::request('GET', 'https://api.mercadolibre.com/users/me', $accessToken, null);
+  }
+
+  public static function getItem(string $accessToken, string $itemId): array {
+    return self::request('GET', 'https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken, null);
   }
 
   public static function fetchRecentOrders(string $accessToken, ?string $sinceIso): array {
