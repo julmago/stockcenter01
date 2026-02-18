@@ -578,8 +578,13 @@ $nextPage = min($totalPages, $page + 1);
             </select>
           </label>
 
-          <div id="connFields" class="stack" style="gap: var(--space-3); display: <?= $channelTypeValue === 'NONE' ? 'none' : '' ?>;">
-            <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px; display: <?= $channelTypeValue === 'NONE' ? 'none' : '' ?>;">
+          <?php
+            $connFieldsStyle = $channelTypeValue === 'NONE' ? 'none' : '';
+            $psFieldsStyle = $channelTypeValue === 'PRESTASHOP' ? '' : 'none';
+            $mlFieldsStyle = $channelTypeValue === 'MERCADOLIBRE' ? '' : 'none';
+          ?>
+          <div id="connFields" class="stack" style="gap: var(--space-3); display: <?= $connFieldsStyle ?>;">
+            <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px; display: <?= $connFieldsStyle ?>;">
               <label class="form-field">
                 <span class="form-label">Habilitado</span>
                 <select class="form-control" name="connection_enabled">
@@ -597,7 +602,7 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3); display: <?= $channelTypeValue === 'PRESTASHOP' ? '' : 'none' ?>;">
+            <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3); display: <?= $psFieldsStyle ?>;">
               <label class="form-field">
                 <span class="form-label">URL base</span>
                 <input class="form-control" type="text" name="ps_base_url" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_base_url']) ?>">
@@ -612,7 +617,7 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="mlFields" class="stack" data-connection-group="MERCADOLIBRE" style="gap: var(--space-3); display: <?= $channelTypeValue === 'MERCADOLIBRE' ? '' : 'none' ?>;">
+            <div id="mlFields" class="stack" data-connection-group="MERCADOLIBRE" style="gap: var(--space-3); display: <?= $mlFieldsStyle ?>;">
               <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
@@ -661,7 +666,7 @@ $nextPage = min($totalPages, $page + 1);
             </div>
           </div>
 
-          <div class="inline-actions">
+          <div class="inline-actions" id="siteFormActions" style="display:flex;">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
             <button class="btn" type="submit">Guardar</button>
           </div>
@@ -778,6 +783,19 @@ $nextPage = min($totalPages, $page + 1);
       var prestashopFields = document.getElementById('psFields');
       var mercadolibreFields = document.getElementById('mlFields');
 
+      [
+        ['siteForm', siteForm],
+        ['channel_type', channelType],
+        ['connFields', connFields],
+        ['connectionCommonFields', commonFields],
+        ['psFields', prestashopFields],
+        ['mlFields', mercadolibreFields],
+      ].forEach(function (entry) {
+        if (!entry[1]) {
+          console.warn('[sites.php] Missing expected element:', entry[0]);
+        }
+      });
+
       function updateDynamicRequired(channelValue) {
         if (!siteForm) {
           return;
@@ -789,19 +807,19 @@ $nextPage = min($totalPages, $page + 1);
       }
 
       function toggleConnectionFields() {
-        if (!channelType || !connFields || !commonFields || !prestashopFields || !mercadolibreFields) {
+        if (!channelType) {
+          return;
+        }
+        if (!connFields || !prestashopFields || !mercadolibreFields) {
+          console.warn('[sites.php] toggleConnectionFields skipped due to missing field containers.');
           return;
         }
         var value = channelType.value;
         updateDynamicRequired(value);
-        if (value === 'NONE') {
-          connFields.style.display = 'none';
-          prestashopFields.style.display = 'none';
-          mercadolibreFields.style.display = 'none';
-          return;
+        connFields.style.display = value === 'NONE' ? 'none' : '';
+        if (commonFields) {
+          commonFields.style.display = value === 'NONE' ? 'none' : '';
         }
-        connFields.style.display = '';
-        commonFields.style.display = '';
         prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
         mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
       }
