@@ -165,6 +165,8 @@ if (is_post()) {
     $isActive = post('is_active') === '1' ? 1 : 0;
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
+    $connectionEnabledPosted = array_key_exists('connection_enabled', $_POST);
+    $syncStockEnabledPosted = array_key_exists('sync_stock_enabled', $_POST);
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
     $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
     $psBaseUrl = trim(post('ps_base_url'));
@@ -191,6 +193,20 @@ if (is_post()) {
       $error = 'Margen (%) inválido. Usá un valor entre -100 y 999.99.';
     } else {
       try {
+        $st = $pdo->prepare('SELECT conn_enabled, sync_stock_enabled FROM sites WHERE id = ? LIMIT 1');
+        $st->execute([$id]);
+        $currentSiteState = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$currentSiteState) {
+          $error = 'Sitio inválido.';
+          throw new RuntimeException('site_not_found');
+        }
+        if (!$connectionEnabledPosted) {
+          $connectionEnabled = (int)$currentSiteState['conn_enabled'];
+        }
+        if (!$syncStockEnabledPosted) {
+          $syncStockEnabled = (int)$currentSiteState['sync_stock_enabled'];
+        }
+
         $st = $pdo->prepare('SELECT id FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id <> ? LIMIT 1');
         $st->execute([$name, $id]);
         if ($st->fetch()) {
@@ -198,7 +214,32 @@ if (is_post()) {
         } else {
           $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
-          $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
+          $st = $pdo->prepare('SELECT ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri FROM site_connections WHERE site_id = ? LIMIT 1');
+          $st->execute([$id]);
+          $existingConnection = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+          $psBaseUrlToSave = array_key_exists('ps_base_url', $existingConnection) ? (string)$existingConnection['ps_base_url'] : '';
+          $psApiKeyToSave = array_key_exists('ps_api_key', $existingConnection) ? (string)$existingConnection['ps_api_key'] : '';
+          $psShopIdToSave = array_key_exists('ps_shop_id', $existingConnection) ? $existingConnection['ps_shop_id'] : null;
+          $webhookSecretToSave = array_key_exists('webhook_secret', $existingConnection) ? (string)$existingConnection['webhook_secret'] : '';
+          $mlClientIdToSave = array_key_exists('ml_client_id', $existingConnection) ? (string)$existingConnection['ml_client_id'] : '';
+          $mlAppIdToSave = array_key_exists('ml_app_id', $existingConnection) ? (string)$existingConnection['ml_app_id'] : '';
+          $mlClientSecretToSave = array_key_exists('ml_client_secret', $existingConnection) ? (string)$existingConnection['ml_client_secret'] : '';
+          $mlRedirectUriToSave = array_key_exists('ml_redirect_uri', $existingConnection) ? (string)$existingConnection['ml_redirect_uri'] : '';
+
+          if ($channelType === 'PRESTASHOP') {
+            $psBaseUrlToSave = $psBaseUrl;
+            $psApiKeyToSave = $psApiKey;
+            $psShopIdToSave = $psShopId;
+          } elseif ($channelType === 'MERCADOLIBRE') {
+            $webhookSecretToSave = $webhookSecret;
+            $mlClientIdToSave = $mlClientId;
+            $mlAppIdToSave = $mlAppId !== '' ? $mlAppId : ($mlClientId !== '' ? $mlClientId : '');
+            $mlClientSecretToSave = $mlClientSecret;
+            $mlRedirectUriToSave = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
+          }
+
+          $effectiveMlRedirectUri = $mlRedirectUriToSave !== '' ? $mlRedirectUriToSave : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
@@ -253,13 +294,13 @@ if (is_post()) {
             $id,
             $channelType,
             $connectionEnabled,
-            $psBaseUrl !== '' ? $psBaseUrl : null,
-            $psApiKey !== '' ? $psApiKey : null,
-            $webhookSecret !== '' ? $webhookSecret : null,
-            $psShopId,
-            $mlClientId !== '' ? $mlClientId : null,
-            ($mlAppId !== '' ? $mlAppId : ($mlClientId !== '' ? $mlClientId : null)),
-            $mlClientSecret !== '' ? $mlClientSecret : null,
+            $psBaseUrlToSave !== '' ? $psBaseUrlToSave : null,
+            $psApiKeyToSave !== '' ? $psApiKeyToSave : null,
+            $webhookSecretToSave !== '' ? $webhookSecretToSave : null,
+            $psShopIdToSave,
+            $mlClientIdToSave !== '' ? $mlClientIdToSave : null,
+            $mlAppIdToSave !== '' ? $mlAppIdToSave : null,
+            $mlClientSecretToSave !== '' ? $mlClientSecretToSave : null,
             $effectiveMlRedirectUri,
           ]);
           if (strtoupper($channelType) === 'MERCADOLIBRE' && $connectionEnabled === 1) {
@@ -274,7 +315,9 @@ if (is_post()) {
           exit;
         }
       } catch (Throwable $t) {
-        $error = 'No se pudo modificar el sitio.';
+        if (!($t instanceof RuntimeException && $t->getMessage() === 'site_not_found')) {
+          $error = 'No se pudo modificar el sitio.';
+        }
       }
     }
   }
@@ -561,10 +604,6 @@ $nextPage = min($totalPages, $page + 1);
                 <input class="form-control" type="text" name="ps_api_key" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_api_key']) ?>">
               </label>
               <label class="form-field">
-                <span class="form-label">Webhook secret (HMAC)</span>
-                <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>">
-              </label>
-              <label class="form-field">
                 <span class="form-label">Shop ID (opcional)</span>
                 <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>">
               </label>
@@ -589,10 +628,14 @@ $nextPage = min($totalPages, $page + 1);
                   <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_redirect_uri']) ?>">
                 </label>
               </div>
-              <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
+              <div class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Callback URL</span>
                   <input class="form-control" type="url" readonly value="<?= e(rtrim(base_url(), '/') . '/api/ml_webhook.php') ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Webhook secret (HMAC)</span>
+                  <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Usuario ML (opcional)</span>
@@ -617,7 +660,7 @@ $nextPage = min($totalPages, $page + 1);
 
           <div class="inline-actions">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
-            <button class="btn" type="submit"><?= $editSite ? 'Guardar' : 'Agregar' ?></button>
+            <button class="btn" type="submit">Guardar</button>
           </div>
         </form>
       </div>
@@ -733,16 +776,6 @@ $nextPage = min($totalPages, $page + 1);
       var prestashopFields = document.getElementById('psFields');
       var mercadolibreFields = document.getElementById('mlFields');
 
-      function setFieldsEnabled(container, enabled) {
-        if (!container) {
-          return;
-        }
-        var controls = container.querySelectorAll('input, select, textarea, button');
-        controls.forEach(function (control) {
-          control.disabled = !enabled;
-        });
-      }
-
       function updateDynamicRequired(channelValue) {
         if (!siteForm) {
           return;
@@ -763,18 +796,12 @@ $nextPage = min($totalPages, $page + 1);
           connFields.style.display = 'none';
           prestashopFields.style.display = 'none';
           mercadolibreFields.style.display = 'none';
-          setFieldsEnabled(commonFields, false);
-          setFieldsEnabled(prestashopFields, false);
-          setFieldsEnabled(mercadolibreFields, false);
           return;
         }
         connFields.style.display = '';
         commonFields.style.display = '';
-        setFieldsEnabled(commonFields, true);
         prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
         mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
-        setFieldsEnabled(prestashopFields, value === 'PRESTASHOP');
-        setFieldsEnabled(mercadolibreFields, value === 'MERCADOLIBRE');
       }
 
       if (channelType) {
