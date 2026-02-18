@@ -68,6 +68,22 @@ function ensure_stock_sync_schema(): void {
     CONSTRAINT fk_site_product_map_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+  $pdo->exec("CREATE TABLE IF NOT EXISTS ts_ml_links (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    product_id INT UNSIGNED NOT NULL,
+    site_id INT UNSIGNED NOT NULL,
+    ml_item_id VARCHAR(120) NOT NULL,
+    ml_variation_id VARCHAR(120) NULL,
+    ml_sku VARCHAR(190) NULL,
+    title VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_ts_ml_links (product_id, site_id, ml_item_id, ml_variation_id),
+    KEY idx_ts_ml_links_site_product (site_id, product_id),
+    CONSTRAINT fk_ts_ml_links_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ts_ml_links_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
   $mapColumns = [];
   $st = $pdo->query('SHOW COLUMNS FROM site_product_map');
   foreach ($st->fetchAll() as $row) {
@@ -290,8 +306,15 @@ function stock_sync_ml_variation_sku(array $variation): string {
   if ($candidate !== '') {
     return $candidate;
   }
-  $attributes = $variation['attributes'] ?? [];
-  if (is_array($attributes)) {
+  $sellerSku = trim((string)($variation['seller_sku'] ?? ''));
+  if ($sellerSku !== '') {
+    return $sellerSku;
+  }
+
+  foreach ([$variation['attributes'] ?? null, $variation['attribute_combinations'] ?? null] as $attributes) {
+    if (!is_array($attributes)) {
+      continue;
+    }
     foreach ($attributes as $attribute) {
       if (!is_array($attribute)) {
         continue;
@@ -300,7 +323,7 @@ function stock_sync_ml_variation_sku(array $variation): string {
       if ($id !== 'SELLER_SKU') {
         continue;
       }
-      $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? ''));
+      $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? $attribute['value'] ?? ''));
       if ($value !== '') {
         return $value;
       }
@@ -811,15 +834,8 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
       continue;
     }
 
-    $map = stock_sync_load_ml_mapping($pdo, $siteId, $productId, $sku);
-
-    $mlItemId = trim((string)($map['ml_item_id'] ?? ''));
-    $mlVariationId = trim((string)($map['ml_variation_id'] ?? ''));
-    if ($mlVariationId === '') {
-      $mlVariationId = null;
-    }
-
-    if ($mlItemId === '') {
+    $links = stock_sync_load_ml_links($pdo, $siteId, $productId);
+    if (count($links) === 0) {
       $err = 'No se puede sincronizar a MercadoLibre: falta vínculo guardado (Item ID) para este producto/sitio.';
       stock_sync_write_log($productId, $siteId, 'sync_push', [
         'connector' => 'mercadolibre',
@@ -832,13 +848,25 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
       continue;
     }
 
-    try {
-      $accessToken = (string)$site['ml_access_token'];
-      $itemResponse = MercadoLibreAdapter::getItem($accessToken, $mlItemId);
+    $siteErrors = [];
+    $accessToken = (string)$site['ml_access_token'];
+    foreach ($links as $link) {
+      $mlItemId = trim((string)($link['ml_item_id'] ?? ''));
+      $mlVariationId = trim((string)($link['ml_variation_id'] ?? ''));
+      if ($mlVariationId === '') {
+        $mlVariationId = null;
+      }
+      if ($mlItemId === '') {
+        $siteErrors[] = 'Vínculo sin Item ID.';
+        continue;
+      }
+
+      try {
+        $itemResponse = MercadoLibreAdapter::getItem($accessToken, $mlItemId);
       $itemStatus = (int)($itemResponse['code'] ?? 0);
       $itemBody = (string)($itemResponse['body'] ?? '');
       if ($itemStatus < 200 || $itemStatus >= 300) {
-        $err = 'No se pudo consultar item de MercadoLibre (HTTP ' . $itemStatus . '): ' . mb_substr($itemBody, 0, 500);
+        $err = 'No se pudo consultar item de MercadoLibre ' . $mlItemId . ' (HTTP ' . $itemStatus . '): ' . mb_substr($itemBody, 0, 500);
         stock_sync_write_log($productId, $siteId, 'sync_push', [
           'connector' => 'mercadolibre',
           'sku' => $sku,
@@ -850,7 +878,7 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
           'http_body' => mb_substr($itemBody, 0, 2000),
           'error' => $err,
         ]);
-        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+        $siteErrors[] = $err;
         continue;
       }
 
@@ -870,7 +898,7 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
           'ok' => false,
           'error' => $err,
         ]);
-        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+        $siteErrors[] = $err;
         continue;
       }
 
@@ -911,9 +939,9 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
       ]);
 
       if ($ok) {
-        $pushStatus[] = ['site_id' => $siteId, 'ok' => true, 'error' => ''];
+        // ok
       } else {
-        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $errorMessage];
+        $siteErrors[] = $errorMessage;
       }
     } catch (Throwable $e) {
       stock_sync_write_log($productId, $siteId, 'sync_push', [
@@ -925,7 +953,14 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
         'ok' => false,
         'error' => $e->getMessage(),
       ]);
-      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $e->getMessage()];
+      $siteErrors[] = $e->getMessage();
+    }
+    }
+
+    if (count($siteErrors) > 0) {
+      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => implode(' | ', $siteErrors)];
+    } else {
+      $pushStatus[] = ['site_id' => $siteId, 'ok' => true, 'error' => ''];
     }
   }
 
@@ -954,6 +989,37 @@ function stock_sync_load_ml_mapping(PDO $pdo, int $siteId, int $productId, strin
 
   $skuMap = $skuSt->fetch();
   return $skuMap ?: null;
+}
+
+function stock_sync_load_ml_links(PDO $pdo, int $siteId, int $productId): array {
+  $st = $pdo->prepare('SELECT id, product_id, site_id, ml_item_id, ml_variation_id, ml_sku, title, created_at FROM ts_ml_links WHERE site_id = ? AND product_id = ? ORDER BY id ASC');
+  $st->execute([$siteId, $productId]);
+  $rows = $st->fetchAll();
+  if (is_array($rows) && count($rows) > 0) {
+    return $rows;
+  }
+
+  $fallback = stock_sync_load_ml_mapping($pdo, $siteId, $productId, '');
+  if (!$fallback) {
+    return [];
+  }
+
+  $itemId = trim((string)($fallback['ml_item_id'] ?? $fallback['remote_id'] ?? ''));
+  if ($itemId === '') {
+    return [];
+  }
+  $variationId = trim((string)($fallback['ml_variation_id'] ?? $fallback['remote_variant_id'] ?? ''));
+
+  return [[
+    'id' => 0,
+    'product_id' => $productId,
+    'site_id' => $siteId,
+    'ml_item_id' => $itemId,
+    'ml_variation_id' => $variationId,
+    'ml_sku' => null,
+    'title' => null,
+    'created_at' => null,
+  ]];
 }
 
 function stock_sync_resolve_shop_id(array $site): int {
