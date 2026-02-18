@@ -327,7 +327,7 @@ if (is_post() && post('action') === 'stock_set') {
   } else {
     try {
       $stockResult = set_stock($id, (int)$qty_raw, $note, (int)(current_user()['id'] ?? 0));
-      $pushStatus = sync_push_stock_to_sites((string)$product['sku'], (int)$stockResult['qty']);
+      $pushStatus = sync_push_stock_to_sites((string)$product['sku'], (int)$stockResult['qty'], null, $id);
 
       $okPushCount = 0;
       $errorPushes = [];
@@ -342,11 +342,11 @@ if (is_post() && post('action') === 'stock_set') {
       if ($errorPushes) {
         $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $id]);
-        $error = 'Error enviando a PrestaShop: ' . implode(' ; ', $errorPushes);
+        $error = 'Error enviando stock a sitios: ' . implode(' ; ', $errorPushes);
       } elseif ($okPushCount > 0) {
         $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . (string)$product['sku'], $id]);
-        $message = 'Stock actualizado. Stock enviado a PrestaShop OK.';
+        $message = 'Stock actualizado. Stock enviado a sitios OK.';
       } else {
         $message = 'Stock actualizado.';
       }
@@ -368,7 +368,7 @@ if (is_post() && post('action') === 'stock_add') {
   } else {
     try {
       $stockResult = add_stock($id, (int)$delta_raw, $note, (int)(current_user()['id'] ?? 0));
-      $pushStatus = sync_push_stock_to_sites((string)$product['sku'], (int)$stockResult['qty']);
+      $pushStatus = sync_push_stock_to_sites((string)$product['sku'], (int)$stockResult['qty'], null, $id);
 
       $okPushCount = 0;
       $errorPushes = [];
@@ -383,11 +383,11 @@ if (is_post() && post('action') === 'stock_add') {
       if ($errorPushes) {
         $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $id]);
-        $error = 'Error enviando a PrestaShop: ' . implode(' ; ', $errorPushes);
+        $error = 'Error enviando stock a sitios: ' . implode(' ; ', $errorPushes);
       } elseif ($okPushCount > 0) {
         $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . (string)$product['sku'], $id]);
-        $message = 'Stock ajustado. Stock enviado a PrestaShop OK.';
+        $message = 'Stock ajustado. Stock enviado a sitios OK.';
       } else {
         $message = 'Stock ajustado.';
       }
