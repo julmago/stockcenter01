@@ -52,6 +52,7 @@ if (is_post()) {
     $psShopIdRaw = trim(post('ps_shop_id'));
     $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
     $mlClientId = trim(post('ml_client_id'));
+    $mlAppId = trim(post('ml_app_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRedirectUri = trim(post('ml_redirect_uri'));
 
@@ -76,7 +77,7 @@ if (is_post()) {
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct]);
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
@@ -86,36 +87,43 @@ if (is_post()) {
               webhook_secret = VALUES(webhook_secret),
               ps_shop_id = VALUES(ps_shop_id),
               ml_client_id = VALUES(ml_client_id),
+              ml_app_id = VALUES(ml_app_id),
               ml_client_secret = VALUES(ml_client_secret),
               ml_redirect_uri = VALUES(ml_redirect_uri),
               updated_at = NOW(),
               ml_access_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_access_token END,
               ml_refresh_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_refresh_token END,
               ml_token_expires_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_token_expires_at END,
               ml_connected_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_connected_at END,
               ml_user_id = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_user_id END,
               ml_status = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN 'DISCONNECTED' ELSE site_connections.ml_status END");
@@ -128,9 +136,18 @@ if (is_post()) {
             $webhookSecret !== '' ? $webhookSecret : null,
             $psShopId,
             $mlClientId !== '' ? $mlClientId : null,
+            ($mlAppId !== '' ? $mlAppId : ($mlClientId !== '' ? $mlClientId : null)),
             $mlClientSecret !== '' ? $mlClientSecret : null,
             $effectiveMlRedirectUri,
           ]);
+          if (strtoupper($channelType) === 'MERCADOLIBRE' && $connectionEnabled === 1) {
+            try {
+              $callbackUrl = rtrim(base_url(), '/') . '/api/ml_webhook.php';
+              stock_sync_ml_register_subscription($siteId, $callbackUrl, 'items');
+            } catch (Throwable $subscriptionError) {
+              error_log('[sites] ML subscribe create error site_id=' . $siteId . ' err=' . $subscriptionError->getMessage());
+            }
+          }
           header('Location: sites.php?created=1');
           exit;
         }
@@ -156,6 +173,7 @@ if (is_post()) {
     $psShopIdRaw = trim(post('ps_shop_id'));
     $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
     $mlClientId = trim(post('ml_client_id'));
+    $mlAppId = trim(post('ml_app_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRedirectUri = trim(post('ml_redirect_uri'));
 
@@ -181,7 +199,7 @@ if (is_post()) {
           $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
@@ -191,36 +209,43 @@ if (is_post()) {
               webhook_secret = VALUES(webhook_secret),
               ps_shop_id = VALUES(ps_shop_id),
               ml_client_id = VALUES(ml_client_id),
+              ml_app_id = VALUES(ml_app_id),
               ml_client_secret = VALUES(ml_client_secret),
               ml_redirect_uri = VALUES(ml_redirect_uri),
               updated_at = NOW(),
               ml_access_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_access_token END,
               ml_refresh_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_refresh_token END,
               ml_token_expires_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_token_expires_at END,
               ml_connected_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_connected_at END,
               ml_user_id = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_user_id END,
               ml_status = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
+                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN 'DISCONNECTED' ELSE site_connections.ml_status END");
@@ -233,9 +258,18 @@ if (is_post()) {
             $webhookSecret !== '' ? $webhookSecret : null,
             $psShopId,
             $mlClientId !== '' ? $mlClientId : null,
+            ($mlAppId !== '' ? $mlAppId : ($mlClientId !== '' ? $mlClientId : null)),
             $mlClientSecret !== '' ? $mlClientSecret : null,
             $effectiveMlRedirectUri,
           ]);
+          if (strtoupper($channelType) === 'MERCADOLIBRE' && $connectionEnabled === 1) {
+            try {
+              $callbackUrl = rtrim(base_url(), '/') . '/api/ml_webhook.php';
+              stock_sync_ml_register_subscription($id, $callbackUrl, 'items');
+            } catch (Throwable $subscriptionError) {
+              error_log('[sites] ML subscribe update error site_id=' . $id . ' err=' . $subscriptionError->getMessage());
+            }
+          }
           header('Location: sites.php?updated=1');
           exit;
         }
@@ -325,6 +359,7 @@ $editConnection = [
   'webhook_secret' => '',
   'ps_shop_id' => '',
   'ml_client_id' => '',
+  'ml_app_id' => '',
   'ml_client_secret' => '',
   'ml_redirect_uri' => '',
   'ml_access_token' => '',
@@ -335,7 +370,7 @@ $editConnection = [
   'ml_status' => 'DISCONNECTED',
 ];
 if ($editSite) {
-  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
   $st->execute([(int)$editSite['id']]);
   $row = $st->fetch();
   if ($row) {
@@ -348,6 +383,7 @@ if ($editSite) {
       'webhook_secret' => (string)($row['webhook_secret'] ?? ''),
       'ps_shop_id' => isset($row['ps_shop_id']) ? (string)$row['ps_shop_id'] : '',
       'ml_client_id' => (string)($row['ml_client_id'] ?? ''),
+      'ml_app_id' => (string)($row['ml_app_id'] ?? ''),
       'ml_client_secret' => (string)($row['ml_client_secret'] ?? ''),
       'ml_redirect_uri' => (string)($row['ml_redirect_uri'] ?? ''),
       'ml_access_token' => (string)($row['ml_access_token'] ?? ''),
@@ -374,6 +410,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
     'webhook_secret' => trim(post('webhook_secret', $editConnection['webhook_secret'])),
     'ps_shop_id' => trim(post('ps_shop_id', $editConnection['ps_shop_id'])),
     'ml_client_id' => trim(post('ml_client_id', $editConnection['ml_client_id'])),
+    'ml_app_id' => trim(post('ml_app_id', $editConnection['ml_app_id'])),
     'ml_client_secret' => trim(post('ml_client_secret', $editConnection['ml_client_secret'])),
     'ml_redirect_uri' => trim(post('ml_redirect_uri', $editConnection['ml_redirect_uri'])),
     'ml_access_token' => $editConnection['ml_access_token'],
@@ -534,10 +571,14 @@ $nextPage = min($totalPages, $page + 1);
             </div>
 
             <div id="mlFields" class="stack" style="gap: var(--space-3);">
-              <div class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+              <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
                   <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">App ID</span>
+                  <input class="form-control" type="text" name="ml_app_id" maxlength="100" value="<?= e($formConnection['ml_app_id'] !== '' ? $formConnection['ml_app_id'] : $formConnection['ml_client_id']) ?>">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Client Secret</span>
@@ -551,7 +592,7 @@ $nextPage = min($totalPages, $page + 1);
               <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Callback URL</span>
-                  <input class="form-control" type="url" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
+                  <input class="form-control" type="url" readonly value="<?= e(rtrim(base_url(), '/') . '/api/ml_webhook.php') ?>">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Usuario ML (opcional)</span>

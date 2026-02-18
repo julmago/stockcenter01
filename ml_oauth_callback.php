@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/stock_sync.php';
 
 require_login();
 ensure_sites_schema();
@@ -147,15 +148,24 @@ try {
     $expiresAt = date('Y-m-d H:i:s', time() + $expiresIn);
   }
 
-  $st = $pdo->prepare('UPDATE site_connections SET ml_access_token = ?, ml_refresh_token = ?, ml_token_expires_at = ?, ml_connected_at = NOW(), ml_user_id = ?, ml_status = ?, updated_at = NOW() WHERE site_id = ?');
+  $st = $pdo->prepare('UPDATE site_connections SET ml_access_token = ?, ml_refresh_token = ?, ml_token_expires_at = ?, ml_connected_at = NOW(), ml_user_id = ?, ml_app_id = COALESCE(NULLIF(ml_app_id, ""), ?), ml_status = ?, updated_at = NOW() WHERE site_id = ?');
   $st->execute([
     $accessToken,
     $refreshToken,
     $expiresAt,
     $userId !== '' ? $userId : null,
+    $clientId,
     'CONNECTED',
     $siteId,
   ]);
+
+
+  try {
+    $callbackUrl = rtrim(base_url(), '/') . '/api/ml_webhook.php';
+    stock_sync_ml_register_subscription($siteId, $callbackUrl, 'items');
+  } catch (Throwable $subscriptionError) {
+    error_log('[ml_oauth_callback] ML subscribe error site_id=' . $siteId . ' err=' . $subscriptionError->getMessage());
+  }
 
   header('Location: sites.php?edit_id=' . $siteId . '&oauth_connected=1');
   exit;
