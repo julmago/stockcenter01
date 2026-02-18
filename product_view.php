@@ -990,7 +990,7 @@ if ($st) {
 
             <div class="table-wrapper" id="ml-search-results-wrap" style="display:none;">
               <table class="table">
-                <thead><tr><th>Seleccionar</th><th>Item ID</th><th>Variation ID</th><th>Título</th><th>Status</th><th>Stock</th><th>Origen match</th></tr></thead>
+                <thead><tr><th>SKU</th><th>Título</th><th>Precio</th><th>Stock</th><th>Item ID</th><th>Variation ID</th><th>Acciones</th></tr></thead>
                 <tbody id="ml-search-results-body"></tbody>
               </table>
             </div>
@@ -1361,13 +1361,9 @@ if ($st) {
   const mlBindStatus = document.getElementById('ml-bind-status');
   const mlSearchWrap = document.getElementById('ml-search-results-wrap');
   const mlSearchBody = document.getElementById('ml-search-results-body');
+  const productSku = <?= json_encode((string)$product['sku']) ?>;
 
-  const renderLogs = (logs) => {
-    if (!Array.isArray(logs) || logs.length === 0) {
-      return '';
-    }
-    return logs.join(' | ');
-  };
+  const toIntDisplay = (value) => Number.isFinite(Number(value)) ? String(parseInt(value, 10)) : '0';
 
   if (mlSearchBtn) {
     mlSearchBtn.addEventListener('click', async () => {
@@ -1384,52 +1380,84 @@ if ($st) {
       mlSearchBody.innerHTML = '';
       mlSearchWrap.style.display = 'none';
 
-      const url = `api/ml_search_by_sku.php?site_id=${encodeURIComponent(siteId)}&sku=${encodeURIComponent(<?= json_encode((string)$product['sku']) ?>)}`;
+      const url = `api/site_test_sku.php?site_id=${encodeURIComponent(siteId)}&sku=${encodeURIComponent(productSku)}`;
       try {
-        const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
-        const data = await response.json();
-        if (!response.ok || !data.ok) {
-          mlBindStatus.textContent = data && data.error ? data.error : 'No se pudo buscar en MercadoLibre.';
+        const response = await fetch(url, { credentials: 'same-origin' });
+        const payload = await response.json();
+        if (!payload || payload.ok !== true) {
+          mlBindStatus.textContent = payload && payload.error ? payload.error : 'No se pudo buscar en MercadoLibre.';
           return;
         }
 
-        const rows = Array.isArray(data.rows) ? data.rows : [];
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
         if (rows.length === 0) {
-          const logsText = renderLogs(data.logs);
-          mlBindStatus.textContent = logsText
-            ? `No se encontraron publicaciones para este SKU. ${logsText}`
-            : 'No se encontraron publicaciones para este SKU.';
+          mlBindStatus.textContent = 'No se encontraron publicaciones para este SKU.';
           return;
         }
 
-        rows.forEach((row, idx) => {
+        rows.forEach((row) => {
           const tr = document.createElement('tr');
-          const checked = idx === 0 ? 'checked' : '';
-          const rowVariationId = row.variation_id || '';
+          const rowVariationId = String(row.variation_id || '');
+          const rowItemId = String(row.item_id || '');
           tr.innerHTML = `
-            <td><input type="radio" name="ml-row" value="${idx}" ${checked}></td>
-            <td>${row.item_id || ''}</td>
-            <td>${rowVariationId || '—'}</td>
+            <td>${row.sku || ''}</td>
             <td>${row.title || ''}</td>
-            <td>${row.status || ''}</td>
-            <td>${row.available_quantity ?? ''}</td>
-            <td>${row.match_source || '—'}</td>
+            <td>${toIntDisplay(row.price)}</td>
+            <td>${toIntDisplay(row.stock)}</td>
+            <td>${rowItemId}</td>
+            <td>${rowVariationId || '—'}</td>
+            <td></td>
           `;
-          tr.addEventListener('click', () => {
-            if (mlItemInput) mlItemInput.value = row.item_id || '';
-            if (mlVariationInput) mlVariationInput.value = rowVariationId;
-            mlBindStatus.textContent = rowVariationId
-              ? `Seleccionado ${row.item_id} / variante ${rowVariationId}. Guardá el vínculo para aplicar.`
-              : `Seleccionado ${row.item_id}. Guardá el vínculo para aplicar.`;
-          });
+          const actionsTd = tr.lastElementChild;
+          if (rowItemId && actionsTd) {
+            const linkBtn = document.createElement('button');
+            linkBtn.type = 'button';
+            linkBtn.className = 'btn btn-ghost';
+            linkBtn.textContent = 'Vincular';
+            linkBtn.addEventListener('click', async () => {
+              linkBtn.disabled = true;
+              if (mlItemInput) mlItemInput.value = rowItemId;
+              if (mlVariationInput) mlVariationInput.value = rowVariationId;
+
+              const body = new URLSearchParams();
+              body.append('site_id', String(siteId || ''));
+              body.append('sku', productSku);
+              body.append('item_id', rowItemId);
+              body.append('variation_id', rowVariationId);
+
+              try {
+                const saveResponse = await fetch('api/site_link_product_ml.php', {
+                  method: 'POST',
+                  credentials: 'same-origin',
+                  headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                  },
+                  body: body.toString()
+                });
+                const savePayload = await saveResponse.json();
+                if (!savePayload || savePayload.ok !== true) {
+                  mlBindStatus.textContent = savePayload && savePayload.error ? savePayload.error : 'No se pudo vincular.';
+                  return;
+                }
+                mlBindStatus.textContent = rowVariationId
+                  ? `Vinculación guardada (${rowItemId} / ${rowVariationId}).`
+                  : `Vinculación guardada (${rowItemId}).`;
+              } catch (err) {
+                mlBindStatus.textContent = 'No se pudo vincular.';
+              } finally {
+                linkBtn.disabled = false;
+              }
+            });
+            actionsTd.appendChild(linkBtn);
+          } else if (actionsTd) {
+            actionsTd.textContent = '—';
+          }
           mlSearchBody.appendChild(tr);
         });
 
         mlSearchWrap.style.display = '';
-        const logsText = renderLogs(data.logs);
-        mlBindStatus.textContent = logsText
-          ? `Seleccioná una fila para cargar Item/Variante y luego guardá el vínculo. ${logsText}`
-          : 'Seleccioná una fila para cargar Item/Variante y luego guardá el vínculo.';
+        mlBindStatus.textContent = `Resultados encontrados: ${rows.length}.`;
       } catch (err) {
         mlBindStatus.textContent = 'Error de red al buscar en MercadoLibre.';
       }
