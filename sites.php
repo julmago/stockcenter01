@@ -479,7 +479,7 @@ $nextPage = min($totalPages, $page + 1);
         <div class="card-header">
           <h3 class="card-title"><?= $editSite ? 'Modificar sitio' : 'Nuevo sitio' ?></h3>
         </div>
-        <form method="post" class="stack">
+        <form method="post" class="stack" id="siteForm">
           <input type="hidden" name="action" value="<?= $editSite ? 'update_site' : 'create_site' ?>">
           <?php if ($editSite): ?>
             <input type="hidden" name="id" value="<?= (int)$editSite['id'] ?>">
@@ -532,8 +532,8 @@ $nextPage = min($totalPages, $page + 1);
             </select>
           </label>
 
-          <div id="connFields" class="stack">
-            <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px;">
+          <div id="connFields" class="stack" style="gap: var(--space-3);">
+            <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px;">
               <label class="form-field">
                 <span class="form-label">Habilitado</span>
                 <select class="form-control" name="connection_enabled">
@@ -551,14 +551,14 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="psFields" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+            <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
               <label class="form-field">
                 <span class="form-label">URL base</span>
-                <input class="form-control" type="text" name="ps_base_url" maxlength="255" value="<?= e($formConnection['ps_base_url']) ?>">
+                <input class="form-control" type="text" name="ps_base_url" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_base_url']) ?>">
               </label>
               <label class="form-field">
                 <span class="form-label">API Key / Token</span>
-                <input class="form-control" type="text" name="ps_api_key" maxlength="255" value="<?= e($formConnection['ps_api_key']) ?>">
+                <input class="form-control" type="text" name="ps_api_key" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_api_key']) ?>">
               </label>
               <label class="form-field">
                 <span class="form-label">Webhook secret (HMAC)</span>
@@ -570,11 +570,11 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="mlFields" class="stack" style="gap: var(--space-3);">
+            <div id="mlFields" class="stack" data-connection-group="MERCADOLIBRE" style="gap: var(--space-3);">
               <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
-                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
+                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_id']) ?>">
                 </label>
                 <label class="form-field">
                   <span class="form-label">App ID</span>
@@ -582,11 +582,11 @@ $nextPage = min($totalPages, $page + 1);
                 </label>
                 <label class="form-field">
                   <span class="form-label">Client Secret</span>
-                  <input class="form-control" type="password" name="ml_client_secret" maxlength="255" value="<?= e($formConnection['ml_client_secret']) ?>" autocomplete="off">
+                  <input class="form-control" type="password" name="ml_client_secret" maxlength="255" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_secret']) ?>" autocomplete="off">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Redirect URI</span>
-                  <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
+                  <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_redirect_uri']) ?>">
                 </label>
               </div>
               <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
@@ -726,25 +726,55 @@ $nextPage = min($totalPages, $page + 1);
 <?php if ($showNewForm): ?>
   <script>
     (function () {
+      var siteForm = document.getElementById('siteForm');
       var channelType = document.getElementById('channel_type');
       var connFields = document.getElementById('connFields');
+      var commonFields = document.getElementById('connectionCommonFields');
       var prestashopFields = document.getElementById('psFields');
       var mercadolibreFields = document.getElementById('mlFields');
 
+      function setFieldsEnabled(container, enabled) {
+        if (!container) {
+          return;
+        }
+        var controls = container.querySelectorAll('input, select, textarea, button');
+        controls.forEach(function (control) {
+          control.disabled = !enabled;
+        });
+      }
+
+      function updateDynamicRequired(channelValue) {
+        if (!siteForm) {
+          return;
+        }
+        var requiredInputs = siteForm.querySelectorAll('[data-required-when]');
+        requiredInputs.forEach(function (input) {
+          input.required = input.getAttribute('data-required-when') === channelValue;
+        });
+      }
+
       function toggleConnectionFields() {
-        if (!channelType || !connFields || !prestashopFields || !mercadolibreFields) {
+        if (!channelType || !connFields || !commonFields || !prestashopFields || !mercadolibreFields) {
           return;
         }
         var value = channelType.value;
+        updateDynamicRequired(value);
         if (value === 'NONE') {
           connFields.style.display = 'none';
           prestashopFields.style.display = 'none';
           mercadolibreFields.style.display = 'none';
+          setFieldsEnabled(commonFields, false);
+          setFieldsEnabled(prestashopFields, false);
+          setFieldsEnabled(mercadolibreFields, false);
           return;
         }
         connFields.style.display = '';
+        commonFields.style.display = '';
+        setFieldsEnabled(commonFields, true);
         prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
         mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
+        setFieldsEnabled(prestashopFields, value === 'PRESTASHOP');
+        setFieldsEnabled(mercadolibreFields, value === 'MERCADOLIBRE');
       }
 
       if (channelType) {
