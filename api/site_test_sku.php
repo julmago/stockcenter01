@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../prestashop.php';
+require_once __DIR__ . '/../include/stock_sync.php';
 
 header('Content-Type: application/json; charset=utf-8');
 require_login();
@@ -173,6 +174,20 @@ function ml_extract_sku(array $item, string $defaultSku): string {
   return $defaultSku;
 }
 
+function ml_format_variation_sku(array $row, string $searchedSku): string {
+  $sku = trim((string)($row['sku'] ?? ''));
+  if ($sku !== '') {
+    return $sku;
+  }
+
+  $variationId = trim((string)($row['variation_id'] ?? ''));
+  if ($variationId !== '') {
+    return $searchedSku . ' (var ' . $variationId . ')';
+  }
+
+  return $searchedSku;
+}
+
 $siteId = (int)get('site_id', '0');
 $sku = trim((string)get('sku', ''));
 if ($siteId <= 0) {
@@ -258,88 +273,20 @@ try {
       $up->execute([$mlUserId, $siteId]);
     }
 
-    $query = http_build_query(['seller_sku' => $sku], '', '&', PHP_QUERY_RFC3986);
-    $search = ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $query, $accessToken);
-    if ($search['code'] < 200 || $search['code'] >= 300) {
-      throw new RuntimeException('No se pudo buscar SKU en MercadoLibre (HTTP ' . $search['code'] . ').');
+    $rows = stock_sync_ml_search_by_sku($pdo, $row, $siteId, $sku);
+    $formatted = [];
+    foreach ($rows as $rowItem) {
+      $formatted[] = [
+        'sku' => ml_format_variation_sku($rowItem, $sku),
+        'title' => trim((string)($rowItem['title'] ?? '')),
+        'price' => 0,
+        'stock' => 0,
+        'item_id' => trim((string)($rowItem['item_id'] ?? '')),
+        'variation_id' => trim((string)($rowItem['variation_id'] ?? '')),
+      ];
     }
 
-    $itemIds = $search['json']['results'] ?? [];
-    if (!is_array($itemIds)) {
-      $itemIds = [];
-    }
-
-    if (count($itemIds) === 0) {
-      $fallbackQuery = http_build_query(['q' => $sku], '', '&', PHP_QUERY_RFC3986);
-      $fallbackSearch = ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $fallbackQuery, $accessToken);
-      if ($fallbackSearch['code'] < 200 || $fallbackSearch['code'] >= 300) {
-        throw new RuntimeException('No se pudo buscar SKU en MercadoLibre por texto (HTTP ' . $fallbackSearch['code'] . ').');
-      }
-
-      $fallbackIds = $fallbackSearch['json']['results'] ?? [];
-      if (!is_array($fallbackIds)) {
-        $fallbackIds = [];
-      }
-      $matchedFallback = [];
-      foreach ($fallbackIds as $fallbackItemId) {
-        $fallbackItemId = trim((string)$fallbackItemId);
-        if ($fallbackItemId === '') {
-          continue;
-        }
-        $item = ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($fallbackItemId), $accessToken);
-        if ($item['code'] < 200 || $item['code'] >= 300) {
-          continue;
-        }
-        $itemJson = $item['json'];
-        $sellerCustomField = trim((string)($itemJson['seller_custom_field'] ?? ''));
-        if ($sellerCustomField === $sku) {
-          $matchedFallback[] = $fallbackItemId;
-        }
-      }
-      $itemIds = $matchedFallback;
-    }
-
-    $itemIds = array_values(array_unique(array_map(static function ($itemId): string {
-      return trim((string)$itemId);
-    }, $itemIds)));
-
-    $rows = [];
-    foreach ($itemIds as $itemId) {
-      if ($itemId === '') {
-        continue;
-      }
-      $item = ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
-      if ($item['code'] < 200 || $item['code'] >= 300) {
-        continue;
-      }
-      $itemJson = $item['json'];
-      $baseSku = ml_extract_sku($itemJson, $sku);
-      $baseTitle = trim((string)($itemJson['title'] ?? ''));
-      $basePrice = to_int_number($itemJson['price'] ?? 0);
-      $baseStock = to_int_number($itemJson['available_quantity'] ?? 0);
-
-      $rows[] = ['sku' => $baseSku, 'title' => $baseTitle, 'price' => $basePrice, 'stock' => $baseStock, 'item_id' => $itemId, 'variation_id' => ''];
-
-      $variations = $itemJson['variations'] ?? [];
-      if (is_array($variations)) {
-        foreach ($variations as $variation) {
-          if (!is_array($variation)) {
-            continue;
-          }
-          $variationId = trim((string)($variation['id'] ?? ''));
-          $rows[] = [
-            'sku' => $sku . ($variationId !== '' ? ' (var ' . $variationId . ')' : ' (var)'),
-            'title' => $baseTitle . ' (variante)',
-            'price' => array_key_exists('price', $variation) ? to_int_number($variation['price']) : $basePrice,
-            'stock' => array_key_exists('available_quantity', $variation) ? to_int_number($variation['available_quantity']) : $baseStock,
-            'item_id' => $itemId,
-            'variation_id' => $variationId,
-          ];
-        }
-      }
-    }
-
-    respond(['ok' => true, 'rows' => $rows]);
+    respond(['ok' => true, 'rows' => $formatted]);
   }
 
   respond(['ok' => false, 'rows' => [], 'error' => 'Tipo de conexión no soportado.'], 400);

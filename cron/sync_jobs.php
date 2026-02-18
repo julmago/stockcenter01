@@ -43,28 +43,27 @@ foreach ($jobs as $job) {
     $product = $productSt->fetch();
     $sku = trim((string)($product['sku'] ?? ''));
 
-    $map = stock_sync_load_ml_mapping($pdo, $siteId, $productId, $sku);
-    if (!$map) {
-      throw new RuntimeException('Falta mapping en site_product_map para site_id=' . $siteId . ' product_id=' . $productId . ' sku=' . $sku);
-    }
-
     $qty = (int)$payload['qty'];
     $connType = stock_sync_conn_type($site);
     if ($connType === 'prestashop') {
+      $map = stock_sync_load_ml_mapping($pdo, $siteId, $productId, $sku);
+      if (!$map) {
+        throw new RuntimeException('Falta mapping en site_product_map para site_id=' . $siteId . ' product_id=' . $productId . ' sku=' . $sku);
+      }
       PrestashopAdapter::updateStock((string)$site['ps_base_url'], (string)$site['ps_api_key'], (string)$map['remote_id'], $map['remote_variant_id'] !== null ? (string)$map['remote_variant_id'] : null, $qty);
     } elseif ($connType === 'mercadolibre') {
-      $itemId = trim((string)($map['ml_item_id'] ?? ''));
-      if ($itemId === '') {
-        $itemId = trim((string)($map['remote_id'] ?? ''));
-      }
-      $variationId = trim((string)($map['ml_variation_id'] ?? ''));
-      if ($variationId === '') {
-        $variationId = trim((string)($map['remote_variant_id'] ?? ''));
-      }
-      if ($itemId === '') {
+      $links = stock_sync_load_ml_links($pdo, $siteId, $productId);
+      if (count($links) === 0) {
         throw new RuntimeException('No se puede sincronizar a MercadoLibre: falta vincular Item ID/Variante para este producto.');
       }
-      MercadoLibreAdapter::updateStock((string)$site['ml_access_token'], $itemId, $variationId !== '' ? $variationId : null, $qty);
+      foreach ($links as $link) {
+        $itemId = trim((string)($link['ml_item_id'] ?? ''));
+        $variationId = trim((string)($link['ml_variation_id'] ?? ''));
+        if ($itemId === '') {
+          continue;
+        }
+        MercadoLibreAdapter::updateStock((string)$site['ml_access_token'], $itemId, $variationId !== '' ? $variationId : null, $qty);
+      }
     } else {
       throw new RuntimeException('Tipo de conexión no soportado para sync de stock.');
     }
