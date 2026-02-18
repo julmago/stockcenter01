@@ -17,9 +17,6 @@ $message = '';
 
 function normalize_channel_type($value): string {
   $channel = strtoupper(trim((string)$value));
-  if ($channel === 'SIN_CONEXION') {
-    $channel = 'NONE';
-  }
   if (!in_array($channel, ['NONE', 'PRESTASHOP', 'MERCADOLIBRE'], true)) {
     return 'NONE';
   }
@@ -55,7 +52,6 @@ if (is_post()) {
     $psShopIdRaw = trim(post('ps_shop_id'));
     $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
     $mlClientId = trim(post('ml_client_id'));
-    $mlAppId = trim(post('ml_app_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRedirectUri = trim(post('ml_redirect_uri'));
 
@@ -80,8 +76,8 @@ if (is_post()) {
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct]);
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
@@ -90,43 +86,36 @@ if (is_post()) {
               webhook_secret = VALUES(webhook_secret),
               ps_shop_id = VALUES(ps_shop_id),
               ml_client_id = VALUES(ml_client_id),
-              ml_app_id = VALUES(ml_app_id),
               ml_client_secret = VALUES(ml_client_secret),
               ml_redirect_uri = VALUES(ml_redirect_uri),
               updated_at = NOW(),
               ml_access_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_access_token END,
               ml_refresh_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_refresh_token END,
               ml_token_expires_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_token_expires_at END,
               ml_connected_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_connected_at END,
               ml_user_id = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_user_id END,
               ml_status = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN 'DISCONNECTED' ELSE site_connections.ml_status END");
@@ -139,18 +128,9 @@ if (is_post()) {
             $webhookSecret !== '' ? $webhookSecret : null,
             $psShopId,
             $mlClientId !== '' ? $mlClientId : null,
-            ($mlAppId !== '' ? $mlAppId : ($mlClientId !== '' ? $mlClientId : null)),
             $mlClientSecret !== '' ? $mlClientSecret : null,
             $effectiveMlRedirectUri,
           ]);
-          if (strtoupper($channelType) === 'MERCADOLIBRE' && $connectionEnabled === 1) {
-            try {
-              $callbackUrl = rtrim(base_url(), '/') . '/api/ml_webhook.php';
-              stock_sync_ml_register_subscription($siteId, $callbackUrl, 'items');
-            } catch (Throwable $subscriptionError) {
-              error_log('[sites] ML subscribe create error site_id=' . $siteId . ' err=' . $subscriptionError->getMessage());
-            }
-          }
           header('Location: sites.php?created=1');
           exit;
         }
@@ -168,8 +148,6 @@ if (is_post()) {
     $isActive = post('is_active') === '1' ? 1 : 0;
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
-    $connectionEnabledPosted = array_key_exists('connection_enabled', $_POST);
-    $syncStockEnabledPosted = array_key_exists('sync_stock_enabled', $_POST);
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
     $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
     $psBaseUrl = trim(post('ps_base_url'));
@@ -178,7 +156,6 @@ if (is_post()) {
     $psShopIdRaw = trim(post('ps_shop_id'));
     $psShopId = $psShopIdRaw === '' ? null : (int)$psShopIdRaw;
     $mlClientId = trim(post('ml_client_id'));
-    $mlAppId = trim(post('ml_app_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRedirectUri = trim(post('ml_redirect_uri'));
 
@@ -196,20 +173,6 @@ if (is_post()) {
       $error = 'Margen (%) inválido. Usá un valor entre -100 y 999.99.';
     } else {
       try {
-        $st = $pdo->prepare('SELECT conn_enabled, sync_stock_enabled FROM sites WHERE id = ? LIMIT 1');
-        $st->execute([$id]);
-        $currentSiteState = $st->fetch(PDO::FETCH_ASSOC);
-        if (!$currentSiteState) {
-          $error = 'Sitio inválido.';
-          throw new RuntimeException('site_not_found');
-        }
-        if (!$connectionEnabledPosted) {
-          $connectionEnabled = (int)$currentSiteState['conn_enabled'];
-        }
-        if (!$syncStockEnabledPosted) {
-          $syncStockEnabled = (int)$currentSiteState['sync_stock_enabled'];
-        }
-
         $st = $pdo->prepare('SELECT id FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id <> ? LIMIT 1');
         $st->execute([$name, $id]);
         if ($st->fetch()) {
@@ -217,34 +180,9 @@ if (is_post()) {
         } else {
           $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
-          $st = $pdo->prepare('SELECT ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri FROM site_connections WHERE site_id = ? LIMIT 1');
-          $st->execute([$id]);
-          $existingConnection = $st->fetch(PDO::FETCH_ASSOC) ?: [];
-
-          $psBaseUrlToSave = array_key_exists('ps_base_url', $existingConnection) ? (string)$existingConnection['ps_base_url'] : '';
-          $psApiKeyToSave = array_key_exists('ps_api_key', $existingConnection) ? (string)$existingConnection['ps_api_key'] : '';
-          $psShopIdToSave = array_key_exists('ps_shop_id', $existingConnection) ? $existingConnection['ps_shop_id'] : null;
-          $webhookSecretToSave = array_key_exists('webhook_secret', $existingConnection) ? (string)$existingConnection['webhook_secret'] : '';
-          $mlClientIdToSave = array_key_exists('ml_client_id', $existingConnection) ? (string)$existingConnection['ml_client_id'] : '';
-          $mlAppIdToSave = array_key_exists('ml_app_id', $existingConnection) ? (string)$existingConnection['ml_app_id'] : '';
-          $mlClientSecretToSave = array_key_exists('ml_client_secret', $existingConnection) ? (string)$existingConnection['ml_client_secret'] : '';
-          $mlRedirectUriToSave = array_key_exists('ml_redirect_uri', $existingConnection) ? (string)$existingConnection['ml_redirect_uri'] : '';
-
-          if ($channelType === 'PRESTASHOP') {
-            $psBaseUrlToSave = $psBaseUrl;
-            $psApiKeyToSave = $psApiKey;
-            $psShopIdToSave = $psShopId;
-          } elseif ($channelType === 'MERCADOLIBRE') {
-            $webhookSecretToSave = $webhookSecret;
-            $mlClientIdToSave = $mlClientId;
-            $mlAppIdToSave = $mlAppId !== '' ? $mlAppId : ($mlClientId !== '' ? $mlClientId : '');
-            $mlClientSecretToSave = $mlClientSecret;
-            $mlRedirectUriToSave = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          }
-
-          $effectiveMlRedirectUri = $mlRedirectUriToSave !== '' ? $mlRedirectUriToSave : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+          $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
@@ -253,43 +191,36 @@ if (is_post()) {
               webhook_secret = VALUES(webhook_secret),
               ps_shop_id = VALUES(ps_shop_id),
               ml_client_id = VALUES(ml_client_id),
-              ml_app_id = VALUES(ml_app_id),
               ml_client_secret = VALUES(ml_client_secret),
               ml_redirect_uri = VALUES(ml_redirect_uri),
               updated_at = NOW(),
               ml_access_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_access_token END,
               ml_refresh_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_refresh_token END,
               ml_token_expires_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_token_expires_at END,
               ml_connected_at = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_connected_at END,
               ml_user_id = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN NULL ELSE site_connections.ml_user_id END,
               ml_status = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
-                  OR COALESCE(site_connections.ml_app_id, '') <> COALESCE(VALUES(ml_app_id), '')
                   OR COALESCE(site_connections.ml_client_secret, '') <> COALESCE(VALUES(ml_client_secret), '')
                   OR COALESCE(site_connections.ml_redirect_uri, '') <> COALESCE(VALUES(ml_redirect_uri), '')
                 THEN 'DISCONNECTED' ELSE site_connections.ml_status END");
@@ -297,30 +228,19 @@ if (is_post()) {
             $id,
             $channelType,
             $connectionEnabled,
-            $psBaseUrlToSave !== '' ? $psBaseUrlToSave : null,
-            $psApiKeyToSave !== '' ? $psApiKeyToSave : null,
-            $webhookSecretToSave !== '' ? $webhookSecretToSave : null,
-            $psShopIdToSave,
-            $mlClientIdToSave !== '' ? $mlClientIdToSave : null,
-            $mlAppIdToSave !== '' ? $mlAppIdToSave : null,
-            $mlClientSecretToSave !== '' ? $mlClientSecretToSave : null,
+            $psBaseUrl !== '' ? $psBaseUrl : null,
+            $psApiKey !== '' ? $psApiKey : null,
+            $webhookSecret !== '' ? $webhookSecret : null,
+            $psShopId,
+            $mlClientId !== '' ? $mlClientId : null,
+            $mlClientSecret !== '' ? $mlClientSecret : null,
             $effectiveMlRedirectUri,
           ]);
-          if (strtoupper($channelType) === 'MERCADOLIBRE' && $connectionEnabled === 1) {
-            try {
-              $callbackUrl = rtrim(base_url(), '/') . '/api/ml_webhook.php';
-              stock_sync_ml_register_subscription($id, $callbackUrl, 'items');
-            } catch (Throwable $subscriptionError) {
-              error_log('[sites] ML subscribe update error site_id=' . $id . ' err=' . $subscriptionError->getMessage());
-            }
-          }
           header('Location: sites.php?updated=1');
           exit;
         }
       } catch (Throwable $t) {
-        if (!($t instanceof RuntimeException && $t->getMessage() === 'site_not_found')) {
-          $error = 'No se pudo modificar el sitio.';
-        }
+        $error = 'No se pudo modificar el sitio.';
       }
     }
   }
@@ -388,8 +308,7 @@ $listSt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $listSt->execute();
 $sites = $listSt->fetchAll();
 
-$editIdRaw = get('edit_id', '');
-$editId = (int)$editIdRaw;
+$editId = (int)get('edit_id', '0');
 $editSite = null;
 if ($editId > 0) {
   $st = $pdo->prepare('SELECT id, name, channel_type, conn_type, conn_enabled, sync_stock_enabled, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
@@ -406,7 +325,6 @@ $editConnection = [
   'webhook_secret' => '',
   'ps_shop_id' => '',
   'ml_client_id' => '',
-  'ml_app_id' => '',
   'ml_client_secret' => '',
   'ml_redirect_uri' => '',
   'ml_access_token' => '',
@@ -417,7 +335,7 @@ $editConnection = [
   'ml_status' => 'DISCONNECTED',
 ];
 if ($editSite) {
-  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
   $st->execute([(int)$editSite['id']]);
   $row = $st->fetch();
   if ($row) {
@@ -430,7 +348,6 @@ if ($editSite) {
       'webhook_secret' => (string)($row['webhook_secret'] ?? ''),
       'ps_shop_id' => isset($row['ps_shop_id']) ? (string)$row['ps_shop_id'] : '',
       'ml_client_id' => (string)($row['ml_client_id'] ?? ''),
-      'ml_app_id' => (string)($row['ml_app_id'] ?? ''),
       'ml_client_secret' => (string)($row['ml_client_secret'] ?? ''),
       'ml_redirect_uri' => (string)($row['ml_redirect_uri'] ?? ''),
       'ml_access_token' => (string)($row['ml_access_token'] ?? ''),
@@ -457,7 +374,6 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
     'webhook_secret' => trim(post('webhook_secret', $editConnection['webhook_secret'])),
     'ps_shop_id' => trim(post('ps_shop_id', $editConnection['ps_shop_id'])),
     'ml_client_id' => trim(post('ml_client_id', $editConnection['ml_client_id'])),
-    'ml_app_id' => trim(post('ml_app_id', $editConnection['ml_app_id'])),
     'ml_client_secret' => trim(post('ml_client_secret', $editConnection['ml_client_secret'])),
     'ml_redirect_uri' => trim(post('ml_redirect_uri', $editConnection['ml_redirect_uri'])),
     'ml_access_token' => $editConnection['ml_access_token'],
@@ -469,7 +385,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
   ];
 }
 
-$showNewForm = get('new') === '1' || $editSite !== null || array_key_exists('edit_id', $_GET);
+$showNewForm = get('new') === '1' || $editSite !== null;
 
 $queryBase = [];
 if ($q !== '') $queryBase['q'] = $q;
@@ -526,7 +442,7 @@ $nextPage = min($totalPages, $page + 1);
         <div class="card-header">
           <h3 class="card-title"><?= $editSite ? 'Modificar sitio' : 'Nuevo sitio' ?></h3>
         </div>
-        <form method="post" class="stack" id="siteForm">
+        <form method="post" class="stack">
           <input type="hidden" name="action" value="<?= $editSite ? 'update_site' : 'create_site' ?>">
           <?php if ($editSite): ?>
             <input type="hidden" name="id" value="<?= (int)$editSite['id'] ?>">
@@ -569,41 +485,28 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
           </div>
-          <?php
-            $channelTypeValue = normalize_channel_type($formConnection['channel_type'] ?? 'NONE');
-            $showConnFields = $channelTypeValue !== 'NONE';
-            $showPsFields = $channelTypeValue === 'PRESTASHOP';
-            $showMlFields = $channelTypeValue === 'MERCADOLIBRE';
-
-            $connFieldsStyle = $showConnFields ? '' : 'none';
-            $psFieldsStyle = $showPsFields ? '' : 'none';
-            $mlFieldsStyle = $showMlFields ? '' : 'none';
-
-            $connDisabledAttr = $showConnFields ? '' : ' disabled';
-            $psDisabledAttr = $showPsFields ? '' : ' disabled';
-            $mlDisabledAttr = $showMlFields ? '' : ' disabled';
-          ?>
           <label class="form-field" style="max-width: 360px;">
             <span class="form-label">Tipo de conexión</span>
-            <select class="form-control" name="channel_type" id="channel_type" onchange="if (window.siteToggleConnectionFields) { window.siteToggleConnectionFields(this.value); }">
+            <select class="form-control" name="channel_type" id="channel_type">
+              <?php $channelTypeValue = $formConnection['channel_type']; ?>
               <option value="NONE" <?= $channelTypeValue === 'NONE' ? 'selected' : '' ?>>Sin conexión</option>
               <option value="PRESTASHOP" <?= $channelTypeValue === 'PRESTASHOP' ? 'selected' : '' ?>>PrestaShop</option>
               <option value="MERCADOLIBRE" <?= $channelTypeValue === 'MERCADOLIBRE' ? 'selected' : '' ?>>MercadoLibre</option>
             </select>
           </label>
 
-          <div id="connFields" class="stack" style="gap: var(--space-3); display: <?= $connFieldsStyle ?>;">
-            <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px; display: <?= $connFieldsStyle ?>;">
+          <div id="connFields" class="stack">
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px;">
               <label class="form-field">
                 <span class="form-label">Habilitado</span>
-                <select class="form-control" name="connection_enabled"<?= $connDisabledAttr ?>>
+                <select class="form-control" name="connection_enabled">
                   <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
                   <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
                 </select>
               </label>
               <label class="form-field">
                 <span class="form-label">Sincronizar stock</span>
-                <select class="form-control" name="sync_stock_enabled"<?= $connDisabledAttr ?>>
+                <select class="form-control" name="sync_stock_enabled">
                   <?php $syncStockValue = isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 0; ?>
                   <option value="1" <?= $syncStockValue === 1 ? 'selected' : '' ?>>Sí</option>
                   <option value="0" <?= $syncStockValue === 0 ? 'selected' : '' ?>>No</option>
@@ -611,48 +514,44 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3); display: <?= $psFieldsStyle ?>;">
+            <div id="psFields" class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
               <label class="form-field">
                 <span class="form-label">URL base</span>
-                <input class="form-control" type="text" name="ps_base_url" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_base_url']) ?>"<?= $psDisabledAttr ?>>
+                <input class="form-control" type="text" name="ps_base_url" maxlength="255" value="<?= e($formConnection['ps_base_url']) ?>">
               </label>
               <label class="form-field">
                 <span class="form-label">API Key / Token</span>
-                <input class="form-control" type="text" name="ps_api_key" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_api_key']) ?>"<?= $psDisabledAttr ?>>
+                <input class="form-control" type="text" name="ps_api_key" maxlength="255" value="<?= e($formConnection['ps_api_key']) ?>">
+              </label>
+              <label class="form-field">
+                <span class="form-label">Webhook secret (HMAC)</span>
+                <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>">
               </label>
               <label class="form-field">
                 <span class="form-label">Shop ID (opcional)</span>
-                <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>"<?= $psDisabledAttr ?>>
+                <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>">
               </label>
             </div>
 
-            <div id="mlFields" class="stack" data-connection-group="MERCADOLIBRE" style="gap: var(--space-3); display: <?= $mlFieldsStyle ?>;">
-              <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
+            <div id="mlFields" class="stack" style="gap: var(--space-3);">
+              <div class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
-                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_id']) ?>"<?= $mlDisabledAttr ?>>
-                </label>
-                <label class="form-field">
-                  <span class="form-label">App ID</span>
-                  <input class="form-control" type="text" name="ml_app_id" maxlength="100" value="<?= e($formConnection['ml_app_id'] !== '' ? $formConnection['ml_app_id'] : $formConnection['ml_client_id']) ?>"<?= $mlDisabledAttr ?>>
+                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Client Secret</span>
-                  <input class="form-control" type="password" name="ml_client_secret" maxlength="255" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_secret']) ?>" autocomplete="off"<?= $mlDisabledAttr ?>>
+                  <input class="form-control" type="password" name="ml_client_secret" maxlength="255" value="<?= e($formConnection['ml_client_secret']) ?>" autocomplete="off">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Redirect URI</span>
-                  <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_redirect_uri']) ?>"<?= $mlDisabledAttr ?>>
+                  <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
                 </label>
               </div>
-              <div class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+              <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Callback URL</span>
-                  <input class="form-control" type="url" readonly value="<?= e(rtrim(base_url(), '/') . '/api/ml_webhook.php') ?>">
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Webhook secret (HMAC)</span>
-                  <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>"<?= $mlDisabledAttr ?>>
+                  <input class="form-control" type="url" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
                 </label>
                 <label class="form-field">
                   <span class="form-label">Usuario ML (opcional)</span>
@@ -675,9 +574,9 @@ $nextPage = min($totalPages, $page + 1);
             </div>
           </div>
 
-          <div class="inline-actions" id="siteFormActions" style="margin-top: 16px; display:flex; justify-content:flex-end; gap:12px; position: sticky; bottom: 0; z-index: 2; background: rgba(255,255,255,0.95); padding: 12px 0 0;">
+          <div class="inline-actions">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
-            <button class="btn" type="submit">Guardar</button>
+            <button class="btn" type="submit"><?= $editSite ? 'Guardar' : 'Agregar' ?></button>
           </div>
         </form>
       </div>
@@ -783,85 +682,34 @@ $nextPage = min($totalPages, $page + 1);
     </div>
   </div>
 </main>
+<?php if ($showNewForm): ?>
   <script>
     (function () {
-      function initSiteFormBehavior() {
-        var siteForm = document.getElementById('siteForm');
-        var channelType = document.getElementById('channel_type');
-        var connFields = document.getElementById('connFields');
-        var commonFields = document.getElementById('connectionCommonFields');
-        var prestashopFields = document.getElementById('psFields');
-        var mercadolibreFields = document.getElementById('mlFields');
+      var channelType = document.getElementById('channel_type');
+      var connFields = document.getElementById('connFields');
+      var prestashopFields = document.getElementById('psFields');
+      var mercadolibreFields = document.getElementById('mlFields');
 
-        function setDisabledBySelector(selector, disabled) {
-          if (!siteForm) {
-            return;
-          }
-          var nodes = siteForm.querySelectorAll(selector);
-          for (var i = 0; i < nodes.length; i += 1) {
-            nodes[i].disabled = !!disabled;
-          }
+      function toggleConnectionFields() {
+        if (!channelType || !connFields || !prestashopFields || !mercadolibreFields) {
+          return;
         }
-
-        function updateDynamicRequired(channelValue) {
-          if (!siteForm) {
-            return;
-          }
-          var requiredInputs = siteForm.querySelectorAll('[data-required-when]');
-          for (var i = 0; i < requiredInputs.length; i += 1) {
-            requiredInputs[i].required = requiredInputs[i].getAttribute('data-required-when') === channelValue;
-          }
+        var value = channelType.value;
+        if (value === 'NONE') {
+          connFields.style.display = 'none';
+          prestashopFields.style.display = 'none';
+          mercadolibreFields.style.display = 'none';
+          return;
         }
-
-        function toggleConnectionFields(forcedValue) {
-          try {
-            var value = (forcedValue || (channelType ? channelType.value : '') || 'NONE').toUpperCase();
-            if (channelType) {
-              channelType.value = value;
-            }
-
-            var isNone = value === 'NONE';
-            var isPrestashop = value === 'PRESTASHOP';
-            var isMercadolibre = value === 'MERCADOLIBRE';
-
-            updateDynamicRequired(value);
-
-            if (connFields) {
-              connFields.style.display = isNone ? 'none' : '';
-            }
-            if (commonFields) {
-              commonFields.style.display = isNone ? 'none' : '';
-            }
-            if (prestashopFields) {
-              prestashopFields.style.display = isPrestashop ? '' : 'none';
-            }
-            if (mercadolibreFields) {
-              mercadolibreFields.style.display = isMercadolibre ? '' : 'none';
-            }
-
-            setDisabledBySelector('[name="connection_enabled"], [name="sync_stock_enabled"]', isNone);
-            setDisabledBySelector('[name="ps_base_url"], [name="ps_api_key"], [name="ps_shop_id"]', !isPrestashop);
-            setDisabledBySelector('[name="ml_client_id"], [name="ml_app_id"], [name="ml_client_secret"], [name="ml_redirect_uri"], [name="webhook_secret"]', !isMercadolibre);
-          } catch (error) {
-            // Progressive enhancement: avoid breaking the form if any node is missing.
-          }
-        }
-
-        window.siteToggleConnectionFields = toggleConnectionFields;
-        if (channelType && !channelType.dataset.boundToggle) {
-          channelType.addEventListener('change', function () {
-            toggleConnectionFields(channelType.value);
-          });
-          channelType.dataset.boundToggle = '1';
-        }
-        toggleConnectionFields(channelType ? channelType.value : 'NONE');
+        connFields.style.display = '';
+        prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
+        mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
       }
 
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSiteFormBehavior);
-      } else {
-        initSiteFormBehavior();
+      if (channelType) {
+        channelType.addEventListener('change', toggleConnectionFields);
       }
+      toggleConnectionFields();
 
       var siteSkuTestForm = document.getElementById('siteSkuTestForm');
       var siteSkuTestInput = document.getElementById('siteSkuTestInput');
@@ -1013,5 +861,6 @@ $nextPage = min($totalPages, $page + 1);
 
     })();
   </script>
+<?php endif; ?>
 </body>
 </html>
