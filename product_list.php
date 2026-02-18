@@ -12,6 +12,7 @@ if (!is_dir($logsDir)) {
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/include/pricing.php';
+require_once __DIR__ . '/include/stock.php';
 
 $visibleSites = [];
 $products = [];
@@ -33,6 +34,7 @@ try {
   require_login();
   ensure_brands_schema();
   ensure_sites_schema();
+  ensure_stock_schema();
 
   $where = '';
   $params = [];
@@ -139,6 +141,7 @@ try {
     . " COALESCE(s.import_default_units_per_pack, 0) AS supplier_default_units_per_pack,"
     . " {$supplierMarginExpr} AS supplier_default_margin_percent,"
     . " {$supplierDiscountExpr} AS supplier_discount_percent,"
+    . " COALESCE(tsps.qty, 0) AS ts_stock_qty,"
     . ($numeric
       ? " CASE WHEN EXISTS ("
         . "   SELECT 1 FROM product_codes pc_exact"
@@ -173,6 +176,7 @@ try {
     . "     )"
     . " ) ps1 ON ps1.product_id = p.id"
     . " LEFT JOIN suppliers s ON s.id = ps1.supplier_id AND s.is_active = 1"
+    . " LEFT JOIN ts_product_stock tsps ON tsps.product_id = p.id"
     . " $where"
     . " ORDER BY code_exact_match DESC, p.name ASC, p.id ASC"
     . " LIMIT :limit OFFSET :offset";
@@ -263,11 +267,11 @@ try {
       <div class="table-wrapper">
         <table class="table">
           <thead>
-            <tr><th>sku</th><th>nombre</th><th>marca</th><th>proveedor</th><?php foreach ($visibleSites as $site): ?><th><?= e($site['name']) ?></th><?php endforeach; ?></tr>
+            <tr><th>sku</th><th>nombre</th><th>marca</th><th>proveedor</th><?php foreach ($visibleSites as $site): ?><th><?= e($site['name']) ?></th><?php endforeach; ?><th>Stock</th></tr>
           </thead>
           <tbody>
             <?php if (!$products): ?>
-              <tr><td colspan="<?= 4 + count($visibleSites) ?>">Sin productos.</td></tr>
+              <tr><td colspan="<?= 5 + count($visibleSites) ?>">Sin productos.</td></tr>
             <?php else: ?>
               <?php foreach ($products as $p): ?>
                 <tr style="cursor:pointer;" onclick="window.location='product_view.php?id=<?= (int)$p['id'] ?>'">
@@ -305,6 +309,7 @@ try {
                       ?>
                     </td>
                   <?php endforeach; ?>
+                  <td><?= (int)$p['ts_stock_qty'] ?></td>
                 </tr>
               <?php endforeach; ?>
             <?php endif; ?>
