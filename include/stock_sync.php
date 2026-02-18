@@ -173,12 +173,279 @@ function stock_sync_active_sites(): array {
 
   $sql = "SELECT s.id, s.name, s.is_active, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.last_sync_at,
       sc.channel_type, sc.enabled AS connection_enabled, sc.ps_base_url, sc.ps_api_key, sc.ps_shop_id,
-      sc.ml_client_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token
+      sc.ml_client_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token, sc.ml_user_id, sc.ml_status
     FROM sites s
     LEFT JOIN site_connections sc ON sc.site_id = s.id
     WHERE s.is_active = 1";
 
   return db()->query($sql)->fetchAll();
+}
+
+function stock_sync_ml_http_get(string $url, string $accessToken): array {
+  $ch = curl_init($url);
+  if ($ch === false) {
+    throw new RuntimeException('No se pudo inicializar cURL para MercadoLibre.');
+  }
+
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_HTTPGET, true);
+  curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+  curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    'Accept: application/json',
+    'Authorization: Bearer ' . $accessToken,
+  ]);
+
+  $resp = curl_exec($ch);
+  $err = curl_error($ch);
+  $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+
+  if ($resp === false) {
+    throw new RuntimeException('Error cURL en MercadoLibre: ' . $err);
+  }
+
+  $json = json_decode((string)$resp, true);
+  if (!is_array($json)) {
+    $json = [];
+  }
+
+  return ['code' => $code, 'json' => $json];
+}
+
+function stock_sync_ml_extract_sku(array $item, string $defaultSku): string {
+  $candidate = trim((string)($item['seller_custom_field'] ?? ''));
+  if ($candidate !== '') {
+    return $candidate;
+  }
+  $attributes = $item['attributes'] ?? [];
+  if (is_array($attributes)) {
+    foreach ($attributes as $attribute) {
+      if (!is_array($attribute)) {
+        continue;
+      }
+      $id = strtoupper(trim((string)($attribute['id'] ?? '')));
+      if ($id !== 'SELLER_SKU') {
+        continue;
+      }
+      $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? ''));
+      if ($value !== '') {
+        return $value;
+      }
+    }
+  }
+
+  return $defaultSku;
+}
+
+function stock_sync_ml_variation_sku(array $variation): string {
+  $candidate = trim((string)($variation['seller_custom_field'] ?? ''));
+  if ($candidate !== '') {
+    return $candidate;
+  }
+  $attributes = $variation['attributes'] ?? [];
+  if (is_array($attributes)) {
+    foreach ($attributes as $attribute) {
+      if (!is_array($attribute)) {
+        continue;
+      }
+      $id = strtoupper(trim((string)($attribute['id'] ?? '')));
+      if ($id !== 'SELLER_SKU') {
+        continue;
+      }
+      $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? ''));
+      if ($value !== '') {
+        return $value;
+      }
+    }
+  }
+
+  return '';
+}
+
+function stock_sync_ml_ensure_user_id(PDO $pdo, int $siteId, array $site): string {
+  $mlUserId = trim((string)($site['ml_user_id'] ?? ''));
+  if ($mlUserId !== '') {
+    return $mlUserId;
+  }
+
+  $accessToken = trim((string)($site['ml_access_token'] ?? ''));
+  if ($accessToken === '') {
+    throw new RuntimeException('MercadoLibre sin token de acceso para buscar por SKU.');
+  }
+
+  $me = stock_sync_ml_http_get('https://api.mercadolibre.com/users/me', $accessToken);
+  if ($me['code'] < 200 || $me['code'] >= 300) {
+    throw new RuntimeException('No se pudo consultar usuario de MercadoLibre (HTTP ' . $me['code'] . ').');
+  }
+  $mlUserId = trim((string)($me['json']['id'] ?? ''));
+  if ($mlUserId === '') {
+    throw new RuntimeException('MercadoLibre no devolvió user_id en /users/me.');
+  }
+
+  $up = $pdo->prepare('UPDATE site_connections SET ml_user_id = ?, updated_at = NOW() WHERE site_id = ?');
+  $up->execute([$mlUserId, $siteId]);
+  return $mlUserId;
+}
+
+function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string $sku): array {
+  $accessToken = trim((string)($site['ml_access_token'] ?? ''));
+  if ($accessToken === '') {
+    throw new RuntimeException('MercadoLibre sin token de acceso para buscar por SKU.');
+  }
+
+  $mlUserId = stock_sync_ml_ensure_user_id($pdo, $siteId, $site);
+  $query = http_build_query(['seller_sku' => $sku], '', '&', PHP_QUERY_RFC3986);
+  $search = stock_sync_ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $query, $accessToken);
+  if ($search['code'] < 200 || $search['code'] >= 300) {
+    throw new RuntimeException('No se pudo buscar SKU en MercadoLibre (HTTP ' . $search['code'] . ').');
+  }
+
+  $itemIds = $search['json']['results'] ?? [];
+  if (!is_array($itemIds)) {
+    $itemIds = [];
+  }
+
+  if (count($itemIds) === 0) {
+    $fallbackQuery = http_build_query(['q' => $sku], '', '&', PHP_QUERY_RFC3986);
+    $fallbackSearch = stock_sync_ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $fallbackQuery, $accessToken);
+    if ($fallbackSearch['code'] < 200 || $fallbackSearch['code'] >= 300) {
+      throw new RuntimeException('No se pudo buscar SKU en MercadoLibre por texto (HTTP ' . $fallbackSearch['code'] . ').');
+    }
+
+    $fallbackIds = $fallbackSearch['json']['results'] ?? [];
+    if (!is_array($fallbackIds)) {
+      $fallbackIds = [];
+    }
+
+    $matchedFallback = [];
+    foreach ($fallbackIds as $fallbackItemId) {
+      $fallbackItemId = trim((string)$fallbackItemId);
+      if ($fallbackItemId === '') {
+        continue;
+      }
+      $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($fallbackItemId), $accessToken);
+      if ($item['code'] < 200 || $item['code'] >= 300) {
+        continue;
+      }
+      $itemJson = $item['json'];
+      $sellerCustomField = trim((string)($itemJson['seller_custom_field'] ?? ''));
+      if ($sellerCustomField === $sku) {
+        $matchedFallback[] = $fallbackItemId;
+      }
+    }
+    $itemIds = $matchedFallback;
+  }
+
+  $itemIds = array_values(array_unique(array_map(static function ($itemId): string {
+    return trim((string)$itemId);
+  }, $itemIds)));
+
+  $rows = [];
+  foreach ($itemIds as $itemId) {
+    if ($itemId === '') {
+      continue;
+    }
+    $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
+    if ($item['code'] < 200 || $item['code'] >= 300) {
+      continue;
+    }
+
+    $itemJson = $item['json'];
+    $rows[] = [
+      'item_id' => $itemId,
+      'variation_id' => '',
+      'sku' => stock_sync_ml_extract_sku($itemJson, $sku),
+      'title' => trim((string)($itemJson['title'] ?? '')),
+      'has_variations' => !empty($itemJson['variations']) && is_array($itemJson['variations']),
+    ];
+
+    $variations = $itemJson['variations'] ?? [];
+    if (!is_array($variations)) {
+      continue;
+    }
+
+    foreach ($variations as $variation) {
+      if (!is_array($variation)) {
+        continue;
+      }
+      $rows[] = [
+        'item_id' => $itemId,
+        'variation_id' => trim((string)($variation['id'] ?? '')),
+        'sku' => stock_sync_ml_variation_sku($variation),
+        'title' => trim((string)($itemJson['title'] ?? '')),
+        'has_variations' => true,
+      ];
+    }
+  }
+
+  return $rows;
+}
+
+function stock_sync_ml_save_mapping(PDO $pdo, int $siteId, int $productId, string $sku, string $itemId, ?string $variationId): void {
+  $variationValue = $variationId !== null && trim($variationId) !== '' ? trim($variationId) : null;
+  $up = $pdo->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, updated_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, NOW())
+    ON DUPLICATE KEY UPDATE
+      remote_id = VALUES(remote_id),
+      remote_variant_id = VALUES(remote_variant_id),
+      remote_sku = VALUES(remote_sku),
+      ml_item_id = VALUES(ml_item_id),
+      ml_variation_id = VALUES(ml_variation_id),
+      updated_at = NOW()");
+  $up->execute([$siteId, $productId, $itemId, $variationValue, $sku, $itemId, $variationValue]);
+}
+
+function stock_sync_ml_resolve_mapping(PDO $pdo, array $site, int $siteId, int $productId, string $sku): array {
+  $rows = stock_sync_ml_search_by_sku($pdo, $site, $siteId, $sku);
+  if (count($rows) === 0) {
+    throw new RuntimeException('No se puede sincronizar a MercadoLibre: SKU no encontrado para vinculación automática.');
+  }
+
+  $itemIds = array_values(array_unique(array_map(static function (array $row): string {
+    return (string)$row['item_id'];
+  }, $rows)));
+
+  if (count($itemIds) > 1) {
+    $lines = [];
+    foreach ($rows as $row) {
+      $lines[] = 'Item ' . (string)$row['item_id'] . ' | Variante ' . ((string)$row['variation_id'] !== '' ? (string)$row['variation_id'] : '—') . ' | SKU ' . ((string)$row['sku'] !== '' ? (string)$row['sku'] : '—') . ' | Título ' . ((string)$row['title'] !== '' ? (string)$row['title'] : '—');
+    }
+    throw new RuntimeException('SKU duplicado en MercadoLibre. Requiere vinculación manual. Resultados: ' . implode(' || ', $lines));
+  }
+
+  $itemId = (string)$itemIds[0];
+  $itemHasVariations = false;
+  $variationCandidates = [];
+  foreach ($rows as $row) {
+    if ((string)$row['item_id'] !== $itemId) {
+      continue;
+    }
+    if ((bool)($row['has_variations'] ?? false)) {
+      $itemHasVariations = true;
+    }
+    $variationId = trim((string)($row['variation_id'] ?? ''));
+    if ($variationId === '') {
+      continue;
+    }
+    $rowSku = trim((string)($row['sku'] ?? ''));
+    if ($rowSku === '' || $rowSku === $sku) {
+      $variationCandidates[$variationId] = true;
+    }
+  }
+
+  $variationId = null;
+  $candidateIds = array_keys($variationCandidates);
+  if (count($candidateIds) === 1) {
+    $variationId = (string)$candidateIds[0];
+  } elseif (count($candidateIds) > 1) {
+    throw new RuntimeException('El item de MercadoLibre tiene múltiples variantes para el SKU y requiere vinculación manual.');
+  } elseif ($itemHasVariations) {
+    throw new RuntimeException('El item de MercadoLibre tiene variantes y no se pudo determinar la variante por SKU. Requiere vinculación manual.');
+  }
+
+  stock_sync_ml_save_mapping($pdo, $siteId, $productId, $sku, $itemId, $variationId);
+  return ['ml_item_id' => $itemId, 'ml_variation_id' => $variationId, 'resolved' => true];
 }
 
 function enqueue_stock_push_jobs(int $productId, int $qty, string $origin, ?int $sourceSiteId = null, ?string $eventId = null): int {
@@ -403,16 +670,23 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
     }
 
     if ($mlItemId === '') {
-      $err = 'No se puede sincronizar a MercadoLibre: falta vincular Item ID/Variante para este producto.';
-      stock_sync_write_log($productId, $siteId, 'sync_push', [
-        'connector' => 'mercadolibre',
-        'sku' => $sku,
-        'qty' => $newQty,
-        'ok' => false,
-        'error' => $err,
-      ]);
-      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
-      continue;
+      try {
+        $resolvedMap = stock_sync_ml_resolve_mapping($pdo, $site, $siteId, $productId, $sku);
+        $mlItemId = trim((string)($resolvedMap['ml_item_id'] ?? ''));
+        $resolvedVariation = $resolvedMap['ml_variation_id'] ?? null;
+        $mlVariationId = $resolvedVariation !== null && trim((string)$resolvedVariation) !== '' ? trim((string)$resolvedVariation) : null;
+      } catch (Throwable $e) {
+        $err = $e->getMessage();
+        stock_sync_write_log($productId, $siteId, 'sync_push', [
+          'connector' => 'mercadolibre',
+          'sku' => $sku,
+          'qty' => $newQty,
+          'ok' => false,
+          'error' => $err,
+        ]);
+        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+        continue;
+      }
     }
 
     try {
