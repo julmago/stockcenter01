@@ -388,7 +388,8 @@ $listSt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $listSt->execute();
 $sites = $listSt->fetchAll();
 
-$editId = (int)get('edit_id', '0');
+$editIdRaw = get('edit_id', '');
+$editId = (int)$editIdRaw;
 $editSite = null;
 if ($editId > 0) {
   $st = $pdo->prepare('SELECT id, name, channel_type, conn_type, conn_enabled, sync_stock_enabled, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
@@ -468,7 +469,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
   ];
 }
 
-$showNewForm = get('new') === '1' || $editSite !== null;
+$showNewForm = get('new') === '1' || $editSite !== null || array_key_exists('edit_id', $_GET);
 
 $queryBase = [];
 if ($q !== '') $queryBase['q'] = $q;
@@ -810,18 +811,20 @@ $nextPage = min($totalPages, $page + 1);
         if (!channelType) {
           return;
         }
-        if (!connFields || !prestashopFields || !mercadolibreFields) {
-          console.warn('[sites.php] toggleConnectionFields skipped due to missing field containers.');
-          return;
-        }
         var value = channelType.value;
         updateDynamicRequired(value);
-        connFields.style.display = value === 'NONE' ? 'none' : '';
+        if (connFields) {
+          connFields.style.display = value === 'NONE' ? 'none' : '';
+        }
         if (commonFields) {
           commonFields.style.display = value === 'NONE' ? 'none' : '';
         }
-        prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
-        mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
+        if (prestashopFields) {
+          prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
+        }
+        if (mercadolibreFields) {
+          mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
+        }
       }
 
       if (channelType) {
