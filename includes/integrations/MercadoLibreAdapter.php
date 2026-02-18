@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 class MercadoLibreAdapter {
   public static function updateStock(string $accessToken, string $itemId, ?string $variationId, int $qty): void {
+    $response = self::updateStockWithResponse($accessToken, $itemId, $variationId, $qty);
+    if ($response['code'] < 200 || $response['code'] >= 300) {
+      throw new RuntimeException('Error al actualizar stock en MercadoLibre (HTTP ' . $response['code'] . '). ' . mb_substr((string)$response['body'], 0, 500));
+    }
+  }
+
+  public static function updateStockWithResponse(string $accessToken, string $itemId, ?string $variationId, int $qty): array {
     $body = [];
     if ($variationId !== null && trim($variationId) !== '') {
       $body['variations'] = [[
@@ -15,9 +22,7 @@ class MercadoLibreAdapter {
     }
 
     $response = self::request('PUT', 'https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken, $body);
-    if ($response['code'] < 200 || $response['code'] >= 300) {
-      throw new RuntimeException('Error al actualizar stock en MercadoLibre (HTTP ' . $response['code'] . ').');
-    }
+    return $response;
   }
 
   public static function fetchRecentOrders(string $accessToken, ?string $sinceIso): array {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/stock.php';
+require_once __DIR__ . '/../includes/integrations/MercadoLibreAdapter.php';
 
 function ensure_stock_sync_schema(): void {
   static $ready = false;
@@ -54,6 +55,8 @@ function ensure_stock_sync_schema(): void {
     remote_id VARCHAR(120) NOT NULL,
     remote_variant_id VARCHAR(120) NULL,
     remote_sku VARCHAR(120) NULL,
+    ml_item_id VARCHAR(120) NULL,
+    ml_variation_id VARCHAR(120) NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_site_product_remote (site_id, remote_id, remote_variant_id),
@@ -61,6 +64,39 @@ function ensure_stock_sync_schema(): void {
     KEY idx_site_product_map_product (product_id),
     CONSTRAINT fk_site_product_map_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
     CONSTRAINT fk_site_product_map_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $mapColumns = [];
+  $st = $pdo->query('SHOW COLUMNS FROM site_product_map');
+  foreach ($st->fetchAll() as $row) {
+    $mapColumns[(string)$row['Field']] = true;
+  }
+  if (!isset($mapColumns['ml_item_id'])) {
+    $pdo->exec("ALTER TABLE site_product_map ADD COLUMN ml_item_id VARCHAR(120) NULL AFTER remote_sku");
+  }
+  if (!isset($mapColumns['ml_variation_id'])) {
+    $pdo->exec("ALTER TABLE site_product_map ADD COLUMN ml_variation_id VARCHAR(120) NULL AFTER ml_item_id");
+  }
+
+  $pdo->exec("UPDATE site_product_map spm
+    INNER JOIN sites s ON s.id = spm.site_id
+    SET
+      spm.ml_item_id = COALESCE(NULLIF(spm.ml_item_id, ''), spm.remote_id),
+      spm.ml_variation_id = COALESCE(NULLIF(spm.ml_variation_id, ''), spm.remote_variant_id)
+    WHERE LOWER(s.conn_type) = 'mercadolibre'");
+
+  $pdo->exec("CREATE TABLE IF NOT EXISTS stock_logs (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    product_id INT UNSIGNED NOT NULL,
+    site_id INT UNSIGNED NULL,
+    action VARCHAR(50) NOT NULL,
+    detail TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_stock_logs_product_created (product_id, created_at),
+    KEY idx_stock_logs_site_created (site_id, created_at),
+    CONSTRAINT fk_stock_logs_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_logs_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS ts_sync_jobs (
@@ -274,8 +310,42 @@ function stock_sync_request_prestashop(array $site, string $method, string $path
   ];
 }
 
-function sync_push_stock_to_sites(string $sku, int $newQty, ?int $excludeSiteId = null): array {
-  $sites = get_prestashop_sync_sites();
+function stock_sync_write_log(int $productId, ?int $siteId, string $action, array $detail = []): void {
+  $action = trim($action);
+  if ($action === '') {
+    $action = 'sync_push';
+  }
+
+  try {
+    $payload = count($detail) > 0 ? json_encode($detail, JSON_UNESCAPED_UNICODE) : null;
+    $st = db()->prepare('INSERT INTO stock_logs(product_id, site_id, action, detail, created_at) VALUES(?, ?, ?, ?, NOW())');
+    $st->execute([$productId, $siteId, mb_substr($action, 0, 50), $payload]);
+  } catch (Throwable $e) {
+    stock_sync_log('stock_logs insert error', ['product_id' => $productId, 'site_id' => $siteId, 'action' => $action, 'error' => $e->getMessage()]);
+  }
+}
+
+
+function sync_push_stock_to_sites(string $sku, int $newQty, ?int $excludeSiteId = null, ?int $productId = null): array {
+  if ($productId === null || $productId <= 0) {
+    $st = db()->prepare('SELECT id FROM products WHERE sku = ? LIMIT 1');
+    $st->execute([$sku]);
+    $row = $st->fetch();
+    $productId = (int)($row['id'] ?? 0);
+  }
+
+  if ($productId <= 0) {
+    return [];
+  }
+
+  return sync_push_stock_to_sites_by_product($productId, $sku, $newQty, $excludeSiteId);
+}
+
+function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $newQty, ?int $excludeSiteId = null): array {
+  ensure_stock_sync_schema();
+
+  $sites = stock_sync_active_sites();
+  $pdo = db();
   $pushStatus = [];
 
   foreach ($sites as $site) {
@@ -284,12 +354,102 @@ function sync_push_stock_to_sites(string $sku, int $newQty, ?int $excludeSiteId 
       continue;
     }
 
-    $pushResult = sync_stock_to_prestashop_with_result($site, $sku, $newQty);
-    $pushStatus[] = [
-      'site_id' => $siteId,
-      'ok' => (bool)($pushResult['ok'] ?? false),
-      'error' => (string)($pushResult['error'] ?? ''),
-    ];
+    $connEnabled = (int)($site['conn_enabled'] ?? 0) === 1 || (int)($site['connection_enabled'] ?? 0) === 1;
+    $syncEnabled = (int)($site['sync_stock_enabled'] ?? 0) === 1;
+    if (!$connEnabled || !$syncEnabled) {
+      continue;
+    }
+
+    $connType = stock_sync_conn_type($site);
+    if (!in_array($connType, ['prestashop', 'mercadolibre'], true)) {
+      continue;
+    }
+
+    if ($connType === 'prestashop') {
+      $pushResult = sync_stock_to_prestashop_with_result($site, $sku, $newQty);
+      $pushStatus[] = [
+        'site_id' => $siteId,
+        'ok' => (bool)($pushResult['ok'] ?? false),
+        'error' => (string)($pushResult['error'] ?? ''),
+      ];
+      continue;
+    }
+
+    if (!stock_sync_site_has_credentials($site)) {
+      $err = 'MercadoLibre sin credenciales válidas.';
+      stock_sync_write_log($productId, $siteId, 'sync_push', [
+        'connector' => 'mercadolibre',
+        'sku' => $sku,
+        'qty' => $newQty,
+        'ok' => false,
+        'error' => $err,
+      ]);
+      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+      continue;
+    }
+
+    $mapSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, remote_id, remote_variant_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
+    $mapSt->execute([$siteId, $productId]);
+    $map = $mapSt->fetch();
+
+    $mlItemId = trim((string)($map['ml_item_id'] ?? ''));
+    if ($mlItemId === '') {
+      $mlItemId = trim((string)($map['remote_id'] ?? ''));
+    }
+    $mlVariationId = trim((string)($map['ml_variation_id'] ?? ''));
+    if ($mlVariationId === '') {
+      $mlVariationId = trim((string)($map['remote_variant_id'] ?? ''));
+    }
+    if ($mlVariationId === '') {
+      $mlVariationId = null;
+    }
+
+    if ($mlItemId === '') {
+      $err = 'No se puede sincronizar a MercadoLibre: falta vincular Item ID/Variante para este producto.';
+      stock_sync_write_log($productId, $siteId, 'sync_push', [
+        'connector' => 'mercadolibre',
+        'sku' => $sku,
+        'qty' => $newQty,
+        'ok' => false,
+        'error' => $err,
+      ]);
+      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+      continue;
+    }
+
+    try {
+      $response = MercadoLibreAdapter::updateStockWithResponse((string)$site['ml_access_token'], $mlItemId, $mlVariationId, $newQty);
+      $ok = (int)($response['code'] ?? 0) >= 200 && (int)($response['code'] ?? 0) < 300;
+      $body = (string)($response['body'] ?? '');
+
+      stock_sync_write_log($productId, $siteId, 'sync_push', [
+        'connector' => 'mercadolibre',
+        'sku' => $sku,
+        'item_id' => $mlItemId,
+        'variation_id' => $mlVariationId,
+        'qty' => $newQty,
+        'ok' => $ok,
+        'http_status' => (int)($response['code'] ?? 0),
+        'http_body' => mb_substr($body, 0, 2000),
+      ]);
+
+      if ($ok) {
+        $pushStatus[] = ['site_id' => $siteId, 'ok' => true, 'error' => ''];
+      } else {
+        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => 'Error al actualizar stock en MercadoLibre (HTTP ' . (int)$response['code'] . ').'];
+      }
+    } catch (Throwable $e) {
+      stock_sync_write_log($productId, $siteId, 'sync_push', [
+        'connector' => 'mercadolibre',
+        'sku' => $sku,
+        'item_id' => $mlItemId,
+        'variation_id' => $mlVariationId,
+        'qty' => $newQty,
+        'ok' => false,
+        'error' => $e->getMessage(),
+      ]);
+      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $e->getMessage()];
+    }
   }
 
   return $pushStatus;
