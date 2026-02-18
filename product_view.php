@@ -914,7 +914,7 @@ if ($st) {
     <?php if ($ml_sites): ?>
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Vinculación MercadoLibre</h3>
+          <h3 class="card-title">Vincular MercadoLibre</h3>
           <span class="muted small">Item/variante para sincronización</span>
         </div>
         <div class="card-body stack">
@@ -946,7 +946,7 @@ if ($st) {
                 </div>
               </div>
               <div class="form-actions">
-                <button class="btn" type="submit">Guardar</button>
+                <button class="btn" type="submit">Guardar vínculo</button>
               </div>
             </form>
           <?php else: ?>

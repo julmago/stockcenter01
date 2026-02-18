@@ -388,9 +388,7 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
       continue;
     }
 
-    $mapSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, remote_id, remote_variant_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
-    $mapSt->execute([$siteId, $productId]);
-    $map = $mapSt->fetch();
+    $map = stock_sync_load_ml_mapping($pdo, $siteId, $productId, $sku);
 
     $mlItemId = trim((string)($map['ml_item_id'] ?? ''));
     if ($mlItemId === '') {
@@ -453,6 +451,30 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
   }
 
   return $pushStatus;
+}
+
+function stock_sync_load_ml_mapping(PDO $pdo, int $siteId, int $productId, string $sku): ?array {
+  $mapSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, remote_id, remote_variant_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
+  $mapSt->execute([$siteId, $productId]);
+  $map = $mapSt->fetch();
+  if ($map) {
+    return $map;
+  }
+
+  $sku = trim($sku);
+  if ($sku === '') {
+    return null;
+  }
+
+  $skuSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, remote_id, remote_variant_id
+    FROM site_product_map
+    WHERE site_id = ? AND remote_sku = ?
+    ORDER BY id DESC
+    LIMIT 1');
+  $skuSt->execute([$siteId, $sku]);
+
+  $skuMap = $skuSt->fetch();
+  return $skuMap ?: null;
 }
 
 function stock_sync_resolve_shop_id(array $site): int {
