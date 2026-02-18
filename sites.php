@@ -17,6 +17,9 @@ $message = '';
 
 function normalize_channel_type($value): string {
   $channel = strtoupper(trim((string)$value));
+  if ($channel === 'SIN_CONEXION') {
+    $channel = 'NONE';
+  }
   if (!in_array($channel, ['NONE', 'PRESTASHOP', 'MERCADOLIBRE'], true)) {
     return 'NONE';
   }
@@ -766,9 +769,8 @@ $nextPage = min($totalPages, $page + 1);
     </div>
   </div>
 </main>
-<?php if ($showNewForm): ?>
   <script>
-    (function () {
+    document.addEventListener('DOMContentLoaded', function () {
       var siteForm = document.getElementById('siteForm');
       var channelType = document.getElementById('channel_type');
       var connFields = document.getElementById('connFields');
@@ -957,8 +959,7 @@ $nextPage = min($totalPages, $page + 1);
         });
       }
 
-    })();
+    });
   </script>
-<?php endif; ?>
 </body>
 </html>
