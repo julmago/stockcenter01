@@ -990,7 +990,7 @@ if ($st) {
 
             <div class="table-wrapper" id="ml-search-results-wrap" style="display:none;">
               <table class="table">
-                <thead><tr><th>Seleccionar</th><th>Item ID</th><th>Título</th><th>Status</th><th>Tiene variantes</th><th>Stock</th><th>Variantes</th></tr></thead>
+                <thead><tr><th>Seleccionar</th><th>Item ID</th><th>Variation ID</th><th>Título</th><th>Status</th><th>Stock</th><th>Origen match</th></tr></thead>
                 <tbody id="ml-search-results-body"></tbody>
               </table>
             </div>
@@ -1362,15 +1362,11 @@ if ($st) {
   const mlSearchWrap = document.getElementById('ml-search-results-wrap');
   const mlSearchBody = document.getElementById('ml-search-results-body');
 
-  const renderVariationText = (variations) => {
-    if (!Array.isArray(variations) || variations.length === 0) {
-      return '—';
+  const renderLogs = (logs) => {
+    if (!Array.isArray(logs) || logs.length === 0) {
+      return '';
     }
-    return variations.map((variation) => {
-      const vid = variation && variation.variation_id ? variation.variation_id : '—';
-      const attrs = Array.isArray(variation.attributes) ? variation.attributes.join(', ') : '';
-      return attrs ? `${vid} (${attrs})` : String(vid);
-    }).join(' | ');
+    return logs.join(' | ');
   };
 
   if (mlSearchBtn) {
@@ -1399,35 +1395,41 @@ if ($st) {
 
         const rows = Array.isArray(data.rows) ? data.rows : [];
         if (rows.length === 0) {
-          mlBindStatus.textContent = 'No se encontraron publicaciones para este SKU.';
+          const logsText = renderLogs(data.logs);
+          mlBindStatus.textContent = logsText
+            ? `No se encontraron publicaciones para este SKU. ${logsText}`
+            : 'No se encontraron publicaciones para este SKU.';
           return;
         }
 
         rows.forEach((row, idx) => {
           const tr = document.createElement('tr');
           const checked = idx === 0 ? 'checked' : '';
+          const rowVariationId = row.variation_id || '';
           tr.innerHTML = `
             <td><input type="radio" name="ml-row" value="${idx}" ${checked}></td>
             <td>${row.item_id || ''}</td>
+            <td>${rowVariationId || '—'}</td>
             <td>${row.title || ''}</td>
             <td>${row.status || ''}</td>
-            <td>${row.has_variations ? 'Sí' : 'No'}</td>
             <td>${row.available_quantity ?? ''}</td>
-            <td>${renderVariationText(row.variations)}</td>
+            <td>${row.match_source || '—'}</td>
           `;
           tr.addEventListener('click', () => {
-            const selectedVariation = row.selected_variation_id || '';
             if (mlItemInput) mlItemInput.value = row.item_id || '';
-            if (mlVariationInput) mlVariationInput.value = selectedVariation;
-            mlBindStatus.textContent = selectedVariation
-              ? `Seleccionado ${row.item_id} / variante ${selectedVariation}. Guardá el vínculo para aplicar.`
+            if (mlVariationInput) mlVariationInput.value = rowVariationId;
+            mlBindStatus.textContent = rowVariationId
+              ? `Seleccionado ${row.item_id} / variante ${rowVariationId}. Guardá el vínculo para aplicar.`
               : `Seleccionado ${row.item_id}. Guardá el vínculo para aplicar.`;
           });
           mlSearchBody.appendChild(tr);
         });
 
         mlSearchWrap.style.display = '';
-        mlBindStatus.textContent = 'Seleccioná una fila para cargar Item/Variante y luego guardá el vínculo.';
+        const logsText = renderLogs(data.logs);
+        mlBindStatus.textContent = logsText
+          ? `Seleccioná una fila para cargar Item/Variante y luego guardá el vínculo. ${logsText}`
+          : 'Seleccioná una fila para cargar Item/Variante y luego guardá el vínculo.';
       } catch (err) {
         mlBindStatus.textContent = 'Error de red al buscar en MercadoLibre.';
       }
