@@ -78,7 +78,7 @@ if (is_post()) {
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
@@ -241,7 +241,7 @@ if (is_post()) {
 
           $effectiveMlRedirectUri = $mlRedirectUriToSave !== '' ? $mlRedirectUriToSave : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_app_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
@@ -575,8 +575,8 @@ $nextPage = min($totalPages, $page + 1);
             </select>
           </label>
 
-          <div id="connFields" class="stack" style="gap: var(--space-3);">
-            <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px;">
+          <div id="connFields" class="stack" style="gap: var(--space-3); display: <?= $channelTypeValue === 'NONE' ? 'none' : '' ?>;">
+            <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px; display: <?= $channelTypeValue === 'NONE' ? 'none' : '' ?>;">
               <label class="form-field">
                 <span class="form-label">Habilitado</span>
                 <select class="form-control" name="connection_enabled">
@@ -594,7 +594,7 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+            <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3); display: <?= $channelTypeValue === 'PRESTASHOP' ? '' : 'none' ?>;">
               <label class="form-field">
                 <span class="form-label">URL base</span>
                 <input class="form-control" type="text" name="ps_base_url" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_base_url']) ?>">
@@ -609,7 +609,7 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
 
-            <div id="mlFields" class="stack" data-connection-group="MERCADOLIBRE" style="gap: var(--space-3);">
+            <div id="mlFields" class="stack" data-connection-group="MERCADOLIBRE" style="gap: var(--space-3); display: <?= $channelTypeValue === 'MERCADOLIBRE' ? '' : 'none' ?>;">
               <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
