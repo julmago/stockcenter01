@@ -256,6 +256,54 @@ if (is_post() && post('action') === 'set_active_supplier') {
   }
 }
 
+if (is_post() && post('action') === 'save_ml_link') {
+  require_permission($can_edit);
+  $mlSiteId = (int)post('ml_site_id', '0');
+  $mlItemId = strtoupper(trim(post('ml_item_id')));
+  $mlVariationId = trim(post('ml_variation_id'));
+  if ($mlVariationId === '') {
+    $mlVariationId = null;
+  }
+
+  if ($mlSiteId <= 0) {
+    $error = 'Seleccioná un sitio de MercadoLibre.';
+  } elseif ($mlItemId === '') {
+    $error = 'El Item ID de MercadoLibre es obligatorio.';
+  } else {
+    $siteSt = db()->prepare("SELECT s.id
+      FROM sites s
+      LEFT JOIN site_connections sc ON sc.site_id = s.id
+      WHERE s.id = ?
+        AND (
+          LOWER(COALESCE(s.conn_type, '')) = 'mercadolibre'
+          OR UPPER(COALESCE(sc.channel_type, '')) = 'MERCADOLIBRE'
+        )
+      LIMIT 1");
+    $siteSt->execute([$mlSiteId]);
+    if (!$siteSt->fetch()) {
+      $error = 'Sitio de MercadoLibre inválido.';
+    }
+  }
+
+  if ($error === '') {
+    try {
+      $up = db()->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          remote_id = VALUES(remote_id),
+          remote_variant_id = VALUES(remote_variant_id),
+          remote_sku = VALUES(remote_sku),
+          ml_item_id = VALUES(ml_item_id),
+          ml_variation_id = VALUES(ml_variation_id),
+          updated_at = NOW()");
+      $up->execute([$mlSiteId, $id, $mlItemId, $mlVariationId, (string)$product['sku'], $mlItemId, $mlVariationId]);
+      $message = 'Vinculación de MercadoLibre guardada.';
+    } catch (Throwable $t) {
+      $error = 'No se pudo guardar la vinculación de MercadoLibre.';
+    }
+  }
+}
+
 if (is_post() && post('action') === 'create_supplier_inline') {
   require_permission($can_edit);
 
@@ -485,6 +533,45 @@ $st = db()->prepare("SELECT ps.id, ps.supplier_id, ps.supplier_sku, ps.cost_type
   ORDER BY ps.is_active DESC, ps.id DESC");
 $st->execute([$id]);
 $supplier_links = $st->fetchAll();
+
+$st = db()->prepare("SELECT s.id, s.name
+  FROM sites s
+  LEFT JOIN site_connections sc ON sc.site_id = s.id
+  WHERE s.is_active = 1
+    AND (
+      LOWER(COALESCE(s.conn_type, '')) = 'mercadolibre'
+      OR UPPER(COALESCE(sc.channel_type, '')) = 'MERCADOLIBRE'
+    )
+  ORDER BY s.name ASC, s.id ASC");
+$st->execute();
+$ml_sites = $st->fetchAll();
+
+$ml_links_by_site = [];
+if ($ml_sites) {
+  $st = db()->prepare("SELECT spm.site_id, spm.ml_item_id, spm.ml_variation_id, spm.remote_id, spm.remote_variant_id
+    FROM site_product_map spm
+    WHERE spm.product_id = ?
+    ORDER BY spm.site_id ASC");
+  $st->execute([$id]);
+  foreach ($st->fetchAll() as $mapRow) {
+    $siteId = (int)($mapRow['site_id'] ?? 0);
+    if ($siteId <= 0) {
+      continue;
+    }
+    $itemId = trim((string)($mapRow['ml_item_id'] ?? ''));
+    if ($itemId === '') {
+      $itemId = trim((string)($mapRow['remote_id'] ?? ''));
+    }
+    $variationId = trim((string)($mapRow['ml_variation_id'] ?? ''));
+    if ($variationId === '') {
+      $variationId = trim((string)($mapRow['remote_variant_id'] ?? ''));
+    }
+    $ml_links_by_site[$siteId] = [
+      'item_id' => $itemId,
+      'variation_id' => $variationId,
+    ];
+  }
+}
 
 $ts_stock = get_stock($id);
 $ts_stock_moves = get_stock_moves($id, 20);
@@ -823,6 +910,66 @@ if ($st) {
         </div>
       </div>
     </div>
+
+    <?php if ($ml_sites): ?>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Vinculación MercadoLibre</h3>
+          <span class="muted small">Item/variante para sincronización</span>
+        </div>
+        <div class="card-body stack">
+          <?php if ($can_edit): ?>
+            <form method="post" class="stack" id="ml-link-form">
+              <input type="hidden" name="action" value="save_ml_link">
+              <div class="form-row" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
+                <div class="form-group">
+                  <label class="form-label">Sitio MercadoLibre</label>
+                  <select class="form-control" name="ml_site_id" id="ml-site-select" required>
+                    <option value="">Seleccionar</option>
+                    <?php foreach ($ml_sites as $mlSite): ?>
+                      <?php $siteLink = $ml_links_by_site[(int)$mlSite['id']] ?? ['item_id' => '', 'variation_id' => '']; ?>
+                      <option
+                        value="<?= (int)$mlSite['id'] ?>"
+                        data-item-id="<?= e((string)$siteLink['item_id']) ?>"
+                        data-variation-id="<?= e((string)$siteLink['variation_id']) ?>"
+                      ><?= e($mlSite['name']) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Item ID</label>
+                  <input class="form-control" type="text" name="ml_item_id" id="ml-item-id-input" placeholder="MLA123..." required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Variation ID (opcional)</label>
+                  <input class="form-control" type="text" name="ml_variation_id" id="ml-variation-id-input" placeholder="123456789">
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn" type="submit">Guardar</button>
+              </div>
+            </form>
+          <?php else: ?>
+            <div class="table-wrapper">
+              <table class="table">
+                <thead><tr><th>Sitio</th><th>Item ID</th><th>Variation ID</th></tr></thead>
+                <tbody>
+                  <?php foreach ($ml_sites as $mlSite): ?>
+                    <?php $siteLink = $ml_links_by_site[(int)$mlSite['id']] ?? ['item_id' => '', 'variation_id' => '']; ?>
+                    <tr>
+                      <td><?= e($mlSite['name']) ?></td>
+                      <td><?= (string)$siteLink['item_id'] !== '' ? e((string)$siteLink['item_id']) : '—' ?></td>
+                      <td><?= (string)$siteLink['variation_id'] !== '' ? e((string)$siteLink['variation_id']) : '—' ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    <?php endif; ?>
+
 <div class="card">
       <div class="card-header">
         <h3 class="card-title">Códigos</h3>
@@ -1140,6 +1287,27 @@ if ($st) {
   if (costTypeSelect) {
     costTypeSelect.addEventListener('change', () => toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput));
     toggleByMode(costTypeSelect, costUnitsGroup, costUnitsInput);
+  }
+
+  const mlSiteSelect = document.getElementById('ml-site-select');
+  const mlItemInput = document.getElementById('ml-item-id-input');
+  const mlVariationInput = document.getElementById('ml-variation-id-input');
+
+  const fillMlLinkFromSite = () => {
+    if (!mlSiteSelect || !mlItemInput || !mlVariationInput) return;
+    const selectedOption = mlSiteSelect.options[mlSiteSelect.selectedIndex] || null;
+    if (!selectedOption) {
+      mlItemInput.value = '';
+      mlVariationInput.value = '';
+      return;
+    }
+    mlItemInput.value = selectedOption.dataset.itemId || '';
+    mlVariationInput.value = selectedOption.dataset.variationId || '';
+  };
+
+  if (mlSiteSelect) {
+    mlSiteSelect.addEventListener('change', fillMlLinkFromSite);
+    fillMlLinkFromSite();
   }
 
   const supplierSelect = document.getElementById('supplier-id-select');

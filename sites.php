@@ -606,6 +606,9 @@ $nextPage = min($totalPages, $page + 1);
                       <th>Titulo</th>
                       <th>Precio</th>
                       <th>Stock</th>
+                      <th>Item ID</th>
+                      <th>Variation ID</th>
+                      <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="siteSkuTestTbody"></tbody>
@@ -749,10 +752,62 @@ $nextPage = min($totalPages, $page + 1);
           tdPrice.textContent = Number.isFinite(Number(row.price)) ? String(parseInt(row.price, 10)) : '0';
           var tdStock = document.createElement('td');
           tdStock.textContent = Number.isFinite(Number(row.stock)) ? String(parseInt(row.stock, 10)) : '0';
+          var tdItemId = document.createElement('td');
+          tdItemId.textContent = row.item_id || '';
+          var tdVariationId = document.createElement('td');
+          tdVariationId.textContent = row.variation_id || '';
+          var tdActions = document.createElement('td');
+
+          if (row.item_id) {
+            var linkBtn = document.createElement('button');
+            linkBtn.type = 'button';
+            linkBtn.className = 'btn btn-ghost';
+            linkBtn.textContent = 'Vincular';
+            linkBtn.addEventListener('click', function () {
+              linkBtn.disabled = true;
+              var body = new URLSearchParams();
+              body.append('site_id', String(siteSkuTestSiteId.value || ''));
+              body.append('sku', String(siteSkuTestInput.value || '').trim());
+              body.append('item_id', String(row.item_id || ''));
+              body.append('variation_id', String(row.variation_id || ''));
+
+              fetch('api/site_link_product_ml.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                  'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: body.toString()
+              })
+                .then(function (response) { return response.json(); })
+                .then(function (payload) {
+                  if (!payload || payload.ok !== true) {
+                    var msg = payload && payload.error ? payload.error : 'No se pudo vincular.';
+                    siteSkuTestSetMessage(msg, 'error');
+                    return;
+                  }
+                  siteSkuTestSetMessage('Vinculación guardada para SKU ' + (payload.product_sku || '') + '.', '');
+                })
+                .catch(function () {
+                  siteSkuTestSetMessage('No se pudo vincular.', 'error');
+                })
+                .finally(function () {
+                  linkBtn.disabled = false;
+                });
+            });
+            tdActions.appendChild(linkBtn);
+          } else {
+            tdActions.textContent = '—';
+          }
+
           tr.appendChild(tdSku);
           tr.appendChild(tdTitle);
           tr.appendChild(tdPrice);
           tr.appendChild(tdStock);
+          tr.appendChild(tdItemId);
+          tr.appendChild(tdVariationId);
+          tr.appendChild(tdActions);
           siteSkuTestTbody.appendChild(tr);
         });
       }
