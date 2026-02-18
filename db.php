@@ -410,6 +410,7 @@ function ensure_sites_schema(): void {
     webhook_secret VARCHAR(255) NULL,
     ps_shop_id INT NULL,
     ml_client_id VARCHAR(100) NULL,
+    ml_app_id VARCHAR(100) NULL,
     ml_client_secret VARCHAR(255) NULL,
     ml_redirect_uri VARCHAR(255) NULL,
     ml_access_token TEXT NULL,
@@ -417,6 +418,9 @@ function ensure_sites_schema(): void {
     ml_token_expires_at DATETIME NULL,
     ml_connected_at DATETIME NULL,
     ml_user_id VARCHAR(40) NULL,
+    ml_subscription_id VARCHAR(120) NULL,
+    ml_subscription_topic VARCHAR(50) NULL,
+    ml_subscription_updated_at DATETIME NULL,
     ml_status VARCHAR(20) NOT NULL DEFAULT 'DISCONNECTED',
     updated_at DATETIME NULL,
     PRIMARY KEY (site_id),
@@ -431,6 +435,10 @@ function ensure_sites_schema(): void {
 
   if (!isset($connColumns['ml_redirect_uri'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_redirect_uri VARCHAR(255) NULL AFTER ml_client_secret");
+  }
+  if (!isset($connColumns['ml_app_id'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_app_id VARCHAR(100) NULL AFTER ml_client_id");
+    $pdo->exec("UPDATE site_connections SET ml_app_id = ml_client_id WHERE COALESCE(ml_app_id, '') = ''");
   }
   if (!isset($connColumns['webhook_secret'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN webhook_secret VARCHAR(255) NULL AFTER ps_api_key");
@@ -449,6 +457,15 @@ function ensure_sites_schema(): void {
   }
   if (!isset($connColumns['ml_status'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_status VARCHAR(20) NOT NULL DEFAULT 'DISCONNECTED' AFTER ml_user_id");
+  }
+  if (!isset($connColumns['ml_subscription_id'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_subscription_id VARCHAR(120) NULL AFTER ml_user_id");
+  }
+  if (!isset($connColumns['ml_subscription_topic'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_subscription_topic VARCHAR(50) NULL AFTER ml_subscription_id");
+  }
+  if (!isset($connColumns['ml_subscription_updated_at'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_subscription_updated_at DATETIME NULL AFTER ml_subscription_topic");
   }
   if (!isset($connColumns['updated_at'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN updated_at DATETIME NULL AFTER ml_status");

@@ -181,7 +181,7 @@ function stock_sync_active_sites(): array {
 
   $sql = "SELECT s.id, s.name, s.is_active, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.last_sync_at,
       sc.channel_type, sc.enabled AS connection_enabled, sc.ps_base_url, sc.ps_api_key, sc.ps_shop_id,
-      sc.ml_client_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token, sc.ml_user_id, sc.ml_status
+      sc.ml_client_id, sc.ml_app_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token, sc.ml_user_id, sc.ml_subscription_id, sc.ml_subscription_topic, sc.ml_subscription_updated_at, sc.ml_status
     FROM sites s
     LEFT JOIN site_connections sc ON sc.site_id = s.id
     WHERE s.is_active = 1";
@@ -219,6 +219,45 @@ function stock_sync_ml_http_get(string $url, string $accessToken): array {
   }
 
   return ['code' => $code, 'json' => $json];
+}
+
+function stock_sync_ml_http_post(string $url, string $accessToken, array $payload): array {
+  $ch = curl_init($url);
+  if ($ch === false) {
+    throw new RuntimeException('No se pudo inicializar cURL para MercadoLibre.');
+  }
+
+  $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE);
+  if ($jsonPayload === false) {
+    throw new RuntimeException('No se pudo serializar payload de MercadoLibre.');
+  }
+
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_POST, true);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
+  curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+  curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    'Accept: application/json',
+    'Authorization: Bearer ' . $accessToken,
+    'Content-Type: application/json',
+  ]);
+
+  $resp = curl_exec($ch);
+  $err = curl_error($ch);
+  $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+
+  if ($resp === false) {
+    throw new RuntimeException('Error cURL en MercadoLibre: ' . $err);
+  }
+
+  $json = json_decode((string)$resp, true);
+  if (!is_array($json)) {
+    $json = [];
+  }
+
+  return ['code' => $code, 'json' => $json, 'raw' => (string)$resp];
 }
 
 function stock_sync_ml_extract_sku(array $item, string $defaultSku): string {
@@ -586,6 +625,112 @@ function stock_sync_request_prestashop(array $site, string $method, string $path
     'body' => (string)$response,
     'url' => $effectiveUrl !== '' ? $effectiveUrl : $url,
   ];
+}
+
+function stock_sync_ml_extract_item_id_from_resource(string $resource): ?string {
+  $resource = trim($resource);
+  if ($resource === '') {
+    return null;
+  }
+
+  if (preg_match('~/(?:items|products)/([A-Z]{3,4}\d+)~i', $resource, $m)) {
+    return strtoupper(trim((string)$m[1]));
+  }
+
+  return null;
+}
+
+function stock_sync_ml_recent_push_matches_qty(int $productId, int $siteId, int $qty, int $windowSeconds = 20): bool {
+  $windowSeconds = max(1, min(300, $windowSeconds));
+  $st = db()->prepare("SELECT detail FROM stock_logs WHERE product_id = ? AND site_id = ? AND action = 'sync_push' AND created_at >= (NOW() - INTERVAL ? SECOND) ORDER BY id DESC LIMIT 20");
+  $st->execute([$productId, $siteId, $windowSeconds]);
+
+  foreach ($st->fetchAll() as $row) {
+    $detail = json_decode((string)($row['detail'] ?? ''), true);
+    if (!is_array($detail)) {
+      continue;
+    }
+    if (strtolower((string)($detail['connector'] ?? '')) !== 'mercadolibre') {
+      continue;
+    }
+    if ((bool)($detail['ok'] ?? false) !== true) {
+      continue;
+    }
+    if ((int)($detail['qty'] ?? PHP_INT_MIN) !== $qty) {
+      continue;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function stock_sync_ml_register_subscription(int $siteId, string $callbackUrl, string $topic = 'items'): array {
+  ensure_stock_sync_schema();
+
+  $topic = trim(strtolower($topic));
+  if (!in_array($topic, ['items', 'orders'], true)) {
+    $topic = 'items';
+  }
+
+  $st = db()->prepare('SELECT s.id, s.conn_type, sc.ml_client_id, sc.ml_app_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_user_id FROM sites s INNER JOIN site_connections sc ON sc.site_id = s.id WHERE s.id = ? LIMIT 1');
+  $st->execute([$siteId]);
+  $site = $st->fetch();
+  if (!$site) {
+    return ['ok' => false, 'error' => 'Sitio inexistente'];
+  }
+  if (stock_sync_conn_type($site) !== 'mercadolibre') {
+    return ['ok' => false, 'error' => 'El sitio no es MercadoLibre'];
+  }
+
+  $accessToken = trim((string)($site['ml_access_token'] ?? ''));
+  $appId = trim((string)($site['ml_app_id'] ?? $site['ml_client_id'] ?? ''));
+  $clientSecret = trim((string)($site['ml_client_secret'] ?? ''));
+  if ($accessToken === '' || $appId === '' || $clientSecret === '') {
+    return ['ok' => false, 'error' => 'Credenciales ML incompletas'];
+  }
+
+  $callbackUrl = trim($callbackUrl);
+  if ($callbackUrl === '') {
+    return ['ok' => false, 'error' => 'Callback URL vacía'];
+  }
+
+  $resp = stock_sync_ml_http_post('https://api.mercadolibre.com/myfeeds?app_id=' . rawurlencode($appId), $accessToken, [
+    'topic' => $topic,
+    'callback_url' => $callbackUrl,
+  ]);
+
+  $ok = ((int)$resp['code'] >= 200 && (int)$resp['code'] < 300);
+  if (!$ok) {
+    return ['ok' => false, 'error' => 'HTTP ' . (int)$resp['code'] . ': ' . mb_substr((string)($resp['raw'] ?? ''), 0, 500)];
+  }
+
+  $subscriptionId = trim((string)($resp['json']['id'] ?? $resp['json']['subscription_id'] ?? $resp['json']['myfeed_id'] ?? ''));
+  $up = db()->prepare('UPDATE site_connections SET ml_app_id = ?, ml_subscription_id = ?, ml_subscription_topic = ?, ml_subscription_updated_at = NOW(), updated_at = NOW() WHERE site_id = ?');
+  $up->execute([$appId, $subscriptionId !== '' ? $subscriptionId : null, $topic, $siteId]);
+
+  return ['ok' => true, 'subscription_id' => $subscriptionId, 'topic' => $topic];
+}
+
+function stock_sync_ml_find_site_by_user_id(string $mlUserId): ?array {
+  $mlUserId = trim($mlUserId);
+  if ($mlUserId === '') {
+    return null;
+  }
+
+  $st = db()->prepare("SELECT s.id, s.name, s.conn_type, s.conn_enabled, s.sync_stock_enabled,
+      sc.ml_access_token, sc.ml_user_id
+    FROM sites s
+    INNER JOIN site_connections sc ON sc.site_id = s.id
+    WHERE s.is_active = 1
+      AND LOWER(COALESCE(s.conn_type, '')) = 'mercadolibre'
+      AND TRIM(COALESCE(sc.ml_user_id, '')) = ?
+    ORDER BY s.id ASC
+    LIMIT 1");
+  $st->execute([$mlUserId]);
+  $row = $st->fetch();
+
+  return $row ?: null;
 }
 
 function stock_sync_write_log(int $productId, ?int $siteId, string $action, array $detail = []): void {
