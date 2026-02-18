@@ -37,6 +37,15 @@ $parse_supplier_cost_decimal = static function (string $supplier_cost_raw): ?int
   return max(0, (int)round((float)$supplier_cost_raw));
 };
 
+
+$is_non_blocking_stock_push_error = static function (string $error): bool {
+  $normalized = mb_strtolower(trim($error));
+  if ($normalized === '') {
+    return false;
+  }
+
+  return str_contains($normalized, 'falta vincular item id/variante');
+};
 if (is_post() && post('action') === 'update') {
   require_permission($can_edit);
   $sku = post('sku');
@@ -390,7 +399,19 @@ if (is_post() && post('action') === 'stock_set') {
       if ($errorPushes) {
         $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $id]);
-        $error = 'Error enviando stock a sitios: ' . implode(' ; ', $errorPushes);
+        $hasBlockingErrors = false;
+        foreach ($errorPushes as $errorPush) {
+          if (!$is_non_blocking_stock_push_error($errorPush)) {
+            $hasBlockingErrors = true;
+            break;
+          }
+        }
+
+        if ($hasBlockingErrors) {
+          $error = 'Error enviando stock a sitios: ' . implode(' ; ', $errorPushes);
+        } else {
+          $message = 'Stock actualizado. Se omitió la sincronización en MercadoLibre para publicaciones sin Item ID/Variante vinculados.';
+        }
       } elseif ($okPushCount > 0) {
         $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . (string)$product['sku'], $id]);
@@ -431,7 +452,19 @@ if (is_post() && post('action') === 'stock_add') {
       if ($errorPushes) {
         $st = db()->prepare("UPDATE ts_stock_moves SET note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push ERROR: ' . implode(' ; ', $errorPushes), $id]);
-        $error = 'Error enviando stock a sitios: ' . implode(' ; ', $errorPushes);
+        $hasBlockingErrors = false;
+        foreach ($errorPushes as $errorPush) {
+          if (!$is_non_blocking_stock_push_error($errorPush)) {
+            $hasBlockingErrors = true;
+            break;
+          }
+        }
+
+        if ($hasBlockingErrors) {
+          $error = 'Error enviando stock a sitios: ' . implode(' ; ', $errorPushes);
+        } else {
+          $message = 'Stock ajustado. Se omitió la sincronización en MercadoLibre para publicaciones sin Item ID/Variante vinculados.';
+        }
       } elseif ($okPushCount > 0) {
         $st = db()->prepare("UPDATE ts_stock_moves SET reason = 'sync_push', note = CONCAT(COALESCE(note, ''), CASE WHEN COALESCE(note, '') = '' THEN '' ELSE ' | ' END, ?) WHERE product_id = ? ORDER BY id DESC LIMIT 1");
         $st->execute(['sync_push OK: ' . $okPushCount . ' sitio(s) / sku ' . (string)$product['sku'], $id]);
