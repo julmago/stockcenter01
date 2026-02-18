@@ -57,6 +57,8 @@ function ensure_stock_sync_schema(): void {
     remote_sku VARCHAR(120) NULL,
     ml_item_id VARCHAR(120) NULL,
     ml_variation_id VARCHAR(120) NULL,
+    ml_seller_id VARCHAR(120) NULL,
+    ml_last_bind_at DATETIME NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_site_product_remote (site_id, remote_id, remote_variant_id),
@@ -76,6 +78,12 @@ function ensure_stock_sync_schema(): void {
   }
   if (!isset($mapColumns['ml_variation_id'])) {
     $pdo->exec("ALTER TABLE site_product_map ADD COLUMN ml_variation_id VARCHAR(120) NULL AFTER ml_item_id");
+  }
+  if (!isset($mapColumns['ml_seller_id'])) {
+    $pdo->exec("ALTER TABLE site_product_map ADD COLUMN ml_seller_id VARCHAR(120) NULL AFTER ml_variation_id");
+  }
+  if (!isset($mapColumns['ml_last_bind_at'])) {
+    $pdo->exec("ALTER TABLE site_product_map ADD COLUMN ml_last_bind_at DATETIME NULL AFTER ml_seller_id");
   }
 
   $pdo->exec("UPDATE site_product_map spm
@@ -382,18 +390,21 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
   return $rows;
 }
 
-function stock_sync_ml_save_mapping(PDO $pdo, int $siteId, int $productId, string $sku, string $itemId, ?string $variationId): void {
+function stock_sync_ml_save_mapping(PDO $pdo, int $siteId, int $productId, string $sku, string $itemId, ?string $variationId, ?string $sellerId = null): void {
   $variationValue = $variationId !== null && trim($variationId) !== '' ? trim($variationId) : null;
-  $up = $pdo->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, updated_at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, NOW())
+  $sellerValue = $sellerId !== null && trim($sellerId) !== '' ? trim($sellerId) : null;
+  $up = $pdo->prepare("INSERT INTO site_product_map(site_id, product_id, remote_id, remote_variant_id, remote_sku, ml_item_id, ml_variation_id, ml_seller_id, ml_last_bind_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     ON DUPLICATE KEY UPDATE
       remote_id = VALUES(remote_id),
       remote_variant_id = VALUES(remote_variant_id),
       remote_sku = VALUES(remote_sku),
       ml_item_id = VALUES(ml_item_id),
       ml_variation_id = VALUES(ml_variation_id),
+      ml_seller_id = VALUES(ml_seller_id),
+      ml_last_bind_at = NOW(),
       updated_at = NOW()");
-  $up->execute([$siteId, $productId, $itemId, $variationValue, $sku, $itemId, $variationValue]);
+  $up->execute([$siteId, $productId, $itemId, $variationValue, $sku, $itemId, $variationValue, $sellerValue]);
 }
 
 function stock_sync_ml_resolve_mapping(PDO $pdo, array $site, int $siteId, int $productId, string $sku): array {
@@ -658,28 +669,58 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
     $map = stock_sync_load_ml_mapping($pdo, $siteId, $productId, $sku);
 
     $mlItemId = trim((string)($map['ml_item_id'] ?? ''));
-    if ($mlItemId === '') {
-      $mlItemId = trim((string)($map['remote_id'] ?? ''));
-    }
     $mlVariationId = trim((string)($map['ml_variation_id'] ?? ''));
-    if ($mlVariationId === '') {
-      $mlVariationId = trim((string)($map['remote_variant_id'] ?? ''));
-    }
     if ($mlVariationId === '') {
       $mlVariationId = null;
     }
 
     if ($mlItemId === '') {
-      try {
-        $resolvedMap = stock_sync_ml_resolve_mapping($pdo, $site, $siteId, $productId, $sku);
-        $mlItemId = trim((string)($resolvedMap['ml_item_id'] ?? ''));
-        $resolvedVariation = $resolvedMap['ml_variation_id'] ?? null;
-        $mlVariationId = $resolvedVariation !== null && trim((string)$resolvedVariation) !== '' ? trim((string)$resolvedVariation) : null;
-      } catch (Throwable $e) {
-        $err = $e->getMessage();
+      $err = 'No se puede sincronizar a MercadoLibre: falta vínculo guardado (Item ID) para este producto/sitio.';
+      stock_sync_write_log($productId, $siteId, 'sync_push', [
+        'connector' => 'mercadolibre',
+        'sku' => $sku,
+        'qty' => $newQty,
+        'ok' => false,
+        'error' => $err,
+      ]);
+      $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+      continue;
+    }
+
+    try {
+      $accessToken = (string)$site['ml_access_token'];
+      $itemResponse = MercadoLibreAdapter::getItem($accessToken, $mlItemId);
+      $itemStatus = (int)($itemResponse['code'] ?? 0);
+      $itemBody = (string)($itemResponse['body'] ?? '');
+      if ($itemStatus < 200 || $itemStatus >= 300) {
+        $err = 'No se pudo consultar item de MercadoLibre (HTTP ' . $itemStatus . '): ' . mb_substr($itemBody, 0, 500);
         stock_sync_write_log($productId, $siteId, 'sync_push', [
           'connector' => 'mercadolibre',
           'sku' => $sku,
+          'item_id' => $mlItemId,
+          'variation_id' => $mlVariationId,
+          'qty' => $newQty,
+          'ok' => false,
+          'http_status' => $itemStatus,
+          'http_body' => mb_substr($itemBody, 0, 2000),
+          'error' => $err,
+        ]);
+        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
+        continue;
+      }
+
+      $itemJson = json_decode($itemBody, true);
+      if (!is_array($itemJson)) {
+        $itemJson = [];
+      }
+      $itemVariations = $itemJson['variations'] ?? [];
+      $itemHasVariations = is_array($itemVariations) && count($itemVariations) > 0;
+      if ($itemHasVariations && $mlVariationId === null) {
+        $err = 'No se puede sincronizar a MercadoLibre: el item tiene variantes y falta Variation ID vinculada.';
+        stock_sync_write_log($productId, $siteId, 'sync_push', [
+          'connector' => 'mercadolibre',
+          'sku' => $sku,
+          'item_id' => $mlItemId,
           'qty' => $newQty,
           'ok' => false,
           'error' => $err,
@@ -687,28 +728,47 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
         $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $err];
         continue;
       }
-    }
 
-    try {
-      $response = MercadoLibreAdapter::updateStockWithResponse((string)$site['ml_access_token'], $mlItemId, $mlVariationId, $newQty);
-      $ok = (int)($response['code'] ?? 0) >= 200 && (int)($response['code'] ?? 0) < 300;
+      $variationToUse = $itemHasVariations ? $mlVariationId : null;
+      $response = MercadoLibreAdapter::updateStockWithResponse($accessToken, $mlItemId, $variationToUse, $newQty);
+      $httpStatus = (int)($response['code'] ?? 0);
       $body = (string)($response['body'] ?? '');
+      $ok = $httpStatus >= 200 && $httpStatus < 300;
+      $errorMessage = '';
+
+      if (!$ok) {
+        $errorMessage = 'Error al actualizar stock en MercadoLibre (HTTP ' . $httpStatus . '): ' . mb_substr($body, 0, 500);
+
+        if ($httpStatus === 403) {
+          $meResponse = MercadoLibreAdapter::getUserMe($accessToken);
+          $meJson = json_decode((string)($meResponse['body'] ?? ''), true);
+          if (!is_array($meJson)) {
+            $meJson = [];
+          }
+          $tokenSellerId = trim((string)($meJson['id'] ?? ''));
+          $itemSellerId = trim((string)($itemJson['seller_id'] ?? ''));
+          if ($tokenSellerId !== '' && $itemSellerId !== '' && $tokenSellerId !== $itemSellerId) {
+            $errorMessage .= ' Token pertenece a otra cuenta, reconectar MercadoLibre.';
+          }
+        }
+      }
 
       stock_sync_write_log($productId, $siteId, 'sync_push', [
         'connector' => 'mercadolibre',
         'sku' => $sku,
         'item_id' => $mlItemId,
-        'variation_id' => $mlVariationId,
+        'variation_id' => $variationToUse,
         'qty' => $newQty,
         'ok' => $ok,
-        'http_status' => (int)($response['code'] ?? 0),
+        'http_status' => $httpStatus,
         'http_body' => mb_substr($body, 0, 2000),
+        'item_has_variations' => $itemHasVariations,
       ]);
 
       if ($ok) {
         $pushStatus[] = ['site_id' => $siteId, 'ok' => true, 'error' => ''];
       } else {
-        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => 'Error al actualizar stock en MercadoLibre (HTTP ' . (int)$response['code'] . ').'];
+        $pushStatus[] = ['site_id' => $siteId, 'ok' => false, 'error' => $errorMessage];
       }
     } catch (Throwable $e) {
       stock_sync_write_log($productId, $siteId, 'sync_push', [
@@ -728,7 +788,7 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
 }
 
 function stock_sync_load_ml_mapping(PDO $pdo, int $siteId, int $productId, string $sku): ?array {
-  $mapSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, remote_id, remote_variant_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
+  $mapSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, ml_seller_id, ml_last_bind_at, remote_id, remote_variant_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
   $mapSt->execute([$siteId, $productId]);
   $map = $mapSt->fetch();
   if ($map) {
@@ -740,7 +800,7 @@ function stock_sync_load_ml_mapping(PDO $pdo, int $siteId, int $productId, strin
     return null;
   }
 
-  $skuSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, remote_id, remote_variant_id
+  $skuSt = $pdo->prepare('SELECT ml_item_id, ml_variation_id, ml_seller_id, ml_last_bind_at, remote_id, remote_variant_id
     FROM site_product_map
     WHERE site_id = ? AND remote_sku = ?
     ORDER BY id DESC
