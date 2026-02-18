@@ -150,30 +150,6 @@ function ml_http_get(string $url, string $accessToken): array {
   return ['code' => $code, 'json' => $json];
 }
 
-function ml_extract_sku(array $item, string $defaultSku): string {
-  $candidate = trim((string)($item['seller_custom_field'] ?? ''));
-  if ($candidate !== '') {
-    return $candidate;
-  }
-  $attributes = $item['attributes'] ?? [];
-  if (is_array($attributes)) {
-    foreach ($attributes as $attribute) {
-      if (!is_array($attribute)) {
-        continue;
-      }
-      $id = strtoupper(trim((string)($attribute['id'] ?? '')));
-      if ($id !== 'SELLER_SKU') {
-        continue;
-      }
-      $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? ''));
-      if ($value !== '') {
-        return $value;
-      }
-    }
-  }
-  return $defaultSku;
-}
-
 $siteId = (int)get('site_id', '0');
 $sku = trim((string)get('sku', ''));
 if ($siteId <= 0) {
@@ -264,7 +240,7 @@ try {
     $hasExactMatch = false;
     foreach ($rows as $rowItem) {
       $rowSku = trim((string)($rowItem['sku'] ?? ''));
-      $isExactMatch = $rowSku !== '' && $rowSku === $sku;
+      $isExactMatch = stock_sync_ml_sku_matches($rowSku, $sku);
       if ($isExactMatch) {
         $hasExactMatch = true;
       }
