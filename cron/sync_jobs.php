@@ -38,11 +38,14 @@ foreach ($jobs as $job) {
       throw new RuntimeException('Sitio inexistente.');
     }
 
-    $mapSt = $pdo->prepare('SELECT remote_id, remote_variant_id, ml_item_id, ml_variation_id FROM site_product_map WHERE site_id = ? AND product_id = ? LIMIT 1');
-    $mapSt->execute([$siteId, $productId]);
-    $map = $mapSt->fetch();
+    $productSt = $pdo->prepare('SELECT sku FROM products WHERE id = ? LIMIT 1');
+    $productSt->execute([$productId]);
+    $product = $productSt->fetch();
+    $sku = trim((string)($product['sku'] ?? ''));
+
+    $map = stock_sync_load_ml_mapping($pdo, $siteId, $productId, $sku);
     if (!$map) {
-      throw new RuntimeException('Falta mapping en site_product_map para site_id=' . $siteId . ' product_id=' . $productId);
+      throw new RuntimeException('Falta mapping en site_product_map para site_id=' . $siteId . ' product_id=' . $productId . ' sku=' . $sku);
     }
 
     $qty = (int)$payload['qty'];
