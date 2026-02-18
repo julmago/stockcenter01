@@ -301,16 +301,7 @@ function stock_sync_ml_extract_sku(array $item, string $defaultSku): string {
   return $defaultSku;
 }
 
-function stock_sync_ml_variation_sku(array $variation): string {
-  $candidate = trim((string)($variation['seller_custom_field'] ?? ''));
-  if ($candidate !== '') {
-    return $candidate;
-  }
-  $sellerSku = trim((string)($variation['seller_sku'] ?? ''));
-  if ($sellerSku !== '') {
-    return $sellerSku;
-  }
-
+function stock_sync_ml_variation_sku(array $variation, string $fallbackSku = ''): string {
   foreach ([$variation['attributes'] ?? null, $variation['attribute_combinations'] ?? null] as $attributes) {
     if (!is_array($attributes)) {
       continue;
@@ -330,7 +321,17 @@ function stock_sync_ml_variation_sku(array $variation): string {
     }
   }
 
-  return '';
+  $candidate = trim((string)($variation['seller_custom_field'] ?? ''));
+  if ($candidate !== '') {
+    return $candidate;
+  }
+
+  $sellerSku = trim((string)($variation['seller_sku'] ?? ''));
+  if ($sellerSku !== '') {
+    return $sellerSku;
+  }
+
+  return trim($fallbackSku);
 }
 
 function stock_sync_ml_ensure_user_id(PDO $pdo, int $siteId, array $site): string {
@@ -422,31 +423,52 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
     }
 
     $itemJson = $item['json'];
-    $rows[] = [
-      'item_id' => $itemId,
-      'variation_id' => '',
-      'sku' => stock_sync_ml_extract_sku($itemJson, $sku),
-      'title' => trim((string)($itemJson['title'] ?? '')),
-      'has_variations' => !empty($itemJson['variations']) && is_array($itemJson['variations']),
-    ];
-
+    $title = trim((string)($itemJson['title'] ?? ''));
+    $itemSku = stock_sync_ml_extract_sku($itemJson, '');
     $variations = $itemJson['variations'] ?? [];
-    if (!is_array($variations)) {
+    $hasVariations = is_array($variations) && count($variations) > 0;
+
+    if (!$hasVariations) {
+      $finalItemSku = $itemSku !== '' ? $itemSku : $sku;
+      $rows[] = [
+        'item_id' => $itemId,
+        'variation_id' => '',
+        'sku' => $finalItemSku,
+        'title' => $title,
+        'has_variations' => false,
+        'is_exact_match' => $finalItemSku === $sku,
+      ];
       continue;
     }
 
+    $variationRows = [];
+    $exactMatches = [];
     foreach ($variations as $variation) {
       if (!is_array($variation)) {
         continue;
       }
-      $rows[] = [
+
+      $variationSku = stock_sync_ml_variation_sku($variation, $itemSku !== '' ? $itemSku : $sku);
+      $variationRow = [
         'item_id' => $itemId,
         'variation_id' => trim((string)($variation['id'] ?? '')),
-        'sku' => stock_sync_ml_variation_sku($variation),
-        'title' => trim((string)($itemJson['title'] ?? '')),
+        'sku' => $variationSku,
+        'title' => $title,
         'has_variations' => true,
+        'is_exact_match' => $variationSku === $sku,
       ];
+      $variationRows[] = $variationRow;
+      if ($variationRow['is_exact_match']) {
+        $exactMatches[] = $variationRow;
+      }
     }
+
+    if (count($exactMatches) > 0) {
+      $rows = array_merge($rows, $exactMatches);
+      continue;
+    }
+
+    $rows = array_merge($rows, $variationRows);
   }
 
   return $rows;

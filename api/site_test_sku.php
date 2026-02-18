@@ -174,20 +174,6 @@ function ml_extract_sku(array $item, string $defaultSku): string {
   return $defaultSku;
 }
 
-function ml_format_variation_sku(array $row, string $searchedSku): string {
-  $sku = trim((string)($row['sku'] ?? ''));
-  if ($sku !== '') {
-    return $sku;
-  }
-
-  $variationId = trim((string)($row['variation_id'] ?? ''));
-  if ($variationId !== '') {
-    return $searchedSku . ' (var ' . $variationId . ')';
-  }
-
-  return $searchedSku;
-}
-
 $siteId = (int)get('site_id', '0');
 $sku = trim((string)get('sku', ''));
 if ($siteId <= 0) {
@@ -275,18 +261,31 @@ try {
 
     $rows = stock_sync_ml_search_by_sku($pdo, $row, $siteId, $sku);
     $formatted = [];
+    $hasExactMatch = false;
     foreach ($rows as $rowItem) {
+      $rowSku = trim((string)($rowItem['sku'] ?? ''));
+      $isExactMatch = $rowSku !== '' && $rowSku === $sku;
+      if ($isExactMatch) {
+        $hasExactMatch = true;
+      }
+
       $formatted[] = [
-        'sku' => ml_format_variation_sku($rowItem, $sku),
+        'sku' => $rowSku,
         'title' => trim((string)($rowItem['title'] ?? '')),
         'price' => 0,
         'stock' => 0,
         'item_id' => trim((string)($rowItem['item_id'] ?? '')),
         'variation_id' => trim((string)($rowItem['variation_id'] ?? '')),
+        'is_exact_match' => $isExactMatch,
       ];
     }
 
-    respond(['ok' => true, 'rows' => $formatted]);
+    respond([
+      'ok' => true,
+      'rows' => $formatted,
+      'has_exact_match' => $hasExactMatch,
+      'searched_sku' => $sku,
+    ]);
   }
 
   respond(['ok' => false, 'rows' => [], 'error' => 'Tipo de conexión no soportado.'], 400);

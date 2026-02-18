@@ -1333,8 +1333,13 @@ if ($st) {
           const tr = document.createElement('tr');
           const rowVariationId = String(row.variation_id || '');
           const rowItemId = String(row.item_id || '');
+          const rowSku = String(row.sku || '');
+          const isExactMatch = row.is_exact_match === true;
+          if (isExactMatch) {
+            tr.style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
+          }
           tr.innerHTML = `
-            <td>${row.sku || ''}</td>
+            <td>${rowSku || '—'}${isExactMatch ? ' <strong>(coincide)</strong>' : ''}</td>
             <td>${row.title || ''}</td>
             <td>${toIntDisplay(row.price)}</td>
             <td>${toIntDisplay(row.stock)}</td>
@@ -1356,7 +1361,7 @@ if ($st) {
               body.append('site_id', String(siteId || ''));
               body.append('ml_item_id', rowItemId);
               body.append('ml_variation_id', rowVariationId);
-              body.append('ml_sku', String(row.sku || ''));
+              body.append('ml_sku', rowSku);
               body.append('title', String(row.title || ''));
 
               try {
@@ -1388,7 +1393,7 @@ if ($st) {
                   trLink.dataset.linkId = String(savePayload.link_id || '');
                   trLink.innerHTML = `
                     <td>${(mlSiteSelect.options[mlSiteSelect.selectedIndex] || {}).text || ''}</td>
-                    <td>${row.sku || '—'}</td>
+                    <td>${rowSku || '—'}</td>
                     <td>${row.title || '—'}</td>
                     <td>${rowItemId}</td>
                     <td>${rowVariationId || '—'}</td>
@@ -1415,7 +1420,11 @@ if ($st) {
         });
 
         mlSearchWrap.style.display = '';
-        mlBindStatus.textContent = `Resultados encontrados: ${rows.length}.`;
+        if (payload.has_exact_match === false) {
+          mlBindStatus.textContent = `No hay coincidencia exacta para SKU ${productSku}. Mostrando ${rows.length} resultado(s).`;
+        } else {
+          mlBindStatus.textContent = `Resultados encontrados: ${rows.length}.`;
+        }
       } catch (err) {
         mlBindStatus.textContent = 'Error de red al buscar en MercadoLibre.';
       }
