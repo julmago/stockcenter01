@@ -569,38 +569,41 @@ $nextPage = min($totalPages, $page + 1);
               </label>
             </div>
           </div>
+          <?php
+            $channelTypeValue = normalize_channel_type($formConnection['channel_type'] ?? 'NONE');
+            $showConnFields = $channelTypeValue !== 'NONE';
+            $showPsFields = $channelTypeValue === 'PRESTASHOP';
+            $showMlFields = $channelTypeValue === 'MERCADOLIBRE';
+
+            $connFieldsStyle = $showConnFields ? '' : 'none';
+            $psFieldsStyle = $showPsFields ? '' : 'none';
+            $mlFieldsStyle = $showMlFields ? '' : 'none';
+
+            $connDisabledAttr = $showConnFields ? '' : ' disabled';
+            $psDisabledAttr = $showPsFields ? '' : ' disabled';
+            $mlDisabledAttr = $showMlFields ? '' : ' disabled';
+          ?>
           <label class="form-field" style="max-width: 360px;">
             <span class="form-label">Tipo de conexión</span>
             <select class="form-control" name="channel_type" id="channel_type" onchange="if (window.siteToggleConnectionFields) { window.siteToggleConnectionFields(this.value); }">
-              <?php $channelTypeValue = $formConnection['channel_type']; ?>
               <option value="NONE" <?= $channelTypeValue === 'NONE' ? 'selected' : '' ?>>Sin conexión</option>
               <option value="PRESTASHOP" <?= $channelTypeValue === 'PRESTASHOP' ? 'selected' : '' ?>>PrestaShop</option>
               <option value="MERCADOLIBRE" <?= $channelTypeValue === 'MERCADOLIBRE' ? 'selected' : '' ?>>MercadoLibre</option>
             </select>
           </label>
 
-          <div class="inline-actions" id="siteFormActionsTop" style="display:flex;">
-            <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
-            <button class="btn" type="submit">Guardar</button>
-          </div>
-
-          <?php
-            $connFieldsStyle = $channelTypeValue === 'NONE' ? 'none' : '';
-            $psFieldsStyle = $channelTypeValue === 'PRESTASHOP' ? '' : 'none';
-            $mlFieldsStyle = $channelTypeValue === 'MERCADOLIBRE' ? '' : 'none';
-          ?>
           <div id="connFields" class="stack" style="gap: var(--space-3); display: <?= $connFieldsStyle ?>;">
             <div id="connectionCommonFields" class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3); max-width: 520px; display: <?= $connFieldsStyle ?>;">
               <label class="form-field">
                 <span class="form-label">Habilitado</span>
-                <select class="form-control" name="connection_enabled">
+                <select class="form-control" name="connection_enabled"<?= $connDisabledAttr ?>>
                   <option value="1" <?= (int)$formConnection['enabled'] === 1 ? 'selected' : '' ?>>Sí</option>
                   <option value="0" <?= (int)$formConnection['enabled'] === 0 ? 'selected' : '' ?>>No</option>
                 </select>
               </label>
               <label class="form-field">
                 <span class="form-label">Sincronizar stock</span>
-                <select class="form-control" name="sync_stock_enabled">
+                <select class="form-control" name="sync_stock_enabled"<?= $connDisabledAttr ?>>
                   <?php $syncStockValue = isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 0; ?>
                   <option value="1" <?= $syncStockValue === 1 ? 'selected' : '' ?>>Sí</option>
                   <option value="0" <?= $syncStockValue === 0 ? 'selected' : '' ?>>No</option>
@@ -611,15 +614,15 @@ $nextPage = min($totalPages, $page + 1);
             <div id="psFields" class="grid" data-connection-group="PRESTASHOP" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3); display: <?= $psFieldsStyle ?>;">
               <label class="form-field">
                 <span class="form-label">URL base</span>
-                <input class="form-control" type="text" name="ps_base_url" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_base_url']) ?>">
+                <input class="form-control" type="text" name="ps_base_url" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_base_url']) ?>"<?= $psDisabledAttr ?>>
               </label>
               <label class="form-field">
                 <span class="form-label">API Key / Token</span>
-                <input class="form-control" type="text" name="ps_api_key" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_api_key']) ?>">
+                <input class="form-control" type="text" name="ps_api_key" maxlength="255" data-required-when="PRESTASHOP" value="<?= e($formConnection['ps_api_key']) ?>"<?= $psDisabledAttr ?>>
               </label>
               <label class="form-field">
                 <span class="form-label">Shop ID (opcional)</span>
-                <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>">
+                <input class="form-control" type="number" name="ps_shop_id" min="0" step="1" value="<?= e($formConnection['ps_shop_id']) ?>"<?= $psDisabledAttr ?>>
               </label>
             </div>
 
@@ -627,19 +630,19 @@ $nextPage = min($totalPages, $page + 1);
               <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
-                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_id']) ?>">
+                  <input class="form-control" type="text" name="ml_client_id" maxlength="100" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_id']) ?>"<?= $mlDisabledAttr ?>>
                 </label>
                 <label class="form-field">
                   <span class="form-label">App ID</span>
-                  <input class="form-control" type="text" name="ml_app_id" maxlength="100" value="<?= e($formConnection['ml_app_id'] !== '' ? $formConnection['ml_app_id'] : $formConnection['ml_client_id']) ?>">
+                  <input class="form-control" type="text" name="ml_app_id" maxlength="100" value="<?= e($formConnection['ml_app_id'] !== '' ? $formConnection['ml_app_id'] : $formConnection['ml_client_id']) ?>"<?= $mlDisabledAttr ?>>
                 </label>
                 <label class="form-field">
                   <span class="form-label">Client Secret</span>
-                  <input class="form-control" type="password" name="ml_client_secret" maxlength="255" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_secret']) ?>" autocomplete="off">
+                  <input class="form-control" type="password" name="ml_client_secret" maxlength="255" data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_client_secret']) ?>" autocomplete="off"<?= $mlDisabledAttr ?>>
                 </label>
                 <label class="form-field">
                   <span class="form-label">Redirect URI</span>
-                  <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_redirect_uri']) ?>">
+                  <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly data-required-when="MERCADOLIBRE" value="<?= e($formConnection['ml_redirect_uri']) ?>"<?= $mlDisabledAttr ?>>
                 </label>
               </div>
               <div class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
@@ -649,7 +652,7 @@ $nextPage = min($totalPages, $page + 1);
                 </label>
                 <label class="form-field">
                   <span class="form-label">Webhook secret (HMAC)</span>
-                  <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>">
+                  <input class="form-control" type="text" name="webhook_secret" maxlength="255" value="<?= e($formConnection['webhook_secret']) ?>"<?= $mlDisabledAttr ?>>
                 </label>
                 <label class="form-field">
                   <span class="form-label">Usuario ML (opcional)</span>
@@ -672,7 +675,7 @@ $nextPage = min($totalPages, $page + 1);
             </div>
           </div>
 
-          <div class="inline-actions" id="siteFormActions" style="display:flex;">
+          <div class="inline-actions" id="siteFormActions" style="margin-top: 16px; display:flex; justify-content:flex-end; gap:12px; position: sticky; bottom: 0; z-index: 2; background: rgba(255,255,255,0.95); padding: 12px 0 0;">
             <a class="btn btn-ghost" href="sites.php<?= $q !== '' ? '?q=' . rawurlencode($q) : '' ?>">Cancelar</a>
             <button class="btn" type="submit">Guardar</button>
           </div>
@@ -790,6 +793,16 @@ $nextPage = min($totalPages, $page + 1);
         var prestashopFields = document.getElementById('psFields');
         var mercadolibreFields = document.getElementById('mlFields');
 
+        function setDisabledBySelector(selector, disabled) {
+          if (!siteForm) {
+            return;
+          }
+          var nodes = siteForm.querySelectorAll(selector);
+          for (var i = 0; i < nodes.length; i += 1) {
+            nodes[i].disabled = !!disabled;
+          }
+        }
+
         function updateDynamicRequired(channelValue) {
           if (!siteForm) {
             return;
@@ -801,23 +814,36 @@ $nextPage = min($totalPages, $page + 1);
         }
 
         function toggleConnectionFields(forcedValue) {
-          if (!channelType) {
-            return;
-          }
-          var value = (forcedValue || channelType.value || 'NONE').toUpperCase();
-          channelType.value = value;
-          updateDynamicRequired(value);
-          if (connFields) {
-            connFields.style.display = value === 'NONE' ? 'none' : '';
-          }
-          if (commonFields) {
-            commonFields.style.display = value === 'NONE' ? 'none' : '';
-          }
-          if (prestashopFields) {
-            prestashopFields.style.display = value === 'PRESTASHOP' ? '' : 'none';
-          }
-          if (mercadolibreFields) {
-            mercadolibreFields.style.display = value === 'MERCADOLIBRE' ? '' : 'none';
+          try {
+            var value = (forcedValue || (channelType ? channelType.value : '') || 'NONE').toUpperCase();
+            if (channelType) {
+              channelType.value = value;
+            }
+
+            var isNone = value === 'NONE';
+            var isPrestashop = value === 'PRESTASHOP';
+            var isMercadolibre = value === 'MERCADOLIBRE';
+
+            updateDynamicRequired(value);
+
+            if (connFields) {
+              connFields.style.display = isNone ? 'none' : '';
+            }
+            if (commonFields) {
+              commonFields.style.display = isNone ? 'none' : '';
+            }
+            if (prestashopFields) {
+              prestashopFields.style.display = isPrestashop ? '' : 'none';
+            }
+            if (mercadolibreFields) {
+              mercadolibreFields.style.display = isMercadolibre ? '' : 'none';
+            }
+
+            setDisabledBySelector('[name="connection_enabled"], [name="sync_stock_enabled"]', isNone);
+            setDisabledBySelector('[name="ps_base_url"], [name="ps_api_key"], [name="ps_shop_id"]', !isPrestashop);
+            setDisabledBySelector('[name="ml_client_id"], [name="ml_app_id"], [name="ml_client_secret"], [name="ml_redirect_uri"], [name="webhook_secret"]', !isMercadolibre);
+          } catch (error) {
+            // Progressive enhancement: avoid breaking the form if any node is missing.
           }
         }
 
