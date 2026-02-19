@@ -7,20 +7,34 @@ require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../include/stock.php';
 require_once __DIR__ . '/../include/stock_sync.php';
 
-header('Content-Type: application/json; charset=utf-8');
+header('Content-Type: text/plain; charset=utf-8');
 
-function ml_webhook_ack(array $payload = ['ok' => true], int $status = 200): void {
+function ml_webhook_log_path(): string {
+  return __DIR__ . '/../logs/ml_webhook.log';
+}
+
+function ml_webhook_log(string $message, array $context = []): void {
+  $line = '[' . date('Y-m-d H:i:s') . '] ' . $message;
+  if ($context !== []) {
+    $line .= ' ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  }
+  $line .= PHP_EOL;
+
+  $logPath = ml_webhook_log_path();
+  $dir = dirname($logPath);
+  if (!is_dir($dir)) {
+    @mkdir($dir, 0775, true);
+  }
+
+  @file_put_contents($logPath, $line, FILE_APPEND | LOCK_EX);
+}
+
+function ml_webhook_ack(string $message = "OK webhook endpoint\n", int $status = 200): void {
   http_response_code($status);
-  echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+  echo $message;
   if (function_exists('fastcgi_finish_request')) {
     fastcgi_finish_request();
   }
-}
-
-function ml_webhook_fail(string $error, int $status = 422): void {
-  http_response_code($status);
-  echo json_encode(['ok' => false, 'error' => $error], JSON_UNESCAPED_UNICODE);
-  exit;
 }
 
 function ml_webhook_extract_order_id_from_resource(string $resource): ?string {
@@ -64,50 +78,93 @@ function ml_webhook_validate_secret(array $site, string $rawBody): bool {
   return false;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-  ml_webhook_fail('Método inválido.', 405);
+function ml_webhook_server_headers(): array {
+  $headers = [];
+  foreach ($_SERVER as $key => $value) {
+    if (!is_string($key) || !is_string($value)) {
+      continue;
+    }
+    if (str_starts_with($key, 'HTTP_')) {
+      $name = str_replace('_', '-', substr($key, 5));
+      $headers[$name] = $value;
+    }
+  }
+  return $headers;
 }
+
+function ml_webhook_ml_fetch_log(array $resp): array {
+  return [
+    'status' => (int)($resp['code'] ?? 0),
+    'body_preview' => mb_substr((string)($resp['raw'] ?? ''), 0, 300),
+  ];
+}
+
+$requestMethod = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
+$rawBody = (string)file_get_contents('php://input');
+$input = json_decode($rawBody, true);
+if (!is_array($input)) {
+  $input = [];
+}
+
+ml_webhook_log('Webhook inbound', [
+  'method' => $requestMethod,
+  'ip' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+  'uri' => (string)($_SERVER['REQUEST_URI'] ?? ''),
+  'headers' => ml_webhook_server_headers(),
+  'raw_body' => mb_substr($rawBody, 0, 2000),
+]);
+
+if ($requestMethod === 'GET') {
+  ml_webhook_ack("OK webhook endpoint\n", 200);
+  exit;
+}
+
+if ($requestMethod !== 'POST') {
+  ml_webhook_ack("OK webhook endpoint\n", 200);
+  ml_webhook_log('Ignored non-POST webhook request', ['method' => $requestMethod]);
+  exit;
+}
+
+ml_webhook_ack("OK webhook endpoint\n", 200);
 
 ensure_sites_schema();
 ensure_stock_schema();
 ensure_stock_sync_schema();
 
-$rawBody = file_get_contents('php://input');
-if (!is_string($rawBody) || trim($rawBody) === '') {
-  ml_webhook_fail('Body vacío.');
-}
+$topic = strtolower(trim((string)($input['topic'] ?? '')));
+$resource = trim((string)($input['resource'] ?? ''));
+$mlUserId = trim((string)($input['user_id'] ?? ''));
 
-$data = json_decode($rawBody, true);
-if (!is_array($data)) {
-  ml_webhook_fail('JSON inválido.');
-}
-
-$topic = strtolower(trim((string)($data['topic'] ?? '')));
-$resource = trim((string)($data['resource'] ?? ''));
-$mlUserId = trim((string)($data['user_id'] ?? ''));
+ml_webhook_log('Webhook parsed payload', [
+  'topic' => $topic,
+  'resource' => $resource,
+  'user_id' => $mlUserId,
+]);
 
 if ($topic === '' || $resource === '' || $mlUserId === '') {
-  ml_webhook_fail('Payload incompleto.');
+  ml_webhook_log('Payload incompleto, se ignora', ['topic' => $topic, 'resource' => $resource, 'user_id' => $mlUserId]);
+  exit;
 }
 
 $site = stock_sync_ml_find_site_by_user_id($mlUserId);
 if (!$site) {
-  ml_webhook_fail('No existe sitio ML activo para user_id.', 404);
+  ml_webhook_log('No existe sitio ML activo para user_id', ['user_id' => $mlUserId]);
+  exit;
 }
 $siteId = (int)($site['id'] ?? 0);
 if ($siteId <= 0) {
-  ml_webhook_fail('Sitio inválido.', 404);
+  ml_webhook_log('Sitio inválido para webhook', ['site' => $site]);
+  exit;
 }
 
 if (!ml_webhook_validate_secret($site, $rawBody)) {
-  ml_webhook_fail('Webhook no autorizado.', 401);
+  ml_webhook_log('Webhook no autorizado por secreto', ['site_id' => $siteId]);
+  exit;
 }
-
-ml_webhook_ack(['ok' => true, 'accepted' => true, 'topic' => $topic, 'site_id' => $siteId], 200);
 
 $accessToken = trim((string)($site['ml_access_token'] ?? ''));
 if ($accessToken === '') {
-  stock_sync_log('ML webhook sin token de acceso', ['site_id' => $siteId, 'topic' => $topic, 'resource' => $resource]);
+  ml_webhook_log('ML webhook sin token de acceso', ['site_id' => $siteId, 'topic' => $topic, 'resource' => $resource]);
   exit;
 }
 
@@ -115,20 +172,19 @@ $rows = [];
 if ($topic === 'items') {
   $itemId = stock_sync_ml_extract_item_id_from_resource($resource);
   if ($itemId === null || $itemId === '') {
-    stock_sync_log('ML webhook items sin item_id válido', ['site_id' => $siteId, 'resource' => $resource]);
+    ml_webhook_log('ML webhook items sin item_id válido', ['site_id' => $siteId, 'resource' => $resource]);
     exit;
   }
 
   $itemResponse = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
+  ml_webhook_log('ML fetch item response', ['site_id' => $siteId, 'item_id' => $itemId] + ml_webhook_ml_fetch_log($itemResponse));
+
   if ((int)$itemResponse['code'] < 200 || (int)$itemResponse['code'] >= 300) {
-    stock_sync_log('ML webhook fallo al consultar item', ['site_id' => $siteId, 'item_id' => $itemId, 'http_code' => $itemResponse['code']]);
+    ml_webhook_log('ML webhook fallo al consultar item', ['site_id' => $siteId, 'item_id' => $itemId, 'http_code' => $itemResponse['code']]);
     exit;
   }
 
-  $item = $itemResponse['json'];
-  if (!is_array($item)) {
-    $item = [];
-  }
+  $item = is_array($itemResponse['json'] ?? null) ? $itemResponse['json'] : [];
 
   $variations = $item['variations'] ?? [];
   if (is_array($variations) && count($variations) > 0) {
@@ -148,23 +204,22 @@ if ($topic === 'items') {
 } elseif ($topic === 'orders') {
   $orderId = ml_webhook_extract_order_id_from_resource($resource);
   if ($orderId === null || $orderId === '') {
-    stock_sync_log('ML webhook orders sin order_id válido', ['site_id' => $siteId, 'resource' => $resource]);
+    ml_webhook_log('ML webhook orders sin order_id válido', ['site_id' => $siteId, 'resource' => $resource]);
     exit;
   }
 
   $orderResponse = stock_sync_ml_http_get('https://api.mercadolibre.com/orders/' . rawurlencode($orderId), $accessToken);
+  ml_webhook_log('ML fetch order response', ['site_id' => $siteId, 'order_id' => $orderId] + ml_webhook_ml_fetch_log($orderResponse));
+
   if ((int)$orderResponse['code'] < 200 || (int)$orderResponse['code'] >= 300) {
-    stock_sync_log('ML webhook fallo al consultar order', ['site_id' => $siteId, 'order_id' => $orderId, 'http_code' => $orderResponse['code']]);
+    ml_webhook_log('ML webhook fallo al consultar order', ['site_id' => $siteId, 'order_id' => $orderId, 'http_code' => $orderResponse['code']]);
     exit;
   }
 
-  $order = $orderResponse['json'];
-  if (!is_array($order)) {
-    $order = [];
-  }
+  $order = is_array($orderResponse['json'] ?? null) ? $orderResponse['json'] : [];
   $orderItems = $order['order_items'] ?? [];
   if (!is_array($orderItems) || count($orderItems) === 0) {
-    stock_sync_log('ML webhook order sin items', ['site_id' => $siteId, 'order_id' => $orderId]);
+    ml_webhook_log('ML webhook order sin items', ['site_id' => $siteId, 'order_id' => $orderId]);
     exit;
   }
 
@@ -181,15 +236,14 @@ if ($topic === 'items') {
     }
 
     $itemResponse = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
+    ml_webhook_log('ML fetch order item response', ['site_id' => $siteId, 'order_id' => $orderId, 'item_id' => $itemId] + ml_webhook_ml_fetch_log($itemResponse));
+
     if ((int)$itemResponse['code'] < 200 || (int)$itemResponse['code'] >= 300) {
-      stock_sync_log('ML webhook order fallo al consultar item', ['site_id' => $siteId, 'order_id' => $orderId, 'item_id' => $itemId, 'http_code' => $itemResponse['code']]);
+      ml_webhook_log('ML webhook order fallo al consultar item', ['site_id' => $siteId, 'order_id' => $orderId, 'item_id' => $itemId, 'http_code' => $itemResponse['code']]);
       continue;
     }
 
-    $item = $itemResponse['json'];
-    if (!is_array($item)) {
-      $item = [];
-    }
+    $item = is_array($itemResponse['json'] ?? null) ? $itemResponse['json'] : [];
 
     if ($variationId === null) {
       $rows[] = ['topic' => $topic, 'resource' => $resource, 'item_id' => $itemId, 'variation_id' => null, 'qty' => (int)($item['available_quantity'] ?? 0)];
@@ -218,12 +272,12 @@ if ($topic === 'items') {
     $rows[] = ['topic' => $topic, 'resource' => $resource, 'item_id' => $itemId, 'variation_id' => $variationId, 'qty' => $variationQty];
   }
 } else {
-  stock_sync_log('ML webhook recibido (topic ignorado)', ['topic' => $topic, 'site_id' => $siteId, 'resource' => $resource]);
+  ml_webhook_log('ML webhook recibido (topic ignorado)', ['topic' => $topic, 'site_id' => $siteId, 'resource' => $resource]);
   exit;
 }
 
 if (count($rows) === 0) {
-  stock_sync_log('ML webhook sin filas para procesar', ['site_id' => $siteId, 'topic' => $topic, 'resource' => $resource]);
+  ml_webhook_log('ML webhook sin filas para procesar', ['site_id' => $siteId, 'topic' => $topic, 'resource' => $resource]);
   exit;
 }
 
@@ -242,14 +296,8 @@ foreach ($rows as $row) {
   $mapSt->execute([$siteId, $itemId, $variationId, $variationId]);
   $map = $mapSt->fetch();
 
-  if (!$map && $variationId !== null) {
-    $fallbackMapSt = $pdo->prepare('SELECT spm.product_id, p.sku FROM site_product_map spm INNER JOIN products p ON p.id = spm.product_id WHERE spm.site_id = ? AND spm.ml_item_id = ? ORDER BY spm.id DESC LIMIT 1');
-    $fallbackMapSt->execute([$siteId, $itemId]);
-    $map = $fallbackMapSt->fetch();
-  }
-
   if (!$map) {
-    stock_sync_log('ML webhook sin vínculo en TSWork', ['site_id' => $siteId, 'item_id' => $itemId, 'variation_id' => $variationId, 'topic' => (string)$row['topic']]);
+    ml_webhook_log(sprintf('No vínculo encontrado para item_id=%s variation_id=%s', $itemId, $variationId ?? '-'), ['site_id' => $siteId]);
     continue;
   }
 
@@ -260,8 +308,7 @@ foreach ($rows as $row) {
 
   $qty = (int)$row['qty'];
   $eventId = 'ml-webhook-' . sha1($siteId . '|' . $itemId . '|' . ($variationId ?? '0') . '|' . $qty . '|' . gmdate('YmdHi'));
-  $topicValue = trim((string)($row['topic'] ?? $topic));
-  $note = sprintf('Sync desde MercadoLibre | item_id=%s | variation_id=%s | topic=%s | resource=%s', $itemId, $variationId ?? '-', $topicValue, (string)$row['resource']);
+  $note = sprintf('ML webhook | item_id=%s | variation_id=%s | topic=%s', $itemId, $variationId ?? '-', (string)$row['topic']);
 
   set_stock($productId, $qty, $note, 0, 'mercadolibre', $siteId, $eventId, 'sync_pull_ml');
 
@@ -272,7 +319,16 @@ foreach ($rows as $row) {
     'variation_id' => $variationId,
     'qty' => $qty,
     'resource' => (string)$row['resource'],
-    'topic' => $topicValue,
+    'topic' => trim((string)($row['topic'] ?? $topic)),
+    'reason' => 'ML webhook',
+  ]);
+
+  ml_webhook_log('Stock actualizado en TSWork por webhook', [
+    'site_id' => $siteId,
+    'product_id' => $productId,
+    'item_id' => $itemId,
+    'variation_id' => $variationId,
+    'available_quantity' => $qty,
   ]);
 }
 
