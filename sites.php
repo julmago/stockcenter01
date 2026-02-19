@@ -54,6 +54,7 @@ if (is_post()) {
     $mlClientId = trim(post('ml_client_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRedirectUri = trim(post('ml_redirect_uri'));
+    $mlNotificationSecret = trim(post('ml_notification_secret'));
 
     if ($channelType === 'NONE') {
       $connectionEnabled = 0;
@@ -76,8 +77,8 @@ if (is_post()) {
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct]);
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
@@ -88,6 +89,7 @@ if (is_post()) {
               ml_client_id = VALUES(ml_client_id),
               ml_client_secret = VALUES(ml_client_secret),
               ml_redirect_uri = VALUES(ml_redirect_uri),
+              ml_notification_secret = VALUES(ml_notification_secret),
               updated_at = NOW(),
               ml_access_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
@@ -130,6 +132,7 @@ if (is_post()) {
             $mlClientId !== '' ? $mlClientId : null,
             $mlClientSecret !== '' ? $mlClientSecret : null,
             $effectiveMlRedirectUri,
+            $mlNotificationSecret !== '' ? $mlNotificationSecret : null,
           ]);
           header('Location: sites.php?created=1');
           exit;
@@ -158,6 +161,7 @@ if (is_post()) {
     $mlClientId = trim(post('ml_client_id'));
     $mlClientSecret = trim(post('ml_client_secret'));
     $mlRedirectUri = trim(post('ml_redirect_uri'));
+    $mlNotificationSecret = trim(post('ml_notification_secret'));
 
     if ($channelType === 'NONE') {
       $connectionEnabled = 0;
@@ -181,8 +185,8 @@ if (is_post()) {
           $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
           $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
-          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
+          $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
             ON DUPLICATE KEY UPDATE
               channel_type = VALUES(channel_type),
               enabled = VALUES(enabled),
@@ -193,6 +197,7 @@ if (is_post()) {
               ml_client_id = VALUES(ml_client_id),
               ml_client_secret = VALUES(ml_client_secret),
               ml_redirect_uri = VALUES(ml_redirect_uri),
+              ml_notification_secret = VALUES(ml_notification_secret),
               updated_at = NOW(),
               ml_access_token = CASE
                 WHEN COALESCE(site_connections.ml_client_id, '') <> COALESCE(VALUES(ml_client_id), '')
@@ -235,6 +240,7 @@ if (is_post()) {
             $mlClientId !== '' ? $mlClientId : null,
             $mlClientSecret !== '' ? $mlClientSecret : null,
             $effectiveMlRedirectUri,
+            $mlNotificationSecret !== '' ? $mlNotificationSecret : null,
           ]);
           header('Location: sites.php?updated=1');
           exit;
@@ -327,6 +333,7 @@ $editConnection = [
   'ml_client_id' => '',
   'ml_client_secret' => '',
   'ml_redirect_uri' => '',
+  'ml_notification_secret' => '',
   'ml_access_token' => '',
   'ml_refresh_token' => '',
   'ml_token_expires_at' => '',
@@ -335,7 +342,7 @@ $editConnection = [
   'ml_status' => 'DISCONNECTED',
 ];
 if ($editSite) {
-  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
   $st->execute([(int)$editSite['id']]);
   $row = $st->fetch();
   if ($row) {
@@ -350,6 +357,7 @@ if ($editSite) {
       'ml_client_id' => (string)($row['ml_client_id'] ?? ''),
       'ml_client_secret' => (string)($row['ml_client_secret'] ?? ''),
       'ml_redirect_uri' => (string)($row['ml_redirect_uri'] ?? ''),
+      'ml_notification_secret' => (string)($row['ml_notification_secret'] ?? ''),
       'ml_access_token' => (string)($row['ml_access_token'] ?? ''),
       'ml_refresh_token' => (string)($row['ml_refresh_token'] ?? ''),
       'ml_token_expires_at' => (string)($row['ml_token_expires_at'] ?? ''),
@@ -376,6 +384,7 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
     'ml_client_id' => trim(post('ml_client_id', $editConnection['ml_client_id'])),
     'ml_client_secret' => trim(post('ml_client_secret', $editConnection['ml_client_secret'])),
     'ml_redirect_uri' => trim(post('ml_redirect_uri', $editConnection['ml_redirect_uri'])),
+    'ml_notification_secret' => trim(post('ml_notification_secret', $editConnection['ml_notification_secret'])),
     'ml_access_token' => $editConnection['ml_access_token'],
     'ml_refresh_token' => $editConnection['ml_refresh_token'],
     'ml_token_expires_at' => $editConnection['ml_token_expires_at'],
@@ -534,7 +543,7 @@ $nextPage = min($totalPages, $page + 1);
             </div>
 
             <div id="mlFields" class="stack" style="gap: var(--space-3);">
-              <div class="grid" style="grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: var(--space-3);">
+              <div class="grid" style="grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
                   <span class="form-label">Client ID</span>
                   <input class="form-control" type="text" name="ml_client_id" maxlength="100" value="<?= e($formConnection['ml_client_id']) ?>">
@@ -546,6 +555,10 @@ $nextPage = min($totalPages, $page + 1);
                 <label class="form-field">
                   <span class="form-label">Redirect URI</span>
                   <input class="form-control" type="url" name="ml_redirect_uri" maxlength="255" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Webhook secret ML</span>
+                  <input class="form-control" type="text" name="ml_notification_secret" maxlength="255" value="<?= e($formConnection['ml_notification_secret']) ?>" placeholder="Opcional">
                 </label>
               </div>
               <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
