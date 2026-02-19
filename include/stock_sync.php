@@ -234,7 +234,7 @@ function stock_sync_ml_http_get(string $url, string $accessToken): array {
     $json = [];
   }
 
-  return ['code' => $code, 'json' => $json];
+  return ['code' => $code, 'json' => $json, 'raw' => (string)$resp];
 }
 
 function stock_sync_ml_http_post(string $url, string $accessToken, array $payload): array {
@@ -749,6 +749,68 @@ function stock_sync_ml_recent_push_matches_qty(int $productId, int $siteId, int 
   }
 
   return false;
+}
+
+
+function stock_sync_ml_subscription_status(int $siteId): array {
+  ensure_stock_sync_schema();
+
+  $st = db()->prepare('SELECT s.id, s.conn_type, sc.ml_client_id, sc.ml_app_id, sc.ml_access_token, sc.ml_notification_callback_url, sc.ml_subscription_topic, sc.ml_subscription_id FROM sites s INNER JOIN site_connections sc ON sc.site_id = s.id WHERE s.id = ? LIMIT 1');
+  $st->execute([$siteId]);
+  $site = $st->fetch();
+  if (!$site) {
+    return ['ok' => false, 'error' => 'Sitio inexistente'];
+  }
+  if (stock_sync_conn_type($site) !== 'mercadolibre') {
+    return ['ok' => false, 'error' => 'El sitio no es MercadoLibre'];
+  }
+
+  $accessToken = trim((string)($site['ml_access_token'] ?? ''));
+  $appId = trim((string)($site['ml_app_id'] ?? $site['ml_client_id'] ?? ''));
+  if ($accessToken === '' || $appId === '') {
+    return [
+      'ok' => false,
+      'error' => 'Falta access token o app_id',
+      'saved_notification_url' => trim((string)($site['ml_notification_callback_url'] ?? '')),
+      'saved_topic' => trim((string)($site['ml_subscription_topic'] ?? '')),
+      'saved_subscription_id' => trim((string)($site['ml_subscription_id'] ?? '')),
+    ];
+  }
+
+  $topics = ['items', 'orders'];
+  $results = [];
+  $allOk = true;
+
+  foreach ($topics as $topic) {
+    $url = 'https://api.mercadolibre.com/myfeeds/search?app_id=' . rawurlencode($appId) . '&topic=' . rawurlencode($topic);
+    try {
+      $resp = stock_sync_ml_http_get($url, $accessToken);
+      $topicOk = ((int)$resp['code'] >= 200 && (int)$resp['code'] < 300);
+      if (!$topicOk) {
+        $allOk = false;
+      }
+      $results[$topic] = [
+        'ok' => $topicOk,
+        'status' => (int)($resp['code'] ?? 0),
+        'body' => mb_substr((string)($resp['raw'] ?? ''), 0, 1000),
+      ];
+    } catch (Throwable $e) {
+      $allOk = false;
+      $results[$topic] = [
+        'ok' => false,
+        'status' => 0,
+        'body' => $e->getMessage(),
+      ];
+    }
+  }
+
+  return [
+    'ok' => $allOk,
+    'saved_notification_url' => trim((string)($site['ml_notification_callback_url'] ?? '')),
+    'saved_topic' => trim((string)($site['ml_subscription_topic'] ?? '')),
+    'saved_subscription_id' => trim((string)($site['ml_subscription_id'] ?? '')),
+    'topics' => $results,
+  ];
 }
 
 function stock_sync_ml_register_subscription(int $siteId, string $callbackUrl, string $topic = 'items'): array {

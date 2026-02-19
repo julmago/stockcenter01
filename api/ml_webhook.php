@@ -13,6 +13,29 @@ function ml_webhook_log_path(): string {
   return __DIR__ . '/../logs/ml_webhook.log';
 }
 
+function ml_webhook_raw_log_path(): string {
+  return __DIR__ . '/../logs/ml_webhook_raw.log';
+}
+
+function ml_webhook_stock_updates_log_path(): string {
+  return __DIR__ . '/../logs/ml_stock_updates.log';
+}
+
+function ml_webhook_write_line(string $path, string $line): void {
+  $dir = dirname($path);
+  if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+    error_log('[ML_WEBHOOK] no se pudo crear directorio de logs: ' . $dir);
+    error_log('[ML_WEBHOOK] ' . trim($line));
+    return;
+  }
+
+  $writeOk = @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+  if ($writeOk === false) {
+    error_log('[ML_WEBHOOK] fallo escritura log en ' . $path);
+    error_log('[ML_WEBHOOK] ' . trim($line));
+  }
+}
+
 function ml_webhook_log(string $message, array $context = []): void {
   $line = '[' . date('Y-m-d H:i:s') . '] ' . $message;
   if ($context !== []) {
@@ -20,13 +43,17 @@ function ml_webhook_log(string $message, array $context = []): void {
   }
   $line .= PHP_EOL;
 
-  $logPath = ml_webhook_log_path();
-  $dir = dirname($logPath);
-  if (!is_dir($dir)) {
-    @mkdir($dir, 0775, true);
-  }
+  ml_webhook_write_line(ml_webhook_log_path(), $line);
+}
 
-  @file_put_contents($logPath, $line, FILE_APPEND | LOCK_EX);
+function ml_webhook_log_raw_inbound(array $payload): void {
+  $line = '[' . date('Y-m-d H:i:s') . '] RAW ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+  ml_webhook_write_line(ml_webhook_raw_log_path(), $line);
+}
+
+function ml_webhook_log_stock_update(array $payload): void {
+  $line = '[' . date('Y-m-d H:i:s') . '] ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+  ml_webhook_write_line(ml_webhook_stock_updates_log_path(), $line);
 }
 
 function ml_webhook_ack(string $message = "OK webhook endpoint\n", int $status = 200): void {
@@ -112,6 +139,13 @@ ml_webhook_log('Webhook inbound', [
   'uri' => (string)($_SERVER['REQUEST_URI'] ?? ''),
   'headers' => ml_webhook_server_headers(),
   'raw_body' => mb_substr($rawBody, 0, 2000),
+]);
+ml_webhook_log_raw_inbound([
+  'method' => $requestMethod,
+  'uri' => (string)($_SERVER['REQUEST_URI'] ?? ''),
+  'querystring' => (string)($_SERVER['QUERY_STRING'] ?? ''),
+  'headers' => ml_webhook_server_headers(),
+  'raw_body' => $rawBody,
 ]);
 
 if ($requestMethod === 'GET') {
@@ -307,6 +341,8 @@ foreach ($rows as $row) {
   }
 
   $qty = (int)$row['qty'];
+  $currentStock = get_stock($productId);
+  $oldStock = (int)($currentStock['qty'] ?? 0);
   $eventId = 'ml-webhook-' . sha1($siteId . '|' . $itemId . '|' . ($variationId ?? '0') . '|' . $qty . '|' . gmdate('YmdHi'));
   $note = sprintf('ML webhook | item_id=%s | variation_id=%s | topic=%s', $itemId, $variationId ?? '-', (string)$row['topic']);
 
@@ -329,6 +365,14 @@ foreach ($rows as $row) {
     'item_id' => $itemId,
     'variation_id' => $variationId,
     'available_quantity' => $qty,
+  ]);
+
+  ml_webhook_log_stock_update([
+    'sku' => (string)($map['sku'] ?? ''),
+    'item_id' => $itemId,
+    'variation_id' => $variationId,
+    'old_stock' => $oldStock,
+    'new_stock' => $qty,
   ]);
 }
 
