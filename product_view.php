@@ -546,6 +546,20 @@ if ($ml_sites) {
   $ml_links = $st->fetchAll();
 }
 
+
+$ml_last_sync_by_site = [];
+if ($ml_sites) {
+  $mlLastSyncSt = db()->prepare("SELECT site_id, MAX(created_at) AS last_sync_at FROM stock_logs WHERE product_id = ? AND action = 'sync_pull_ml' AND site_id IS NOT NULL GROUP BY site_id");
+  $mlLastSyncSt->execute([$id]);
+  foreach ($mlLastSyncSt->fetchAll() as $mlSyncRow) {
+    $mlLastSiteId = (int)($mlSyncRow['site_id'] ?? 0);
+    if ($mlLastSiteId <= 0) {
+      continue;
+    }
+    $ml_last_sync_by_site[$mlLastSiteId] = (string)($mlSyncRow['last_sync_at'] ?? '');
+  }
+}
+
 $ts_stock = get_stock($id);
 $ts_stock_moves = get_stock_moves($id, 20);
 $prestashop_sync_sites = get_prestashop_sync_sites();
@@ -923,10 +937,10 @@ if ($st) {
 
             <div class="table-wrapper product-table-wrapper">
               <table class="table">
-                <thead><tr><th>Sitio ML</th><th>SKU</th><th>Título</th><th>Item ID</th><th>Variation ID</th><th>Acción</th></tr></thead>
+                <thead><tr><th>Sitio ML</th><th>SKU</th><th>Título</th><th>Item ID</th><th>Variation ID</th><th>Última sync ML</th><th>Acción</th></tr></thead>
                 <tbody id="ml-links-existing-body">
                   <?php if (!$ml_links): ?>
-                    <tr><td colspan="6">Sin vínculos guardados.</td></tr>
+                    <tr><td colspan="7">Sin vínculos guardados.</td></tr>
                   <?php else: ?>
                     <?php foreach ($ml_links as $link): ?>
                       <tr data-link-id="<?= (int)$link['id'] ?>">
@@ -935,6 +949,7 @@ if ($st) {
                         <td><?= trim((string)($link['title'] ?? '')) !== '' ? e((string)$link['title']) : '—' ?></td>
                         <td><?= e((string)$link['ml_item_id']) ?></td>
                         <td><?= trim((string)($link['ml_variation_id'] ?? '')) !== '' ? e((string)$link['ml_variation_id']) : '—' ?></td>
+                        <td><?= trim((string)($ml_last_sync_by_site[(int)$link['site_id']] ?? '')) !== '' ? e((string)$ml_last_sync_by_site[(int)$link['site_id']]) : '—' ?></td>
                         <td><button class="btn btn-danger js-ml-unlink" type="button" data-link-id="<?= (int)$link['id'] ?>">Desvincular</button></td>
                       </tr>
                     <?php endforeach; ?>
@@ -945,10 +960,10 @@ if ($st) {
           <?php else: ?>
             <div class="table-wrapper">
               <table class="table">
-                <thead><tr><th>Sitio ML</th><th>SKU</th><th>Título</th><th>Item ID</th><th>Variation ID</th></tr></thead>
+                <thead><tr><th>Sitio ML</th><th>SKU</th><th>Título</th><th>Item ID</th><th>Variation ID</th><th>Última sync ML</th></tr></thead>
                 <tbody>
                   <?php if (!$ml_links): ?>
-                    <tr><td colspan="5">Sin vínculos guardados.</td></tr>
+                    <tr><td colspan="6">Sin vínculos guardados.</td></tr>
                   <?php else: ?>
                     <?php foreach ($ml_links as $link): ?>
                       <tr>
@@ -957,6 +972,7 @@ if ($st) {
                         <td><?= trim((string)($link['title'] ?? '')) !== '' ? e((string)$link['title']) : '—' ?></td>
                         <td><?= e((string)$link['ml_item_id']) ?></td>
                         <td><?= trim((string)($link['ml_variation_id'] ?? '')) !== '' ? e((string)$link['ml_variation_id']) : '—' ?></td>
+                        <td><?= trim((string)($ml_last_sync_by_site[(int)$link['site_id']] ?? '')) !== '' ? e((string)$ml_last_sync_by_site[(int)$link['site_id']]) : '—' ?></td>
                       </tr>
                     <?php endforeach; ?>
                   <?php endif; ?>
@@ -1457,7 +1473,7 @@ if ($st) {
             mlBindStatus.textContent = 'Vínculo eliminado.';
           }
           if (mlLinksExistingBody && mlLinksExistingBody.children.length === 0) {
-            mlLinksExistingBody.innerHTML = '<tr><td colspan="6">Sin vínculos guardados.</td></tr>';
+            mlLinksExistingBody.innerHTML = '<tr><td colspan="7">Sin vínculos guardados.</td></tr>';
           }
         } catch (e) {
           if (mlBindStatus) {

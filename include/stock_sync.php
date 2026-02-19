@@ -798,6 +798,23 @@ function stock_sync_ml_register_subscription(int $siteId, string $callbackUrl, s
   return ['ok' => true, 'subscription_id' => $subscriptionId, 'topic' => $topic];
 }
 
+
+function stock_sync_ml_register_default_subscriptions(int $siteId, string $callbackUrl): array {
+  $topics = ['items', 'orders'];
+  $results = [];
+  $ok = true;
+
+  foreach ($topics as $topic) {
+    $result = stock_sync_ml_register_subscription($siteId, $callbackUrl, $topic);
+    $results[$topic] = $result;
+    if (!(bool)($result['ok'] ?? false)) {
+      $ok = false;
+    }
+  }
+
+  return ['ok' => $ok, 'topics' => $results];
+}
+
 function stock_sync_ml_find_site_by_user_id(string $mlUserId): ?array {
   $mlUserId = trim($mlUserId);
   if ($mlUserId === '') {
@@ -805,7 +822,7 @@ function stock_sync_ml_find_site_by_user_id(string $mlUserId): ?array {
   }
 
   $st = db()->prepare("SELECT s.id, s.name, s.conn_type, s.conn_enabled, s.sync_stock_enabled,
-      sc.ml_access_token, sc.ml_user_id
+      sc.ml_access_token, sc.ml_user_id, sc.ml_notification_secret, sc.ml_app_id
     FROM sites s
     INNER JOIN site_connections sc ON sc.site_id = s.id
     WHERE s.is_active = 1

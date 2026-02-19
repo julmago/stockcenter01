@@ -161,8 +161,8 @@ try {
 
 
   try {
-    $callbackUrl = rtrim(base_url(), '/') . '/api/ml_webhook.php';
-    stock_sync_ml_register_subscription($siteId, $callbackUrl, 'items');
+    $callbackUrl = rtrim(base_url(), '/') . '/ml_webhook.php';
+    stock_sync_ml_register_default_subscriptions($siteId, $callbackUrl);
   } catch (Throwable $subscriptionError) {
     error_log('[ml_oauth_callback] ML subscribe error site_id=' . $siteId . ' err=' . $subscriptionError->getMessage());
   }
