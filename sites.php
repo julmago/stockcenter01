@@ -596,6 +596,12 @@ $nextPage = min($totalPages, $page + 1);
                   <input class="form-control" type="text" readonly value="items, orders, stock">
                 </label>
               </div>
+              <?php if ($editSite): ?>
+                <div class="inline-actions" style="margin-top: var(--space-3);">
+                  <a class="btn btn-ghost" target="_blank" href="api/ml_webhook_status.php?site_id=<?= (int)$editSite['id'] ?>">Ver estado webhook (JSON)</a>
+                  <a class="btn btn-ghost" target="_blank" href="api/ml_webhook_status.php?action=recreate&site_id=<?= (int)$editSite['id'] ?>">Recrear suscripción (JSON)</a>
+                </div>
+              <?php endif; ?>
               <small class="muted">El refresh token se guarda automáticamente al conectar y se usa para renovar sesión. No se carga manualmente.</small>
             </div>
           </div>
