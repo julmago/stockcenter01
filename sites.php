@@ -334,7 +334,6 @@ $editConnection = [
   'ml_client_secret' => '',
   'ml_redirect_uri' => '',
   'ml_notification_secret' => '',
-  'ml_notification_callback_url' => '',
   'ml_access_token' => '',
   'ml_refresh_token' => '',
   'ml_token_expires_at' => '',
@@ -343,7 +342,7 @@ $editConnection = [
   'ml_status' => 'DISCONNECTED',
 ];
 if ($editSite) {
-  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_notification_callback_url, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status FROM site_connections WHERE site_id = ? LIMIT 1');
   $st->execute([(int)$editSite['id']]);
   $row = $st->fetch();
   if ($row) {
@@ -359,7 +358,6 @@ if ($editSite) {
       'ml_client_secret' => (string)($row['ml_client_secret'] ?? ''),
       'ml_redirect_uri' => (string)($row['ml_redirect_uri'] ?? ''),
       'ml_notification_secret' => (string)($row['ml_notification_secret'] ?? ''),
-      'ml_notification_callback_url' => (string)($row['ml_notification_callback_url'] ?? ''),
       'ml_access_token' => (string)($row['ml_access_token'] ?? ''),
       'ml_refresh_token' => (string)($row['ml_refresh_token'] ?? ''),
       'ml_token_expires_at' => (string)($row['ml_token_expires_at'] ?? ''),
@@ -387,7 +385,6 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
     'ml_client_secret' => trim(post('ml_client_secret', $editConnection['ml_client_secret'])),
     'ml_redirect_uri' => trim(post('ml_redirect_uri', $editConnection['ml_redirect_uri'])),
     'ml_notification_secret' => trim(post('ml_notification_secret', $editConnection['ml_notification_secret'])),
-    'ml_notification_callback_url' => trim((string)$editConnection['ml_notification_callback_url']),
     'ml_access_token' => $editConnection['ml_access_token'],
     'ml_refresh_token' => $editConnection['ml_refresh_token'],
     'ml_token_expires_at' => $editConnection['ml_token_expires_at'],
@@ -566,7 +563,7 @@ $nextPage = min($totalPages, $page + 1);
               </div>
               <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
-                  <span class="form-label">Redirect URI (OAuth)</span>
+                  <span class="form-label">Callback URL</span>
                   <input class="form-control" type="url" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
                 </label>
                 <label class="form-field">
@@ -586,22 +583,6 @@ $nextPage = min($totalPages, $page + 1);
                   <button class="btn" type="button" disabled title="Guardá el sitio para conectar MercadoLibre">Conectar / Obtener-Actualizar Token</button>
                 <?php endif; ?>
               </div>
-              <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
-                <label class="form-field">
-                  <span class="form-label">Webhook URL (Notificaciones)</span>
-                  <input class="form-control" type="url" readonly value="<?= e($formConnection['ml_notification_callback_url'] !== '' ? $formConnection['ml_notification_callback_url'] : (rtrim(base_url(), '/') . '/ml_webhook.php')) ?>">
-                </label>
-                <label class="form-field">
-                  <span class="form-label">Topics suscriptos esperados</span>
-                  <input class="form-control" type="text" readonly value="items, orders, stock">
-                </label>
-              </div>
-              <?php if ($editSite): ?>
-                <div class="inline-actions" style="margin-top: var(--space-3);">
-                  <a class="btn btn-ghost" target="_blank" href="api/ml_webhook_status.php?site_id=<?= (int)$editSite['id'] ?>">Ver estado webhook (JSON)</a>
-                  <a class="btn btn-ghost" target="_blank" href="api/ml_webhook_status.php?action=recreate&site_id=<?= (int)$editSite['id'] ?>">Recrear suscripción (JSON)</a>
-                </div>
-              <?php endif; ?>
               <small class="muted">El refresh token se guarda automáticamente al conectar y se usa para renovar sesión. No se carga manualmente.</small>
             </div>
           </div>
