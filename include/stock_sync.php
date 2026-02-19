@@ -325,8 +325,8 @@ function stock_sync_ml_variation_sku(array $variation, array $item = []): string
       if (!is_array($attribute)) {
         continue;
       }
-      $id = strtoupper(trim((string)($attribute['id'] ?? '')));
-      if (!in_array($id, ['SELLER_SKU', 'SKU', 'SELLER_CUSTOM_FIELD', 'SELLER_PRODUCT_ID'], true)) {
+      $id = strtoupper(trim((string)($attribute['id'] ?? $attribute['attribute_id'] ?? '')));
+      if (!in_array($id, ['SELLER_SKU', 'SKU', 'SELLER_CUSTOM_FIELD'], true)) {
         continue;
       }
       $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? $attribute['value'] ?? ''));
@@ -336,12 +336,12 @@ function stock_sync_ml_variation_sku(array $variation, array $item = []): string
     }
   }
 
-  $sellerSku = trim((string)($variation['seller_sku'] ?? ''));
-  if ($sellerSku !== '') {
-    return $sellerSku;
+  $itemVariations = $item['variations'] ?? [];
+  if (is_array($itemVariations) && count($itemVariations) === 0) {
+    return trim((string)($item['seller_custom_field'] ?? ''));
   }
 
-  return trim((string)($item['seller_custom_field'] ?? ''));
+  return '';
 }
 
 function stock_sync_ml_ensure_user_id(PDO $pdo, int $siteId, array $site): string {
@@ -387,6 +387,7 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
   if (!is_array($itemIds)) {
     $itemIds = [];
   }
+  error_log('[site_test_sku][ml] search site_id=' . $siteId . ' sku=' . $sku . ' item_ids=' . json_encode($itemIds, JSON_UNESCAPED_UNICODE));
 
   if (count($itemIds) === 0) {
     $fallbackQuery = http_build_query(['q' => $sku], '', '&', PHP_QUERY_RFC3986);
@@ -408,6 +409,7 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
       }
       $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($fallbackItemId), $accessToken);
       if ($item['code'] < 200 || $item['code'] >= 300) {
+        error_log('[site_test_sku][ml] item_detail_error site_id=' . $siteId . ' item_id=' . $fallbackItemId . ' http=' . $item['code']);
         continue;
       }
       $itemJson = $item['json'];
@@ -430,6 +432,7 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
     }
     $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
     if ($item['code'] < 200 || $item['code'] >= 300) {
+      error_log('[site_test_sku][ml] item_detail_error site_id=' . $siteId . ' item_id=' . $itemId . ' http=' . $item['code']);
       continue;
     }
 
@@ -474,6 +477,9 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
     }
 
     if ($sku !== '') {
+      if (count($exactMatches) === 0) {
+        error_log('[site_test_sku][ml] no_variation_sku_match site_id=' . $siteId . ' item_id=' . $itemId . ' sku=' . $sku);
+      }
       $rows = array_merge($rows, $exactMatches);
     } else {
       foreach ($variations as $variation) {

@@ -1310,7 +1310,7 @@ if ($st) {
         return;
       }
 
-      mlBindStatus.textContent = 'Buscando en MercadoLibre...';
+      mlBindStatus.textContent = 'Consultando...';
       mlSearchBody.innerHTML = '';
       mlSearchWrap.style.display = 'none';
 
@@ -1334,12 +1334,8 @@ if ($st) {
           const rowVariationId = String(row.variation_id || '');
           const rowItemId = String(row.item_id || '');
           const rowSku = String(row.sku || '');
-          const isExactMatch = row.is_exact_match === true;
-          if (isExactMatch) {
-            tr.style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
-          }
           tr.innerHTML = `
-            <td>${rowSku || '—'}${isExactMatch ? ' <strong>(coincide)</strong>' : ''}</td>
+            <td>${rowSku || ''}</td>
             <td>${row.title || ''}</td>
             <td>${toIntDisplay(row.price)}</td>
             <td>${toIntDisplay(row.stock)}</td>
@@ -1420,13 +1416,9 @@ if ($st) {
         });
 
         mlSearchWrap.style.display = '';
-        if (payload.has_exact_match === false) {
-          mlBindStatus.textContent = `No hay coincidencia exacta para SKU ${productSku}. Mostrando ${rows.length} resultado(s).`;
-        } else {
-          mlBindStatus.textContent = `Resultados encontrados: ${rows.length}.`;
-        }
+        mlBindStatus.textContent = `Resultados encontrados: ${rows.length}.`;
       } catch (err) {
-        mlBindStatus.textContent = 'Error de red al buscar en MercadoLibre.';
+        mlBindStatus.textContent = 'No se pudo probar el SKU.';
       }
     });
   }
