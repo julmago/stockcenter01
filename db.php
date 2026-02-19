@@ -419,6 +419,7 @@ function ensure_sites_schema(): void {
     ml_connected_at DATETIME NULL,
     ml_user_id VARCHAR(40) NULL,
     ml_notification_secret VARCHAR(255) NULL,
+    ml_notification_callback_url VARCHAR(255) NULL,
     ml_subscription_id VARCHAR(120) NULL,
     ml_subscription_topic VARCHAR(50) NULL,
     ml_subscription_updated_at DATETIME NULL,
@@ -464,6 +465,9 @@ function ensure_sites_schema(): void {
   }
   if (!isset($connColumns['ml_notification_secret'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_notification_secret VARCHAR(255) NULL AFTER ml_user_id");
+  }
+  if (!isset($connColumns['ml_notification_callback_url'])) {
+    $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_notification_callback_url VARCHAR(255) NULL AFTER ml_notification_secret");
   }
   if (!isset($connColumns['ml_subscription_topic'])) {
     $pdo->exec("ALTER TABLE site_connections ADD COLUMN ml_subscription_topic VARCHAR(50) NULL AFTER ml_subscription_id");

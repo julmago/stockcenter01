@@ -162,7 +162,17 @@ try {
 
   try {
     $callbackUrl = rtrim(base_url(), '/') . '/ml_webhook.php';
-    stock_sync_ml_register_default_subscriptions($siteId, $callbackUrl);
+    $subResult = stock_sync_ml_register_default_subscriptions($siteId, $callbackUrl);
+
+    $topicsSummary = [];
+    foreach ((array)($subResult['topics'] ?? []) as $topicName => $topicResult) {
+      $topicsSummary[] = $topicName . ':' . (((bool)($topicResult['ok'] ?? false)) ? 'ok' : 'fail');
+    }
+
+    $pdo->prepare('UPDATE site_connections SET ml_notification_callback_url = ?, updated_at = NOW() WHERE site_id = ?')
+      ->execute([$callbackUrl, $siteId]);
+
+    error_log('[ml_oauth_callback] ML webhook callback configurada site_id=' . $siteId . ' callback=' . $callbackUrl . ' topics=' . implode(',', $topicsSummary));
   } catch (Throwable $subscriptionError) {
     error_log('[ml_oauth_callback] ML subscribe error site_id=' . $siteId . ' err=' . $subscriptionError->getMessage());
   }

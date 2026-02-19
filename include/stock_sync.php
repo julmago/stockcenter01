@@ -755,7 +755,7 @@ function stock_sync_ml_register_subscription(int $siteId, string $callbackUrl, s
   ensure_stock_sync_schema();
 
   $topic = trim(strtolower($topic));
-  if (!in_array($topic, ['items', 'orders'], true)) {
+  if (!in_array($topic, ['items', 'orders', 'stock'], true)) {
     $topic = 'items';
   }
 
@@ -792,15 +792,15 @@ function stock_sync_ml_register_subscription(int $siteId, string $callbackUrl, s
   }
 
   $subscriptionId = trim((string)($resp['json']['id'] ?? $resp['json']['subscription_id'] ?? $resp['json']['myfeed_id'] ?? ''));
-  $up = db()->prepare('UPDATE site_connections SET ml_app_id = ?, ml_subscription_id = ?, ml_subscription_topic = ?, ml_subscription_updated_at = NOW(), updated_at = NOW() WHERE site_id = ?');
-  $up->execute([$appId, $subscriptionId !== '' ? $subscriptionId : null, $topic, $siteId]);
+  $up = db()->prepare('UPDATE site_connections SET ml_app_id = ?, ml_notification_callback_url = ?, ml_subscription_id = ?, ml_subscription_topic = ?, ml_subscription_updated_at = NOW(), updated_at = NOW() WHERE site_id = ?');
+  $up->execute([$appId, $callbackUrl, $subscriptionId !== '' ? $subscriptionId : null, $topic, $siteId]);
 
   return ['ok' => true, 'subscription_id' => $subscriptionId, 'topic' => $topic];
 }
 
 
 function stock_sync_ml_register_default_subscriptions(int $siteId, string $callbackUrl): array {
-  $topics = ['items', 'orders'];
+  $topics = ['items', 'orders', 'stock'];
   $results = [];
   $ok = true;
 
