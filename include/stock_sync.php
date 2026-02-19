@@ -76,6 +76,8 @@ function ensure_stock_sync_schema(): void {
     ml_variation_id VARCHAR(120) NULL,
     ml_sku VARCHAR(190) NULL,
     title VARCHAR(255) NULL,
+    last_push_ts DATETIME NULL,
+    last_sync_source VARCHAR(20) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_ts_ml_links (product_id, site_id, ml_item_id, ml_variation_id),
@@ -83,6 +85,18 @@ function ensure_stock_sync_schema(): void {
     CONSTRAINT fk_ts_ml_links_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     CONSTRAINT fk_ts_ml_links_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  $mlLinkColumns = [];
+  $st = $pdo->query('SHOW COLUMNS FROM ts_ml_links');
+  foreach ($st->fetchAll() as $row) {
+    $mlLinkColumns[(string)$row['Field']] = true;
+  }
+  if (!isset($mlLinkColumns['last_push_ts'])) {
+    $pdo->exec("ALTER TABLE ts_ml_links ADD COLUMN last_push_ts DATETIME NULL AFTER title");
+  }
+  if (!isset($mlLinkColumns['last_sync_source'])) {
+    $pdo->exec("ALTER TABLE ts_ml_links ADD COLUMN last_sync_source VARCHAR(20) NULL AFTER last_push_ts");
+  }
 
   $mapColumns = [];
   $st = $pdo->query('SHOW COLUMNS FROM site_product_map');
@@ -884,7 +898,7 @@ function stock_sync_ml_find_site_by_user_id(string $mlUserId): ?array {
   }
 
   $st = db()->prepare("SELECT s.id, s.name, s.conn_type, s.conn_enabled, s.sync_stock_enabled,
-      sc.ml_access_token, sc.ml_user_id, sc.ml_notification_secret, sc.ml_app_id
+      sc.ml_access_token, sc.ml_refresh_token, sc.ml_status, sc.ml_user_id, sc.ml_notification_secret, sc.ml_app_id
     FROM sites s
     INNER JOIN site_connections sc ON sc.site_id = s.id
     WHERE s.is_active = 1
@@ -1081,7 +1095,7 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
       ]);
 
       if ($ok) {
-        // ok
+        stock_sync_ml_mark_push($pdo, $siteId, $mlItemId, $variationToUse, 'TSWORK');
       } else {
         $siteErrors[] = $errorMessage;
       }
@@ -1162,6 +1176,25 @@ function stock_sync_load_ml_links(PDO $pdo, int $siteId, int $productId): array 
     'title' => null,
     'created_at' => null,
   ]];
+}
+
+function stock_sync_ml_mark_push(PDO $pdo, int $siteId, string $itemId, ?string $variationId, string $source = 'TSWORK'): void {
+  $itemId = trim($itemId);
+  if ($itemId === '') {
+    return;
+  }
+
+  $variationId = $variationId !== null ? trim($variationId) : null;
+  if ($variationId === '') {
+    $variationId = null;
+  }
+
+  $st = $pdo->prepare('UPDATE ts_ml_links
+    SET last_push_ts = NOW(), last_sync_source = ?
+    WHERE site_id = ?
+      AND ml_item_id = ?
+      AND ((? IS NULL AND (ml_variation_id IS NULL OR ml_variation_id = "" OR ml_variation_id = "0")) OR ml_variation_id = ?)');
+  $st->execute([mb_substr(trim($source), 0, 20), $siteId, $itemId, $variationId, $variationId]);
 }
 
 function stock_sync_resolve_shop_id(array $site): int {

@@ -63,6 +63,7 @@ foreach ($jobs as $job) {
           continue;
         }
         MercadoLibreAdapter::updateStock((string)$site['ml_access_token'], $itemId, $variationId !== '' ? $variationId : null, $qty);
+        stock_sync_ml_mark_push($pdo, $siteId, $itemId, $variationId !== '' ? $variationId : null, 'TSWORK');
       }
     } else {
       throw new RuntimeException('Tipo de conexión no soportado para sync de stock.');
