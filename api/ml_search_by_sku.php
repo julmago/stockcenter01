@@ -38,7 +38,7 @@ function ml_search_variation_matches_sku(array $variation, string $sku): bool {
         continue;
       }
       $id = strtoupper(trim((string)($attribute['id'] ?? '')));
-      if ($id !== 'SELLER_SKU') {
+      if (!in_array($id, ['SELLER_SKU', 'SELLER_CUSTOM_FIELD', 'SELLER_PRODUCT_ID'], true)) {
         continue;
       }
       if (
@@ -55,7 +55,7 @@ function ml_search_variation_matches_sku(array $variation, string $sku): bool {
 }
 
 function ml_search_fetch_item(string $itemId, string $accessToken, array &$logs): ?array {
-  $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
+  $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId) . '?include_attributes=all', $accessToken);
   if ($item['code'] < 200 || $item['code'] >= 300) {
     $logs[] = sprintf('GET /items/%s -> HTTP %d (omitido)', $itemId, (int)$item['code']);
     return null;
@@ -183,6 +183,58 @@ try {
   }
 
   if (count($rows) === 0) {
+    $queryText = http_build_query(['q' => $sku], '', '&', PHP_QUERY_RFC3986);
+    $searchText = stock_sync_ml_http_get('https://api.mercadolibre.com/users/' . rawurlencode($mlUserId) . '/items/search?' . $queryText, $accessToken);
+    if ($searchText['code'] >= 200 && $searchText['code'] < 300) {
+      $itemIdsText = $searchText['json']['results'] ?? [];
+      if (!is_array($itemIdsText)) {
+        $itemIdsText = [];
+      }
+      $logs[] = 'Intento B /items/search?q: resultados=' . count($itemIdsText);
+
+      foreach ($itemIdsText as $itemIdRaw) {
+        $itemId = trim((string)$itemIdRaw);
+        if ($itemId === '') {
+          continue;
+        }
+        $itemJson = ml_search_fetch_item($itemId, $accessToken, $logs);
+        if ($itemJson === null) {
+          continue;
+        }
+
+        if (ml_search_value_matches_sku($itemJson['seller_custom_field'] ?? null, $sku)) {
+          $key = $itemId . '|';
+          if (!isset($seen[$key])) {
+            $rows[] = ml_search_build_row($itemJson, $itemId, null, 'item.seller_custom_field(q)');
+            $seen[$key] = true;
+          }
+        }
+
+        $variations = $itemJson['variations'] ?? [];
+        if (!is_array($variations)) {
+          continue;
+        }
+        foreach ($variations as $variation) {
+          if (!is_array($variation) || !ml_search_variation_matches_sku($variation, $sku)) {
+            continue;
+          }
+          $variationId = trim((string)($variation['id'] ?? ''));
+          if ($variationId === '') {
+            continue;
+          }
+          $key = $itemId . '|' . $variationId;
+          if (!isset($seen[$key])) {
+            $rows[] = ml_search_build_row($itemJson, $itemId, $variationId, 'variations.attributes.SELLER_SKU(q)');
+            $seen[$key] = true;
+          }
+        }
+      }
+    } else {
+      $logs[] = 'Intento B /items/search?q falló HTTP ' . $searchText['code'];
+    }
+  }
+
+  if (count($rows) === 0) {
     $offset = 0;
     $limit = 50;
     $page = 0;
@@ -202,11 +254,11 @@ try {
 
       $scanItemIds = $scan['json']['results'] ?? [];
       if (!is_array($scanItemIds) || count($scanItemIds) === 0) {
-        $logs[] = 'Intento B scan offset=' . $offset . ': resultados=0';
+        $logs[] = 'Intento C scan offset=' . $offset . ': resultados=0';
         break;
       }
 
-      $logs[] = 'Intento B scan offset=' . $offset . ': resultados=' . count($scanItemIds);
+      $logs[] = 'Intento C scan offset=' . $offset . ': resultados=' . count($scanItemIds);
       foreach ($scanItemIds as $itemIdRaw) {
         $itemId = trim((string)$itemIdRaw);
         if ($itemId === '') {
@@ -250,7 +302,7 @@ try {
       $page++;
     }
 
-    $logs[] = 'Intento B scan completado: items_inspeccionados=' . $scannedItems . ', matches=' . count($rows);
+    $logs[] = 'Intento C scan completado: items_inspeccionados=' . $scannedItems . ', matches=' . count($rows);
   }
 
   if (count($rows) === 0) {
