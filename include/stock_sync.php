@@ -288,7 +288,7 @@ function stock_sync_ml_extract_sku(array $item, string $defaultSku): string {
         continue;
       }
       $id = strtoupper(trim((string)($attribute['id'] ?? '')));
-      if ($id !== 'SELLER_SKU') {
+      if (!in_array($id, ['SELLER_SKU', 'SELLER_CUSTOM_FIELD', 'SELLER_PRODUCT_ID'], true)) {
         continue;
       }
       $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? ''));
@@ -326,7 +326,7 @@ function stock_sync_ml_variation_sku(array $variation, array $item = []): string
         continue;
       }
       $id = strtoupper(trim((string)($attribute['id'] ?? $attribute['attribute_id'] ?? '')));
-      if (!in_array($id, ['SELLER_SKU', 'SKU', 'SELLER_CUSTOM_FIELD'], true)) {
+      if (!in_array($id, ['SELLER_SKU', 'SKU', 'SELLER_CUSTOM_FIELD', 'SELLER_PRODUCT_ID'], true)) {
         continue;
       }
       $value = trim((string)($attribute['value_name'] ?? $attribute['value_id'] ?? $attribute['value'] ?? ''));
@@ -407,14 +407,28 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
       if ($fallbackItemId === '') {
         continue;
       }
-      $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($fallbackItemId), $accessToken);
+      $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($fallbackItemId) . '?include_attributes=all', $accessToken);
       if ($item['code'] < 200 || $item['code'] >= 300) {
         error_log('[site_test_sku][ml] item_detail_error site_id=' . $siteId . ' item_id=' . $fallbackItemId . ' http=' . $item['code']);
         continue;
       }
       $itemJson = $item['json'];
-      $sellerCustomField = trim((string)($itemJson['seller_custom_field'] ?? ''));
-      if (stock_sync_ml_sku_matches($sellerCustomField, $sku)) {
+      $itemSku = stock_sync_ml_extract_sku($itemJson, '');
+      $matchedByVariation = false;
+      $variations = $itemJson['variations'] ?? [];
+      if (is_array($variations)) {
+        foreach ($variations as $variation) {
+          if (!is_array($variation)) {
+            continue;
+          }
+          if (stock_sync_ml_sku_matches(stock_sync_ml_variation_sku($variation, $itemJson), $sku)) {
+            $matchedByVariation = true;
+            break;
+          }
+        }
+      }
+
+      if (stock_sync_ml_sku_matches($itemSku, $sku) || $matchedByVariation) {
         $matchedFallback[] = $fallbackItemId;
       }
     }
@@ -430,7 +444,7 @@ function stock_sync_ml_search_by_sku(PDO $pdo, array $site, int $siteId, string 
     if ($itemId === '') {
       continue;
     }
-    $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId), $accessToken);
+    $item = stock_sync_ml_http_get('https://api.mercadolibre.com/items/' . rawurlencode($itemId) . '?include_attributes=all', $accessToken);
     if ($item['code'] < 200 || $item['code'] >= 300) {
       error_log('[site_test_sku][ml] item_detail_error site_id=' . $siteId . ' item_id=' . $itemId . ' http=' . $item['code']);
       continue;
