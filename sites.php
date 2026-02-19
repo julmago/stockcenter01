@@ -566,7 +566,7 @@ $nextPage = min($totalPages, $page + 1);
               </div>
               <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
-                  <span class="form-label">Callback URL</span>
+                  <span class="form-label">Redirect URI (OAuth)</span>
                   <input class="form-control" type="url" readonly value="<?= e($formConnection['ml_redirect_uri']) ?>">
                 </label>
                 <label class="form-field">
@@ -588,7 +588,7 @@ $nextPage = min($totalPages, $page + 1);
               </div>
               <div class="grid" style="grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: var(--space-3);">
                 <label class="form-field">
-                  <span class="form-label">Webhook URL configurada</span>
+                  <span class="form-label">Webhook URL (Notificaciones)</span>
                   <input class="form-control" type="url" readonly value="<?= e($formConnection['ml_notification_callback_url'] !== '' ? $formConnection['ml_notification_callback_url'] : (rtrim(base_url(), '/') . '/ml_webhook.php')) ?>">
                 </label>
                 <label class="form-field">

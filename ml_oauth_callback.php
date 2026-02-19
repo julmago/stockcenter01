@@ -3,7 +3,6 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/include/stock_sync.php';
 
-require_login();
 ensure_sites_schema();
 
 function ml_http_build_query(array $params): string {
@@ -84,7 +83,9 @@ function ml_oauth_state_decode(string $state, string $secret): ?array {
 $code = trim((string)get('code', ''));
 $state = trim((string)get('state', ''));
 if ($code === '' || $state === '') {
-  header('Location: sites.php?oauth_error=code');
+  http_response_code(200);
+  header('Content-Type: text/plain; charset=utf-8');
+  echo "OAuth callback. Falta code/state.";
   exit;
 }
 
