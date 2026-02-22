@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/include/stock.php';
 require_once __DIR__ . '/include/stock_sync.php';
+require_once __DIR__ . '/prestashop.php';
 require_login();
 require_permission(can_sync_prestashop());
 
@@ -56,6 +58,10 @@ $results = [];
 $ok = 0; $fail = 0; $skip = 0; $omitted = 0;
 $total_sent = 0;
 $pending_after_total = 0;
+$mode = ps_mode(); // replace|add
+$sync_interpretation = $mode === 'replace' ? 'SET' : 'DELTA';
+$currentUser = current_user();
+$currentUserId = (int)($currentUser['id'] ?? 0);
 
 foreach ($items as $it) {
   $sku = (string)$it['sku'];
@@ -77,7 +83,46 @@ foreach ($items as $it) {
   }
 
   try {
-    $push_status = sync_push_stock_to_sites_by_product((int)$it['product_id'], $sku, $qty, null);
+    $product_id = (int)$it['product_id'];
+    $old_stock = (int)(get_stock($product_id)['qty'] ?? 0);
+    $input_value = $sync_interpretation === 'SET' ? $qty : $pending_qty;
+    $computed_new_stock = $sync_interpretation === 'SET'
+      ? $qty
+      : ($old_stock + $pending_qty);
+
+    if ($sync_interpretation === 'SET') {
+      set_stock(
+        $product_id,
+        $computed_new_stock,
+        sprintf('Sincronizar Todo [%s] qty=%d', $sync_interpretation, $input_value),
+        $currentUserId,
+        'tswork',
+        null,
+        null,
+        'inventario'
+      );
+    } else {
+      add_stock(
+        $product_id,
+        $pending_qty,
+        sprintf('Sincronizar Todo [%s] delta=%+d', $sync_interpretation, $input_value),
+        $currentUserId,
+        'tswork'
+      );
+    }
+
+    $delta_saved = $computed_new_stock - $old_stock;
+    error_log(sprintf(
+      '[Sincronizar Todo] SKU=%s old_stock=%d input_value=%d interpreted_as=%s computed_new_stock=%d delta_saved=%+d',
+      $sku,
+      $old_stock,
+      $input_value,
+      $sync_interpretation,
+      $computed_new_stock,
+      $delta_saved
+    ));
+
+    $push_status = sync_push_stock_to_sites_by_product($product_id, $sku, $computed_new_stock, null);
     $attempted = count($push_status);
 
     if ($attempted <= 0) {
@@ -91,7 +136,7 @@ foreach ($items as $it) {
         'qty' => 0,
         'status' => 'OMITIDO',
         'progress' => $synced_qty . '/' . $qty,
-        'detail' => $detail,
+        'detail' => $detail . sprintf(' | old_stock=%d input_value=%d interpreted_as=%s computed_new_stock=%d delta_saved=%+d', $old_stock, $input_value, $sync_interpretation, $computed_new_stock, $delta_saved),
       ];
       $omitted++;
       continue;
@@ -115,7 +160,7 @@ foreach ($items as $it) {
         'qty' => 0,
         'status' => 'ERROR',
         'progress' => $synced_qty . '/' . $qty,
-        'detail' => implode(' | ', $errors),
+        'detail' => implode(' | ', $errors) . sprintf(' | old_stock=%d input_value=%d interpreted_as=%s computed_new_stock=%d delta_saved=%+d', $old_stock, $input_value, $sync_interpretation, $computed_new_stock, $delta_saved),
       ];
       $fail++;
       continue;
@@ -139,7 +184,7 @@ foreach ($items as $it) {
       'qty' => $pending_qty,
       'status' => 'OK',
       'progress' => $new_synced_qty . '/' . $qty,
-      'detail' => $detail,
+      'detail' => $detail . sprintf(' | old_stock=%d input_value=%d interpreted_as=%s computed_new_stock=%d delta_saved=%+d', $old_stock, $input_value, $sync_interpretation, $computed_new_stock, $delta_saved),
     ];
     $ok++;
   } catch (Throwable $t) {
