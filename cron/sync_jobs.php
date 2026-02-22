@@ -27,7 +27,7 @@ foreach ($jobs as $job) {
       throw new RuntimeException('Payload inválido.');
     }
 
-    $siteSt = $pdo->prepare("SELECT s.id, s.conn_type, s.conn_enabled, s.sync_stock_enabled, sc.channel_type, sc.enabled,
+    $siteSt = $pdo->prepare("SELECT s.id, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.stock_sync_mode, sc.channel_type, sc.enabled,
       sc.ps_base_url, sc.ps_api_key, sc.ml_access_token
       FROM sites s
       LEFT JOIN site_connections sc ON sc.site_id = s.id
@@ -36,6 +36,10 @@ foreach ($jobs as $job) {
     $site = $siteSt->fetch();
     if (!$site) {
       throw new RuntimeException('Sitio inexistente.');
+    }
+
+    if (!stock_sync_allows_push($site)) {
+      throw new RuntimeException('Modo de sincronización sin push TS→Sitio.');
     }
 
     $productSt = $pdo->prepare('SELECT sku FROM products WHERE id = ? LIMIT 1');

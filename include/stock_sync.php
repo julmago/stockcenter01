@@ -32,6 +32,10 @@ function ensure_stock_sync_schema(): void {
   if (!isset($siteColumns['sync_stock_enabled'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER conn_enabled");
   }
+  if (!isset($siteColumns['stock_sync_mode'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN stock_sync_mode ENUM('OFF','BIDIR','TS_TO_SITE','SITE_TO_TS') NOT NULL DEFAULT 'OFF' AFTER sync_stock_enabled");
+    $pdo->exec("UPDATE sites SET stock_sync_mode = CASE WHEN sync_stock_enabled = 1 THEN 'BIDIR' ELSE 'OFF' END WHERE stock_sync_mode = 'OFF'");
+  }
   if (!isset($siteColumns['last_sync_at'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN last_sync_at DATETIME NULL AFTER sync_stock_enabled");
   }
@@ -206,10 +210,30 @@ function stock_sync_site_has_credentials(array $site): bool {
   return false;
 }
 
+function stock_sync_mode(array $site): string {
+  $mode = strtoupper(trim((string)($site['stock_sync_mode'] ?? '')));
+  if ($mode === '') {
+    return (int)($site['sync_stock_enabled'] ?? 0) === 1 ? 'BIDIR' : 'OFF';
+  }
+  if (!in_array($mode, ['OFF', 'BIDIR', 'TS_TO_SITE', 'SITE_TO_TS'], true)) {
+    return (int)($site['sync_stock_enabled'] ?? 0) === 1 ? 'BIDIR' : 'OFF';
+  }
+  return $mode;
+}
+
+function stock_sync_allows_push(array $site): bool {
+  return in_array(stock_sync_mode($site), ['BIDIR', 'TS_TO_SITE'], true);
+}
+
+function stock_sync_allows_pull(array $site): bool {
+  return in_array(stock_sync_mode($site), ['BIDIR', 'SITE_TO_TS'], true);
+}
+
+
 function stock_sync_active_sites(): array {
   ensure_stock_sync_schema();
 
-  $sql = "SELECT s.id, s.name, s.is_active, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.last_sync_at,
+  $sql = "SELECT s.id, s.name, s.is_active, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.stock_sync_mode, s.last_sync_at,
       sc.channel_type, sc.enabled AS connection_enabled, sc.ps_base_url, sc.ps_api_key, sc.ps_shop_id,
       sc.ml_client_id, sc.ml_app_id, sc.ml_client_secret, sc.ml_access_token, sc.ml_refresh_token, sc.ml_user_id, sc.ml_subscription_id, sc.ml_subscription_topic, sc.ml_subscription_updated_at, sc.ml_status
     FROM sites s
@@ -612,8 +636,7 @@ function enqueue_stock_push_jobs(int $productId, int $qty, string $origin, ?int 
   foreach ($sites as $site) {
     $siteId = (int)$site['id'];
     $connEnabled = (int)($site['conn_enabled'] ?? 0) === 1 || (int)($site['connection_enabled'] ?? 0) === 1;
-    $syncEnabled = (int)($site['sync_stock_enabled'] ?? 0) === 1;
-    if (!$connEnabled || !$syncEnabled || !stock_sync_site_has_credentials($site)) {
+    if (!$connEnabled || !stock_sync_allows_push($site) || !stock_sync_site_has_credentials($site)) {
       continue;
     }
     if ($sourceSiteId !== null && $siteId === $sourceSiteId) {
@@ -897,7 +920,7 @@ function stock_sync_ml_find_site_by_user_id(string $mlUserId): ?array {
     return null;
   }
 
-  $st = db()->prepare("SELECT s.id, s.name, s.conn_type, s.conn_enabled, s.sync_stock_enabled,
+  $st = db()->prepare("SELECT s.id, s.name, s.conn_type, s.conn_enabled, s.sync_stock_enabled, s.stock_sync_mode,
       sc.ml_access_token, sc.ml_refresh_token, sc.ml_status, sc.ml_user_id, sc.ml_notification_secret, sc.ml_app_id
     FROM sites s
     INNER JOIN site_connections sc ON sc.site_id = s.id
@@ -957,8 +980,7 @@ function sync_push_stock_to_sites_by_product(int $productId, string $sku, int $n
     }
 
     $connEnabled = (int)($site['conn_enabled'] ?? 0) === 1 || (int)($site['connection_enabled'] ?? 0) === 1;
-    $syncEnabled = (int)($site['sync_stock_enabled'] ?? 0) === 1;
-    if (!$connEnabled || !$syncEnabled) {
+    if (!$connEnabled || !stock_sync_allows_push($site)) {
       continue;
     }
 
@@ -1381,7 +1403,7 @@ function get_prestashop_sync_sites(): array {
     $connEnabled = (int)($site['conn_enabled'] ?? 0) === 1 || (int)($site['connection_enabled'] ?? 0) === 1;
     return stock_sync_conn_type($site) === 'prestashop'
       && $connEnabled
-      && (int)($site['sync_stock_enabled'] ?? 0) === 1
+      && stock_sync_allows_pull($site)
       && stock_sync_site_has_credentials($site);
   }));
 }

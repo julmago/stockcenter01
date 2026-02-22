@@ -356,6 +356,7 @@ function ensure_sites_schema(): void {
     conn_type ENUM('none','prestashop','mercadolibre') NOT NULL DEFAULT 'none',
     conn_enabled TINYINT(1) NOT NULL DEFAULT 0,
     sync_stock_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    stock_sync_mode ENUM('OFF','BIDIR','TS_TO_SITE','SITE_TO_TS') NOT NULL DEFAULT 'OFF',
     last_sync_at DATETIME NULL,
     margin_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -399,6 +400,11 @@ function ensure_sites_schema(): void {
 
   if (!isset($site_columns['last_sync_at'])) {
     $pdo->exec("ALTER TABLE sites ADD COLUMN last_sync_at DATETIME NULL AFTER sync_stock_enabled");
+  }
+
+  if (!isset($site_columns['stock_sync_mode'])) {
+    $pdo->exec("ALTER TABLE sites ADD COLUMN stock_sync_mode ENUM('OFF','BIDIR','TS_TO_SITE','SITE_TO_TS') NOT NULL DEFAULT 'OFF' AFTER sync_stock_enabled");
+    $pdo->exec("UPDATE sites SET stock_sync_mode = CASE WHEN sync_stock_enabled = 1 THEN 'BIDIR' ELSE 'OFF' END WHERE stock_sync_mode = 'OFF'");
   }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS site_connections (
