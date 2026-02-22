@@ -364,6 +364,12 @@ $show_subtitle = $list_name !== '' && $list_name !== $page_title;
               <span class="muted small">(sin pendientes)</span>
             <?php endif; ?>
           </form>
+
+          <form method="post" style="display:inline;" action="all_sync.php?id=<?= (int)$list['id'] ?>">
+            <button class="btn" type="submit" <?= $can_sync ? '' : 'disabled' ?>>
+              Sincronizar Todo
+            </button>
+          </form>
         <?php endif; ?>
       </div>
 
