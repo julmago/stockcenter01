@@ -24,6 +24,16 @@ function normalize_channel_type($value): string {
 }
 
 
+
+
+function normalize_stock_sync_mode($value, int $syncStockEnabled): string {
+  $mode = strtoupper(trim((string)$value));
+  if (in_array($mode, ['OFF', 'BIDIR', 'TS_TO_SITE', 'SITE_TO_TS'], true)) {
+    return $mode;
+  }
+  return $syncStockEnabled === 1 ? 'BIDIR' : 'OFF';
+}
+
 function ml_default_callback_url(): string {
   $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
   $host = (string)($_SERVER['HTTP_HOST'] ?? '');
@@ -45,7 +55,9 @@ if (is_post()) {
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
-    $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
+    $syncStockEnabledLegacy = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
+    $stockSyncMode = normalize_stock_sync_mode(post('stock_sync_mode', ''), $syncStockEnabledLegacy);
+    $syncStockEnabled = $stockSyncMode === 'OFF' ? 0 : 1;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
     $webhookSecret = trim(post('webhook_secret'));
@@ -73,8 +85,8 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('INSERT INTO sites(name, channel_type, conn_type, conn_enabled, sync_stock_enabled, margin_percent, is_active, is_visible, show_in_product, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-          $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct]);
+          $st = $pdo->prepare('INSERT INTO sites(name, channel_type, conn_type, conn_enabled, sync_stock_enabled, stock_sync_mode, margin_percent, is_active, is_visible, show_in_product, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+          $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $stockSyncMode, $margin, $isActive, $showInList, $showInProduct]);
           $siteId = (int)$pdo->lastInsertId();
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
@@ -152,7 +164,9 @@ if (is_post()) {
     $showInList = post('is_visible', '1') === '0' ? 0 : 1;
     $showInProduct = post('show_in_product', '1') === '0' ? 0 : 1;
     $connectionEnabled = post('connection_enabled', '0') === '1' ? 1 : 0;
-    $syncStockEnabled = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
+    $syncStockEnabledLegacy = post('sync_stock_enabled', '0') === '1' ? 1 : 0;
+    $stockSyncMode = normalize_stock_sync_mode(post('stock_sync_mode', ''), $syncStockEnabledLegacy);
+    $syncStockEnabled = $stockSyncMode === 'OFF' ? 0 : 1;
     $psBaseUrl = trim(post('ps_base_url'));
     $psApiKey = trim(post('ps_api_key'));
     $webhookSecret = trim(post('webhook_secret'));
@@ -182,8 +196,8 @@ if (is_post()) {
         if ($st->fetch()) {
           $error = 'Ese sitio ya existe.';
         } else {
-          $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
-          $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $margin, $isActive, $showInList, $showInProduct, $id]);
+          $st = $pdo->prepare('UPDATE sites SET name = ?, channel_type = ?, conn_type = ?, conn_enabled = ?, sync_stock_enabled = ?, stock_sync_mode = ?, margin_percent = ?, is_active = ?, is_visible = ?, show_in_product = ?, updated_at = NOW() WHERE id = ?');
+          $st->execute([$name, $channelType, strtolower($channelType), $connectionEnabled, $syncStockEnabled, $stockSyncMode, $margin, $isActive, $showInList, $showInProduct, $id]);
           $effectiveMlRedirectUri = $mlRedirectUri !== '' ? $mlRedirectUri : ml_default_callback_url();
           $st = $pdo->prepare("INSERT INTO site_connections (site_id, channel_type, enabled, ps_base_url, ps_api_key, webhook_secret, ps_shop_id, ml_client_id, ml_client_secret, ml_redirect_uri, ml_notification_secret, ml_access_token, ml_refresh_token, ml_token_expires_at, ml_connected_at, ml_user_id, ml_status, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 'DISCONNECTED', NOW())
@@ -300,7 +314,7 @@ $totalPages = max(1, (int)ceil($total / $limit));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $limit;
 
-$listSql = "SELECT s.id, s.name, s.margin_percent, s.is_active, s.is_visible, s.show_in_product, s.sync_stock_enabled
+$listSql = "SELECT s.id, s.name, s.margin_percent, s.is_active, s.is_visible, s.show_in_product, s.sync_stock_enabled, s.stock_sync_mode
   FROM sites s
   $where
   ORDER BY s.name ASC
@@ -317,7 +331,7 @@ $sites = $listSt->fetchAll();
 $editId = (int)get('edit_id', '0');
 $editSite = null;
 if ($editId > 0) {
-  $st = $pdo->prepare('SELECT id, name, channel_type, conn_type, conn_enabled, sync_stock_enabled, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
+  $st = $pdo->prepare('SELECT id, name, channel_type, conn_type, conn_enabled, sync_stock_enabled, stock_sync_mode, margin_percent, is_active, is_visible, show_in_product FROM sites WHERE id = ? LIMIT 1');
   $st->execute([$editId]);
   $editSite = $st->fetch();
 }
@@ -326,6 +340,7 @@ $editConnection = [
   'channel_type' => $editSite ? normalize_channel_type($editSite['channel_type'] ?? 'NONE') : 'NONE',
   'enabled' => (int)($editSite['conn_enabled'] ?? 0),
   'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 0),
+  'stock_sync_mode' => (string)($editSite['stock_sync_mode'] ?? ((int)($editSite['sync_stock_enabled'] ?? 0) === 1 ? 'BIDIR' : 'OFF')),
   'ps_base_url' => '',
   'ps_api_key' => '',
   'webhook_secret' => '',
@@ -350,6 +365,7 @@ if ($editSite) {
       'channel_type' => normalize_channel_type($row['channel_type'] ?? $editConnection['channel_type']),
       'enabled' => (int)($row['enabled'] ?? 0),
       'sync_stock_enabled' => (int)($editSite['sync_stock_enabled'] ?? 0),
+      'stock_sync_mode' => (string)($editSite['stock_sync_mode'] ?? ((int)($editSite['sync_stock_enabled'] ?? 0) === 1 ? 'BIDIR' : 'OFF')),
       'ps_base_url' => (string)($row['ps_base_url'] ?? ''),
       'ps_api_key' => (string)($row['ps_api_key'] ?? ''),
       'webhook_secret' => (string)($row['webhook_secret'] ?? ''),
@@ -376,7 +392,8 @@ if (is_post() && $error !== '' && in_array(post('action'), ['create_site', 'upda
   $formConnection = [
     'channel_type' => normalize_channel_type(post('channel_type', $editConnection['channel_type'])),
     'enabled' => post('connection_enabled', (string)$editConnection['enabled']) === '1' ? 1 : 0,
-    'sync_stock_enabled' => post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '1' ? 1 : 0,
+    'stock_sync_mode' => normalize_stock_sync_mode(post('stock_sync_mode', (string)($editConnection['stock_sync_mode'] ?? '')), post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '1' ? 1 : 0),
+    'sync_stock_enabled' => normalize_stock_sync_mode(post('stock_sync_mode', (string)($editConnection['stock_sync_mode'] ?? '')), post('sync_stock_enabled', (string)$editConnection['sync_stock_enabled']) === '1' ? 1 : 0) === 'OFF' ? 0 : 1,
     'ps_base_url' => trim(post('ps_base_url', $editConnection['ps_base_url'])),
     'ps_api_key' => trim(post('ps_api_key', $editConnection['ps_api_key'])),
     'webhook_secret' => trim(post('webhook_secret', $editConnection['webhook_secret'])),
@@ -515,10 +532,12 @@ $nextPage = min($totalPages, $page + 1);
               </label>
               <label class="form-field">
                 <span class="form-label">Sincronizar stock</span>
-                <select class="form-control" name="sync_stock_enabled">
-                  <?php $syncStockValue = isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 0; ?>
-                  <option value="1" <?= $syncStockValue === 1 ? 'selected' : '' ?>>Sí</option>
-                  <option value="0" <?= $syncStockValue === 0 ? 'selected' : '' ?>>No</option>
+                <select class="form-control" name="stock_sync_mode">
+                  <?php $syncModeValue = normalize_stock_sync_mode((string)($formConnection['stock_sync_mode'] ?? ''), isset($formConnection['sync_stock_enabled']) ? (int)$formConnection['sync_stock_enabled'] : 0); ?>
+                  <option value="OFF" <?= $syncModeValue === 'OFF' ? 'selected' : '' ?>>No</option>
+                  <option value="BIDIR" <?= $syncModeValue === 'BIDIR' ? 'selected' : '' ?>>Bidireccional</option>
+                  <option value="TS_TO_SITE" <?= $syncModeValue === 'TS_TO_SITE' ? 'selected' : '' ?>>TSWork → Sitio</option>
+                  <option value="SITE_TO_TS" <?= $syncModeValue === 'SITE_TO_TS' ? 'selected' : '' ?>>Sitio → TSWork</option>
                 </select>
               </label>
             </div>

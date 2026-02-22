@@ -72,12 +72,16 @@ if ($sku === '' || !is_numeric($qtyRaw)) {
 $qtyNew = (int)$qtyRaw;
 $pdo = db();
 if ($siteId > 0) {
-  $siteSt = $pdo->prepare('SELECT s.id, s.name FROM sites s WHERE s.id = ? LIMIT 1');
+  $siteSt = $pdo->prepare('SELECT s.id, s.name, s.stock_sync_mode, s.sync_stock_enabled FROM sites s WHERE s.id = ? LIMIT 1');
   $siteSt->execute([$siteId]);
   $site = $siteSt->fetch();
   if (!$site) {
     stock_webhook_json(['ok' => false, 'error' => 'Site no encontrado.'], 404);
   }
+}
+
+if ($siteId > 0 && isset($site) && !stock_sync_allows_pull($site)) {
+  stock_webhook_json(['ok' => true, 'ignored' => true, 'reason' => 'Modo sin pull Sitio→TSWork.']);
 }
 
 $st = $pdo->prepare('SELECT id, sku FROM products WHERE sku = ? ORDER BY id ASC');
@@ -110,7 +114,7 @@ $note = sprintf(
 );
 $eventId = 'ps-webhook-' . sha1($siteId . '|' . $sku . '|' . $timestamp . '|' . $event);
 $stock = set_stock($productId, $qtyNew, $note, 0, 'prestashop', $siteId, $eventId, 'sync_pull_webhook');
-$pushStatus = sync_push_stock_to_sites($sku, (int)$stock['qty'], $siteId > 0 ? $siteId : null);
+$pushStatus = ($siteId > 0 && isset($site) && !stock_sync_allows_push($site)) ? [] : sync_push_stock_to_sites($sku, (int)$stock['qty'], $siteId > 0 ? $siteId : null);
 
 $okPushCount = 0;
 $errorPushes = [];

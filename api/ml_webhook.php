@@ -272,6 +272,10 @@ if (!$site) {
   exit;
 }
 $siteId = (int)($site['id'] ?? 0);
+if (!stock_sync_allows_pull($site)) {
+  ml_webhook_log('Modo sin pull Sitio→TSWork, webhook ignorado', ['site_id' => $siteId]);
+  exit;
+}
 if ($siteId <= 0) {
   ml_webhook_log('Sitio inválido para webhook', ['site' => $site]);
   exit;

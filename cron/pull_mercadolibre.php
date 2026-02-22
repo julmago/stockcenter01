@@ -10,17 +10,21 @@ require_once __DIR__ . '/../includes/integrations/MercadoLibreAdapter.php';
 ensure_stock_sync_schema();
 
 $pdo = db();
-$sites = $pdo->query("SELECT s.id, s.last_sync_at, s.sync_stock_enabled, s.conn_enabled, s.conn_type,
+$sites = $pdo->query("SELECT s.id, s.last_sync_at, s.sync_stock_enabled, s.stock_sync_mode, s.conn_enabled, s.conn_type,
   sc.ml_access_token
   FROM sites s
   LEFT JOIN site_connections sc ON sc.site_id = s.id
-  WHERE s.is_active = 1 AND s.sync_stock_enabled = 1 AND (s.conn_enabled = 1 OR sc.enabled = 1)")->fetchAll();
+  WHERE s.is_active = 1 AND (s.conn_enabled = 1 OR sc.enabled = 1)")->fetchAll();
 
 $moves = 0;
 foreach ($sites as $site) {
   if (stock_sync_conn_type($site) !== 'mercadolibre') {
     continue;
   }
+  if (!stock_sync_allows_pull($site)) {
+    continue;
+  }
+
   $token = trim((string)($site['ml_access_token'] ?? ''));
   if ($token === '') {
     continue;

@@ -41,7 +41,7 @@ if ($eventId === '') {
 }
 
 $pdo = db();
-$siteSt = $pdo->prepare('SELECT s.id, s.conn_type, s.sync_stock_enabled, s.conn_enabled, sc.ps_api_key FROM sites s LEFT JOIN site_connections sc ON sc.site_id = s.id WHERE s.id = ? LIMIT 1');
+$siteSt = $pdo->prepare('SELECT s.id, s.conn_type, s.sync_stock_enabled, s.stock_sync_mode, s.conn_enabled, sc.ps_api_key FROM sites s LEFT JOIN site_connections sc ON sc.site_id = s.id WHERE s.id = ? LIMIT 1');
 $siteSt->execute([$siteId]);
 $site = $siteSt->fetch();
 if (!$site) {
@@ -61,6 +61,10 @@ if (!$map) {
 }
 
 $productId = (int)$map['product_id'];
+if (!stock_sync_allows_pull($site)) {
+  inbound_json(['ok' => true, 'ignored' => true, 'reason' => 'Modo sin pull Sitio→TSWork.']);
+}
+
 if (!stock_sync_register_lock($siteId, $productId, 'prestashop', $eventId, hash('sha256', $eventId))) {
   inbound_json(['ok' => true, 'ignored' => true, 'reason' => 'Evento ya procesado.']);
 }
@@ -73,6 +77,6 @@ $skuSt->execute([$productId]);
 $skuRow = $skuSt->fetch();
 $sku = trim((string)($skuRow['sku'] ?? ''));
 
-$pushStatus = $sku !== '' ? sync_push_stock_to_sites($sku, (int)$stock['qty'], $siteId) : [];
+$pushStatus = ($sku !== '' && stock_sync_allows_push($site)) ? sync_push_stock_to_sites($sku, (int)$stock['qty'], $siteId) : [];
 
 inbound_json(['ok' => true, 'stock' => $stock, 'push_status' => $pushStatus]);
